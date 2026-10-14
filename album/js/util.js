@@ -38,6 +38,17 @@ export function uuid() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+// 한국어 조사: 받침이 있으면 '이/을', 없으면 '가/를'
+export function hasBatchim(word) {
+  const c = String(word).trim().charCodeAt(String(word).trim().length - 1);
+  if (c >= 0xac00 && c <= 0xd7a3) return (c - 0xac00) % 28 !== 0;
+  return /[013678LMNRlmnr]$/.test(String(word).trim()); // 숫자·영어 끝소리 대략
+}
+export const subj = (n) => `${n}${hasBatchim(n) ? '이' : '가'}`;
+export const obj = (n) => `${n}${hasBatchim(n) ? '을' : '를'}`;
+// '하준' → '하준이', '서아' → '서아'
+export const callName = (name) => (hasBatchim(name) && /[가-힣]$/.test(name) ? `${name}이` : name);
+
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function debounce(fn, ms) {
@@ -224,3 +235,16 @@ export const isKakaoInApp = () => /KAKAOTALK/i.test(navigator.userAgent);
 export function blobToFile(blob, name) {
   return new File([blob], name, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
 }
+
+// 원본 파일 형식 (Supabase 버킷에서 허용하는 형식만)
+const ORIG_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+export function originalInfo(file) {
+  const ext = (file.name?.match(/\.([a-z0-9]{2,5})$/i)?.[1] || '').toLowerCase();
+  const byType = Object.entries(ORIG_TYPES).find(([, t]) => t === file.type);
+  const type = byType ? file.type : ORIG_TYPES[ext];
+  if (!type) return null;
+  return { type, ext: byType ? (byType[0] === 'jpeg' ? 'jpg' : byType[0]) : (ext === 'jpeg' ? 'jpg' : ext) };
+}
+
+// 게시물 사진 한 장에 딸린 파일들 (보여주기용, 작은 사진, 원본)
+export const filesOf = (ph) => [ph.path, ph.thumb, ph.orig].filter(Boolean);

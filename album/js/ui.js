@@ -70,28 +70,34 @@ export function sheet({ title = '', body = '', cls = '', mount, onClose }) {
     onClose,
     mount,
     content: html`
-      <div class="sheet" role="dialog" aria-modal="true" aria-label="${title}">
-        <div class="sheet-grip" data-close></div>
-        ${title ? html`<div class="sheet-head"><h2>${title}</h2><button class="icon-btn" data-close aria-label="닫기">${icon('close')}</button></div>` : ''}
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="${title || '창'}">
+        <div class="sheet-top">
+          <span class="sheet-grip" data-close></span>
+          ${title ? html`<h2>${title}</h2>` : ''}
+          <button class="icon-btn sheet-x" data-close aria-label="닫기">${icon('close', { size: 22 })}</button>
+        </div>
         <div class="sheet-body">${body}</div>
       </div>`,
   });
 }
 
-// 메뉴 목록 창: [{label, icon, danger, value}] → 고른 value
-export function menu(items, { title = '' } = {}) {
+// 메뉴 창. quick: 위쪽 동그란 버튼들 [{label, icon, value}], items: 아래 목록 [{label, icon, danger, value}]
+export function menu(items, { title = '', quick = [] } = {}) {
+  const all = [...quick, ...items];
   return new Promise((resolve) => {
     sheet({
       title,
       onClose: (v) => resolve(v),
-      body: html`<div class="menu-list">${items.map((it, i) => html`
-        <button class="menu-item ${it.danger ? 'danger' : ''}" data-i="${i}">
-          ${it.icon ? icon(it.icon) : ''}<span>${it.label}</span>
-        </button>`)}
-        <button class="menu-item cancel" data-close>취소</button></div>`,
+      body: html`
+        ${quick.length ? html`<div class="quick-actions">${quick.map((it, i) => html`
+          <button class="qa" data-i="${i}"><span class="qa-ic">${icon(it.icon, { size: 24 })}</span><span>${it.label}</span></button>`)}</div>` : ''}
+        ${items.length ? html`<div class="menu-list">${items.map((it, i) => html`
+          <button class="menu-item ${it.danger ? 'danger' : ''}" data-i="${quick.length + i}">
+            ${it.icon ? icon(it.icon, { size: 22 }) : ''}<span>${it.label}</span>
+          </button>`)}</div>` : ''}`,
       mount: (el, ctl) => el.addEventListener('click', (e) => {
         const b = e.target.closest('[data-i]');
-        if (b) ctl.close(items[+b.dataset.i].value);
+        if (b) ctl.close(all[+b.dataset.i].value);
       }),
     });
   });
@@ -119,9 +125,12 @@ export function confirmBox({ title = '', message = '', ok = '확인', cancel = '
 
 export const alertBox = (message, title = '') => confirmBox({ title, message, cancel: '' });
 
-// 짧은 알림 메시지
+// 짧은 알림 메시지 (화면 위쪽). opts: 숫자(ms) 또는 { ms, action: '되돌리기', onAction }
 let toastTimer;
-export function toast(msg, ms = 2600) {
+export function toast(msg, opts = {}) {
+  if (typeof opts === 'number') opts = { ms: opts };
+  const { action, onAction } = opts;
+  const ms = Math.max(4000, opts.ms || (action ? 6000 : String(msg).length * 90));
   let t = document.getElementById('toast');
   if (!t) {
     t = document.createElement('div');
@@ -130,10 +139,15 @@ export function toast(msg, ms = 2600) {
     t.setAttribute('aria-live', 'polite');
     document.body.appendChild(t);
   }
-  t.textContent = msg;
+  t.innerHTML = String(html`<span class="toast-msg">${msg}</span>${action ? html`<button class="toast-act">${action}</button>` : ''}`);
+  const hide = () => t.classList.remove('show');
+  t.onclick = (e) => {
+    if (e.target.closest('.toast-act')) onAction?.();
+    hide();
+  };
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  toastTimer = setTimeout(hide, ms);
 }
 
 // 올리는 중… 같은 진행 표시 (뒤로 가기로 닫히지 않음)
@@ -149,4 +163,22 @@ export function progress(text) {
     },
     close() { el.remove(); },
   };
+}
+
+// 글자 복사 (안 되면 옛날 방식으로)
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
 }

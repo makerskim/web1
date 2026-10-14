@@ -2,7 +2,7 @@
 // 클라우드 모드(api-cloud.js)와 똑같은 기능 이름을 가지고 있어서 화면 코드는 둘을 구분하지 않습니다.
 
 import { openDB } from './idb.js';
-import { uuid } from './util.js';
+import { uuid, originalInfo, filesOf } from './util.js';
 
 const ME = 'local-me';
 
@@ -120,7 +120,16 @@ export class LocalApi {
       const thumb = `${fid}/${id}/${i}_t.jpg`;
       await this.db.put('photos', ph.blob, path);
       await this.db.put('photos', ph.thumb, thumb);
-      metas.push({ path, thumb, w: ph.w, h: ph.h, ph: ph.ph });
+      const meta = { path, thumb, w: ph.w, h: ph.h, ph: ph.ph, dec: !!ph.dec };
+      const info = ph.orig && originalInfo(ph.orig);
+      if (info) {
+        meta.orig = `${fid}/${id}/${i}_o.${info.ext}`;
+        meta.origName = (ph.orig.name || `photo.${info.ext}`).slice(-80);
+        meta.origSize = ph.orig.size;
+        // File 그대로 저장하면 나중에 원본 파일을 못 읽을 수 있어서 내용을 복사해 둡니다
+        await this.db.put('photos', new Blob([await ph.orig.arrayBuffer()], { type: info.type }), meta.orig);
+      }
+      metas.push(meta);
       onProgress?.((i + 1) / photos.length);
     }
     const p = {
@@ -142,8 +151,7 @@ export class LocalApi {
 
   async deletePost(post) {
     for (const ph of post.photos) {
-      await this.db.del('photos', ph.path);
-      await this.db.del('photos', ph.thumb);
+      for (const f of filesOf(ph)) await this.db.del('photos', f);
     }
     for (const l of await this.db.allBy('likes', 'postId', post.id)) await this.db.del('likes', [l.postId, l.userId]);
     for (const c of await this.db.allBy('comments', 'postId', post.id)) await this.db.del('comments', c.id);
@@ -187,6 +195,27 @@ export class LocalApi {
     const url = URL.createObjectURL(await this.photoBlob(path));
     this.urls.set(path, url);
     return url;
+  }
+
+  originalBlob(path) { return this.photoBlob(path); }
+
+  async storageUsage() {
+    const e = await navigator.storage?.estimate?.().catch(() => null);
+    return { used: e?.usage || 0, limit: e?.quota || 0, shared: false };
+  }
+
+  async dropOriginals(fid, paths) {
+    const set = new Set(paths);
+    for (const p of await this.db.allBy('posts', 'familyId', fid)) {
+      if (!p.photos.some((ph) => set.has(ph.orig))) continue;
+      p.photos = p.photos.map((ph) => {
+        if (!set.has(ph.orig)) return ph;
+        const { orig, origName, origSize, ...rest } = ph;
+        return rest;
+      });
+      await this.db.put('posts', p);
+    }
+    for (const f of paths) await this.db.del('photos', f);
   }
 
   async signOut() { /* 체험 모드에는 로그아웃이 없어요 */ }

@@ -130,6 +130,11 @@ const app = {
   refreshBadges,
   checkNews,
   markSeen: (k) => markSeen(k),
+  // 스토리: 최근 3일 안에 올린 사진 중 아직 안 본 것이 있는지, 열기
+  hasUnseenStory: (authorId) => Feed.hasUnseenStory(authorId),
+  openStory: (authorId) => Feed.openStory(app, authorId),
+  // 다른 탭에 있는 동안 숨어 있는 홈 화면 (카드 고칠 때 같이 고쳐요)
+  extraRoots: () => Feed.detachedRoot(),
 };
 
 window.ssukApp = app; // 문제 해결용
@@ -140,8 +145,16 @@ function saveSnap() {
 }
 
 function applyPrefs() {
-  document.documentElement.style.fontSize = TEXT_SIZES[app.prefs.textSize] || TEXT_SIZES.normal;
+  const size = TEXT_SIZES[app.prefs.textSize] ? app.prefs.textSize : 'normal';
+  document.documentElement.style.fontSize = TEXT_SIZES[size];
+  // 글자를 크게 하면 아이콘 옆 '좋아요'·'댓글' 글씨도 다시 보여요 (CSS: html[data-text=large])
+  document.documentElement.dataset.text = size;
 }
+
+// 위쪽 막대: 맨 위에서는 선 없이, 내리면 얇은 선
+window.addEventListener('scroll', () => {
+  document.getElementById('topbar')?.classList.toggle('scrolled', window.scrollY > 4);
+}, { passive: true });
 
 // ---------- 새 소식 확인 (빨간 점, 숫자) ----------
 const seenKey = () => `ssuk-seen-${app.fam?.id}`;
@@ -166,6 +179,11 @@ function refreshBadges() {
   const num = document.querySelector('[data-tab=activity] .badge');
   if (dot) dot.hidden = !newPosts;
   if (num) { num.hidden = !newAct; num.textContent = newAct > 9 ? '9+' : String(newAct); }
+  // 홈 화면에 설치한 앱 아이콘에도 숫자 표시
+  try {
+    if (newAct > 0) navigator.setAppBadge?.(newAct)?.catch?.(() => {});
+    else navigator.clearAppBadge?.()?.catch?.(() => {});
+  } catch { /* 지원 안 함 */ }
   Feed.newPostsHint(app);
 }
 
@@ -197,11 +215,11 @@ function renderShell() {
     <header class="topbar" id="topbar"></header>
     <main id="view" class="view"></main>
     <nav class="tabbar" aria-label="메뉴">
-      <a href="#/home" data-tab="home">${icon('home', { size: 27 })}<span>홈</span><i class="badge dot" hidden></i></a>
-      <a href="#/grid" data-tab="grid">${icon('grid', { size: 27 })}<span>모아보기</span></a>
-      <button type="button" data-tab="new" class="tab-new" aria-label="사진 올리기"><i>${icon('plus', { size: 28, stroke: 2.6 })}</i><span>사진 올리기</span></button>
-      <a href="#/activity" data-tab="activity">${icon('bell', { size: 27 })}<span>소식</span><i class="badge num" hidden></i></a>
-      <a href="#/family" data-tab="family">${icon('users', { size: 27 })}<span>가족</span></a>
+      <a href="#/home" data-tab="home">${icon('home', { size: 27, stroke: 1.9 })}<span>홈</span><i class="badge dot" hidden></i></a>
+      <a href="#/grid" data-tab="grid">${icon('grid', { size: 27, stroke: 1.9 })}<span>모아보기</span></a>
+      <button type="button" data-tab="new" aria-label="사진 올리기">${icon('plusSquare', { size: 27, stroke: 1.9 })}<span>올리기</span></button>
+      <a href="#/activity" data-tab="activity">${icon('bell', { size: 27, stroke: 1.9 })}<span>소식</span><i class="badge num" hidden></i></a>
+      <a href="#/family" data-tab="family">${icon('users', { size: 27, stroke: 1.9 })}<span>가족</span></a>
     </nav>`);
   document.querySelector('[data-tab=new]').addEventListener('click', () => app.compose());
   document.querySelector('[data-tab=home]').addEventListener('click', (e) => {
@@ -218,14 +236,14 @@ function route() {
   if (!app.fam) return;
   const view = document.getElementById('view');
   if (!view) return;
-  const [, name = 'home', arg] = (location.hash || '#/home').split('/');
+  const [, name = 'home', arg, extra] = (location.hash || '#/home').split('/');
   current?.leave?.();
   view.onclick = null;
   document.querySelectorAll('.tabbar [data-tab]').forEach((t) => t.classList.toggle('on', t.dataset.tab === name));
   document.body.dataset.screen = name;
   const screens = { home: Feed, grid: Grid, activity: Activity, family: Family, p: PostPage };
   current = screens[name] || Feed;
-  current.render(app, view, arg);
+  current.render(app, view, arg, extra);
   if (name === 'activity') markSeen('act');
 }
 window.addEventListener('hashchange', () => {
@@ -254,11 +272,25 @@ function fatal(msg) {
     </div>`);
 }
 
-// 카카오톡 안의 브라우저에서는 사진 저장·설치가 잘 안 되어서 휴대폰 기본 브라우저로 엽니다
+// 카카오톡 안의 브라우저에서는 사진 저장·설치가 잘 안 되어서 휴대폰 인터넷 앱으로 열자고 안내해요
 function escapeKakao() {
   if (!isKakaoInApp() || sessionStorage.getItem('ssuk-kakao-tried')) return false;
   sessionStorage.setItem('ssuk-kakao-tried', '1');
-  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+  document.body.dataset.screen = 'onboard';
+  document.getElementById('app').innerHTML = String(html`
+    <div class="onboard kakao">
+      <div class="hero"><div class="logo-big">🌱</div><h1>쑥쑥 앨범</h1>
+        <p>사진 저장이 잘 되도록<br>휴대폰 인터넷 앱으로 열게요.</p></div>
+      <div class="ob-actions">
+        <button class="btn primary big block" data-k="go">계속</button>
+        <button class="link-btn" data-k="stay">여기서 그냥 볼게요</button>
+      </div>
+    </div>`);
+  document.querySelector('[data-k=go]').onclick = () => {
+    location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+    setTimeout(boot2, 1500); // 이동하지 못했으면 여기서 계속
+  };
+  document.querySelector('[data-k=stay]').onclick = () => boot2();
   return true;
 }
 
@@ -269,15 +301,14 @@ async function boot() {
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  if (escapeKakao()) {
-    setTimeout(() => boot2(), 1500); // 이동하지 못했으면 그냥 여기서 계속
-    return;
-  }
+  if (escapeKakao()) return;
   boot2();
 }
 
+let booting = false;
 async function boot2() {
-  if (app.api) return;
+  if (app.api || booting) return;
+  booting = true;
   try {
     app.api = await createApi();
     setMediaApi(app.api);
@@ -285,6 +316,7 @@ async function boot2() {
   } catch (e) {
     console.error(e);
     app.api = null;
+    booting = false;
     return fatal('인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
   }
   const params = new URLSearchParams(location.search);

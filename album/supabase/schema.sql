@@ -214,6 +214,32 @@ begin
   update members set role = p_role where family_id = p_family and user_id = p_user;
 end $$;
 
+-- 저장공간 사용량 (가족 화면의 막대 그래프용, 숫자만 알려줘요)
+create or replace function public.storage_usage()
+returns bigint language sql stable security definer set search_path = public as $$
+  select coalesce(sum((metadata->>'size')::bigint), 0)::bigint from storage.objects where bucket_id = 'photos';
+$$;
+
+-- 오래된 사진의 '원본'을 지운 뒤 게시물 정보에서도 빼기 (관리자만)
+-- 공간이 모자랄 때 원본만 정리하는 용도 — 꾸민 사진은 그대로 남아요
+create or replace function public.forget_originals(p_family uuid, p_paths text[])
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  n integer;
+begin
+  if not is_owner(p_family) then
+    raise exception 'not_owner';
+  end if;
+  update posts p set photos = (
+    select jsonb_agg(case when t.ph->>'orig' = any(p_paths) then t.ph - 'orig' - 'origName' - 'origSize' else t.ph end
+                     order by t.i)
+    from jsonb_array_elements(p.photos) with ordinality as t(ph, i))
+  where p.family_id = p_family
+    and exists (select 1 from jsonb_array_elements(p.photos) x where x->>'orig' = any(p_paths));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
 -- ---------- 접근 권한 ----------
 
 alter table public.families enable row level security;
@@ -236,12 +262,14 @@ grant select, insert, delete on public.comments to authenticated;
 revoke execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text),
   public.gen_invite_code(), public.create_family(text, text, date, text, text), public.invite_info(text),
-  public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text)
+  public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
+  public.storage_usage(), public.forget_originals(uuid, text[])
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text),
   public.create_family(text, text, date, text, text), public.invite_info(text),
-  public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text)
+  public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
+  public.storage_usage(), public.forget_originals(uuid, text[])
   to authenticated;
 
 -- families
@@ -303,10 +331,12 @@ create policy comments_delete on public.comments for delete to authenticated
   using (author_id = auth.uid() or public.is_owner(family_id));
 
 -- ---------- 사진 저장소 ----------
--- 비공개 버킷: 가족 구성원만 사진을 보고 올릴 수 있어요. (사진 1장 최대 10MB)
+-- 비공개 버킷: 가족 구성원만 사진을 보고 올릴 수 있어요.
+-- 파일 1개 최대 30MB (휴대폰 원본 사진 포함), 아이폰 원본(HEIC)도 허용
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('photos', 'photos', false, 10485760, array['image/jpeg', 'image/png', 'image/webp'])
+values ('photos', 'photos', false, 31457280,
+        array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
 on conflict (id) do update
   set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 

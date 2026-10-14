@@ -47,6 +47,7 @@ export async function loadPhoto(file) {
     x.imageSmoothingQuality = 'high';
     x.drawImage(img, 0, 0, c.width, c.height);
     return {
+      file, // 원본 파일 (원본 화질로 올리기용)
       src: c, takenAt: await readPhotoDate(file),
       filter: 'none', rot: 0, aspect: 'orig', cx: 0.5, cy: 0.5,
       frame: 'none', frameText: null, stamp: false, items: [],
@@ -345,6 +346,10 @@ function scaled(src, max) {
   return c;
 }
 
+// 필터·스티커·테두리·자르기 등을 하나라도 했는지
+export const isDecorated = (ps) => ps.filter !== 'none' || ps.frame !== 'none' || ps.items.length > 0
+  || ps.stamp || ps.rot !== 0 || ps.aspect !== 'orig';
+
 // 올릴 사진 만들기: 본 사진, 작은 사진(모아보기용), 아주 작은 자리표시
 export async function exportPhoto(ps, baby) {
   await ensureFonts(ps, baby);
@@ -354,7 +359,7 @@ export async function exportPhoto(ps, baby) {
   const blob = await toBlob(c, 0.84);
   const thumb = await toBlob(scaled(c, 400), 0.78);
   const ph = scaled(c, 24).toDataURL('image/jpeg', 0.6);
-  return { blob, thumb, w: L.W, h: L.H, ph };
+  return { blob, thumb, w: L.W, h: L.H, ph, dec: isDecorated(ps) };
 }
 
 // ---------- 편집 화면 ----------

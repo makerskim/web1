@@ -2,7 +2,7 @@
 // 받은 사진은 photo-cache.js가 휴대폰 안에도 보관합니다.
 
 import { createClient } from '../vendor/supabase.js';
-import { uuid } from './util.js';
+import { uuid, originalInfo, filesOf } from './util.js';
 import { cachedURL, cachedBlob, remember, forget } from './photo-cache.js';
 import { friendly } from './errors.js';
 
@@ -113,7 +113,7 @@ export class CloudApi {
 
   async deleteFamily(f) {
     const rows = await this.allPhotos(f.id);
-    const paths = rows.flatMap((p) => p.photos.flatMap((ph) => [ph.path, ph.thumb]));
+    const paths = rows.flatMap((p) => p.photos.flatMap(filesOf));
     for (let i = 0; i < paths.length; i += 100) {
       check(await this.sb.storage.from(BUCKET).remove(paths.slice(i, i + 100)));
     }
@@ -154,9 +154,9 @@ export class CloudApi {
   async allPhotos(fid) {
     const out = [];
     for (let from = 0; ; from += 1000) {
-      const rows = check(await this.sb.from('posts').select('id, photos, taken_at, created_at')
+      const rows = check(await this.sb.from('posts').select('id, author_id, photos, taken_at, created_at')
         .eq('family_id', fid).order('taken_at', { ascending: false }).range(from, from + 999));
-      out.push(...rows.map((r) => ({ id: r.id, photos: r.photos, takenAt: r.taken_at, createdAt: r.created_at })));
+      out.push(...rows.map((r) => ({ id: r.id, authorId: r.author_id, photos: r.photos, takenAt: r.taken_at, createdAt: r.created_at })));
       if (rows.length < 1000) return out;
     }
   }
@@ -171,19 +171,30 @@ export class CloudApi {
     const store = this.sb.storage.from(BUCKET);
     const uploaded = [];
     const metas = [];
-    const total = photos.length * 2;
+    // 진행 막대는 올린 용량 기준 (원본이 크니까)
+    const total = photos.reduce((n, ph) => n + ph.blob.size + ph.thumb.size + (ph.orig?.size || 0), 0) || 1;
+    let done = 0;
+    const put = async (p, blob, type, cache) => {
+      check(await store.upload(p, blob, { contentType: type, cacheControl: '31536000', upsert: false }));
+      uploaded.push(p);
+      if (cache) remember(p, blob);
+      done += blob.size;
+      onProgress?.(done / total);
+    };
     try {
       for (let i = 0; i < photos.length; i++) {
         const ph = photos[i];
-        const path = `${fid}/${id}/${i}.jpg`;
-        const thumb = `${fid}/${id}/${i}_t.jpg`;
-        for (const [p, blob] of [[path, ph.blob], [thumb, ph.thumb]]) {
-          check(await store.upload(p, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false }));
-          uploaded.push(p);
-          remember(p, blob);
-          onProgress?.(uploaded.length / total);
+        const meta = { path: `${fid}/${id}/${i}.jpg`, thumb: `${fid}/${id}/${i}_t.jpg`, w: ph.w, h: ph.h, ph: ph.ph, dec: !!ph.dec };
+        await put(meta.path, ph.blob, 'image/jpeg', true);
+        await put(meta.thumb, ph.thumb, 'image/jpeg', true);
+        const info = ph.orig && originalInfo(ph.orig);
+        if (info) {
+          meta.orig = `${fid}/${id}/${i}_o.${info.ext}`;
+          meta.origName = (ph.orig.name || `photo.${info.ext}`).slice(-80);
+          meta.origSize = ph.orig.size;
+          await put(meta.orig, ph.orig, info.type, false); // 원본은 커서 휴대폰에 따로 보관하지 않아요
         }
-        metas.push({ path, thumb, w: ph.w, h: ph.h, ph: ph.ph });
+        metas.push(meta);
       }
       const row = check(await this.sb.from('posts').insert({
         id, family_id: fid, caption: caption || '',
@@ -206,7 +217,7 @@ export class CloudApi {
   async deletePost(p) {
     const rows = check(await this.sb.from('posts').delete().eq('id', p.id).select('id'));
     if (!rows.length) throw new Error('지울 수 있는 권한이 없어요.');
-    const paths = p.photos.flatMap((ph) => [ph.path, ph.thumb]);
+    const paths = p.photos.flatMap(filesOf);
     await this.sb.storage.from(BUCKET).remove(paths).catch(() => {});
     paths.forEach(forget);
   }
@@ -259,6 +270,21 @@ export class CloudApi {
 
   photoURL(path) { return cachedURL(path, () => this.download(path)); }
   photoBlob(path) { return cachedBlob(path, () => this.download(path)); }
+  originalBlob(path) { return this.download(path); } // 원본은 그때그때 받기 (휴대폰 공간 절약)
+
+  // ---------- 저장공간 ----------
+  async storageUsage() {
+    const used = check(await this.sb.rpc('storage_usage'));
+    return { used: Number(used) || 0, limit: 1024 * 1024 * 1024, shared: true };
+  }
+
+  // 오래된 게시물의 원본만 지우기 (관리자) — 꾸민 사진·작은 사진은 그대로
+  async dropOriginals(fid, paths) {
+    for (let i = 0; i < paths.length; i += 100) {
+      check(await this.sb.storage.from(BUCKET).remove(paths.slice(i, i + 100)));
+    }
+    check(await this.sb.rpc('forget_originals', { p_family: fid, p_paths: paths }));
+  }
 
   // ---------- 이메일 연결 (기기를 바꿔도 다시 들어올 수 있게) ----------
   async linkEmail(email) {

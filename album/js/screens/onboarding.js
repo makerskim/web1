@@ -1,11 +1,10 @@
 // 처음 화면: 새 앨범 만들기 / 초대 코드로 들어가기 / 이메일로 로그인
 
-import { html, isStandalone } from '../util.js';
+import { html, isStandalone, callName } from '../util.js';
 import { icon } from '../icons.js';
 import { sheet, toast, progress } from '../ui.js';
 import { whoPicker, bindWho } from './who.js';
-import { openInvite, openInstall, fmtCode } from './family.js';
-import { callName } from './feed.js';
+import { openInvite, openInstall, openTextSize, fmtCode } from './family.js';
 
 const root = () => document.getElementById('app');
 
@@ -61,7 +60,7 @@ export function create(app, { onCancel } = {}) {
         <input name="album" maxlength="40" placeholder="예: 하준이네 앨범" autocomplete="off"></label>
       <div class="field"><span>④ 나는 아기의…</span></div>
       ${whoPicker({})}
-      <button class="btn primary big block" type="submit">앨범 만들기</button>
+      <button class="btn primary big block sticky" type="submit">앨범 만들기</button>
     </form>`);
   const form = el.querySelector('form');
   const get = bindWho(el, {});
@@ -76,7 +75,7 @@ export function create(app, { onCancel } = {}) {
     const who = get();
     const baby = form.baby.value.trim();
     const name = form.album.value.trim() || (baby ? `${callName(baby)}네 앨범` : '우리 가족 앨범');
-    if (!who.displayName) return toast('④ 아기와 어떤 사이인지 골라 주세요.');
+    if (!who.displayName) return showError(el, '[data-who=error]', '④ 아기와 어떤 사이인지 골라 주세요');
     const p = progress('앨범을 만들고 있어요…');
     try {
       const fam = await app.api.createFamily({ name, babyName: baby, babyBirthday: form.bday.value || null, ...who });
@@ -86,7 +85,6 @@ export function create(app, { onCancel } = {}) {
       history.replaceState(null, '', location.pathname + '#/home');
       await app.enterFamily(app.families.find((f) => f.id === fam.id) || fam);
       if (app.api.canInvite) openInvite(app, { welcome: true });
-      else toast('앨범을 만들었어요! 🎉');
     } catch (err) {
       p.close();
       toast(err.message, 5000);
@@ -113,10 +111,11 @@ export async function join(app, code = '', { onCancel } = {}) {
     </div>
     <form class="ob-form" novalidate>
       <label class="field" data-j="code-field"><span>초대 코드</span>
-        <input name="code" class="code-input" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EF23" value="${fmtCode(code)}"></label>
+        <input name="code" class="code-input" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EF23" value="${fmtCode(code)}">
+        <p class="field-error" role="alert" data-j="code-error" hidden>초대 코드 8자리를 넣어 주세요</p></label>
       <div class="field"><span>아기와 어떤 사이인가요?</span></div>
-      ${whoPicker({})}
-      <button class="btn primary big block" type="submit">앨범 들어가기</button>
+      ${whoPicker({ collapse: true })}
+      <button class="btn primary big block sticky" type="submit">앨범 들어가기</button>
     </form>`);
   const form = el.querySelector('form');
   const get = bindWho(el, {});
@@ -153,8 +152,11 @@ export async function join(app, code = '', { onCancel } = {}) {
     e.preventDefault();
     const c = cleanCode(form.code.value);
     const who = get();
-    if (c.length !== 8) return toast('초대 코드 8자리를 넣어 주세요.');
-    if (!who.displayName) return toast('아기와 어떤 사이인지 골라 주세요.');
+    if (c.length !== 8) {
+      el.querySelector('[data-j=code-field]').hidden = false;
+      return showError(el, '[data-j=code-error]', '초대 코드 8자리를 넣어 주세요');
+    }
+    if (!who.displayName) return showError(el, '[data-who=error]', '아기와 어떤 사이인지 골라 주세요');
     const p = progress('앨범에 들어가는 중…');
     try {
       const fam = await app.api.joinFamily({ code: c, ...who });
@@ -163,14 +165,24 @@ export async function join(app, code = '', { onCancel } = {}) {
       await app.reloadFamilies();
       p.close();
       history.replaceState(null, '', location.pathname + '#/home');
+      // 할머니·할아버지는 처음부터 큰 글씨로
+      if (/^(외)?할(머니|아버지)$/.test(who.displayName)) app.setPref('textSize', 'large');
       await app.enterFamily(app.families.find((f) => f.id === fam.id) || fam);
-      toast(`환영해요, ${who.displayName}님! 🎉`, 3500);
-      if (!isStandalone()) setTimeout(() => suggestInstall(app), 1800);
+      toast(`환영해요, ${who.displayName}! 🎉`);
+      openTextSize(app, { onClose: () => { if (!isStandalone()) setTimeout(() => suggestInstall(app), 400); } });
     } catch (err) {
       p.close();
       toast(err.message, 5000);
     }
   });
+}
+
+function showError(root, sel, msg) {
+  const e = root.querySelector(sel);
+  if (!e) return toast(msg);
+  e.textContent = msg;
+  e.hidden = false;
+  e.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 function dropInvite(app) {
