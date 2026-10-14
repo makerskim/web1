@@ -3,7 +3,7 @@
 import { html, babyDay, babyMilestone, ymd, callName, obj, hasBatchim } from '../util.js';
 import { icon } from '../icons.js';
 import { toast } from '../ui.js';
-import { postCard, bindCard, handlePostClick, viewerItems } from '../postcard.js';
+import { postCard, bindCard, measureCaption, handlePostClick, viewerItems } from '../postcard.js';
 import { observeImages } from '../media.js';
 import { openViewer } from '../viewer.js';
 import { openInvite, openAlbumSwitcher } from './family.js';
@@ -273,7 +273,11 @@ export function render(app, view) {
   if (!S.el || S.fid !== app.fam.id) build(app);
   else drawStrip(app);
   view.replaceChildren(S.el);
-  requestAnimationFrame(() => window.scrollTo(0, S.scrollY));
+  requestAnimationFrame(() => {
+    // 다른 탭에 있는 동안 다시 그려진 카드는 '더 보기'를 못 쟀어요 → 지금 재기
+    S.el?.querySelectorAll('article.post').forEach(measureCaption);
+    window.scrollTo(0, S.scrollY);
+  });
   if (S.scrollY < 300) app.markSeen('feed');
 }
 
@@ -300,6 +304,7 @@ export function newPostsHint(app) {
 export function prepend(app, post) {
   if (!S.el || S.fid !== app.fam.id) return;
   S.posts.unshift(post);
+  S.scrollY = 0; // 홈으로 돌아오면 방금 올린 사진이 맨 위에 보이게
   appendCards(app, [post], { prepend: true });
   drawStrip(app);
   drawEnd(app);

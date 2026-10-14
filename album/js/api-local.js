@@ -114,31 +114,44 @@ export class LocalApi {
   async createPost(fid, { caption, takenAt, photos }, onProgress) {
     const id = uuid();
     const metas = [];
-    for (let i = 0; i < photos.length; i++) {
-      const ph = photos[i];
-      const path = `${fid}/${id}/${i}.jpg`;
-      const thumb = `${fid}/${id}/${i}_t.jpg`;
-      await this.db.put('photos', ph.blob, path);
-      await this.db.put('photos', ph.thumb, thumb);
-      const meta = { path, thumb, w: ph.w, h: ph.h, ph: ph.ph, dec: !!ph.dec };
-      const info = ph.orig && originalInfo(ph.orig);
-      if (info) {
-        meta.orig = `${fid}/${id}/${i}_o.${info.ext}`;
-        meta.origName = (ph.orig.name || `photo.${info.ext}`).slice(-80);
-        meta.origSize = ph.orig.size;
-        // File 그대로 저장하면 나중에 원본 파일을 못 읽을 수 있어서 내용을 복사해 둡니다
-        await this.db.put('photos', new Blob([await ph.orig.arrayBuffer()], { type: info.type }), meta.orig);
+    const written = []; // 중간에 공간이 모자라 실패하면 지우려고
+    const put = async (blob, key) => { await this.db.put('photos', blob, key); written.push(key); };
+    let skippedOriginals = 0;
+    try {
+      for (let i = 0; i < photos.length; i++) {
+        const ph = photos[i];
+        const path = `${fid}/${id}/${i}.jpg`;
+        const thumb = `${fid}/${id}/${i}_t.jpg`;
+        await put(ph.blob, path);
+        await put(ph.thumb, thumb);
+        const meta = { path, thumb, w: ph.w, h: ph.h, ph: ph.ph, dec: !!ph.dec };
+        const info = ph.orig && originalInfo(ph.orig);
+        if (info) {
+          const key = `${fid}/${id}/${i}_o.${info.ext}`;
+          try {
+            // File 그대로 저장하면 나중에 원본 파일을 못 읽을 수 있어서 내용을 복사해 둡니다
+            await put(new Blob([await ph.orig.arrayBuffer()], { type: info.type }), key);
+            meta.orig = key;
+            meta.origName = (ph.orig.name || `photo.${info.ext}`).slice(-80);
+            meta.origSize = ph.orig.size;
+          } catch {
+            skippedOriginals++; // 원본은 덤 — 공간이 모자라면 일반 화질로만
+          }
+        }
+        metas.push(meta);
+        onProgress?.((i + 1) / photos.length);
       }
-      metas.push(meta);
-      onProgress?.((i + 1) / photos.length);
+      const p = {
+        id, familyId: fid, authorId: ME, caption: caption || '',
+        takenAt: new Date(takenAt || Date.now()).toISOString(),
+        photos: metas, createdAt: new Date().toISOString(),
+      };
+      await this.db.put('posts', p);
+      return { ...p, likes: [], comments: [], ...(skippedOriginals ? { skippedOriginals } : {}) };
+    } catch (e) {
+      for (const k of written) await this.db.del('photos', k).catch(() => {});
+      throw e;
     }
-    const p = {
-      id, familyId: fid, authorId: ME, caption: caption || '',
-      takenAt: new Date(takenAt || Date.now()).toISOString(),
-      photos: metas, createdAt: new Date().toISOString(),
-    };
-    await this.db.put('posts', p);
-    return { ...p, likes: [], comments: [] };
   }
 
   async updatePost(post, { caption, takenAt }) {
@@ -197,7 +210,14 @@ export class LocalApi {
     return url;
   }
 
-  originalBlob(path) { return this.photoBlob(path); }
+  async originalBlob(path) {
+    try {
+      return await this.photoBlob(path);
+    } catch (e) {
+      e.notFound = true;
+      throw e;
+    }
+  }
 
   async storageUsage() {
     const e = await navigator.storage?.estimate?.().catch(() => null);
@@ -206,16 +226,19 @@ export class LocalApi {
 
   async dropOriginals(fid, paths) {
     const set = new Set(paths);
+    const cleared = [];
     for (const p of await this.db.allBy('posts', 'familyId', fid)) {
       if (!p.photos.some((ph) => set.has(ph.orig))) continue;
       p.photos = p.photos.map((ph) => {
         if (!set.has(ph.orig)) return ph;
+        cleared.push(ph.orig);
         const { orig, origName, origSize, ...rest } = ph;
         return rest;
       });
       await this.db.put('posts', p);
     }
-    for (const f of paths) await this.db.del('photos', f);
+    for (const f of cleared) await this.db.del('photos', f);
+    return cleared.length;
   }
 
   async signOut() { /* 체험 모드에는 로그아웃이 없어요 */ }

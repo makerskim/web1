@@ -13,4 +13,7 @@ export default {
   // 예: 'sb_publishable_...' 또는 'eyJhbGciOi...' (Publishable key / anon public key)
   // 이 키는 공개되어도 괜찮은 키예요. (secret / service_role 키는 절대 넣지 마세요!)
   supabaseKey: '',
+
+  // 저장공간 한도(GB). 무료 플랜은 1. 유료(Pro)로 바꾸면 100 으로 고쳐 주세요. (가족 화면의 막대 그래프에 써요)
+  storageLimitGB: 1,
 };

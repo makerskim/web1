@@ -96,6 +96,7 @@ const app = {
 
   async enterFamily(fam) {
     this.fam = fam;
+    askedAbout.clear();
     localStorage.setItem('ssuk-fam', fam.id);
     const snap = load(`ssuk-snap-${fam.id}`, null);
     this.members = snap?.members || [];
@@ -188,16 +189,24 @@ function refreshBadges() {
 }
 
 let checking = false;
+const askedAbout = new Set(); // 이미 한 번 찾아본 모르는 사람 (앨범에서 나간 가족은 다시 찾아도 없어요)
+const memberKey = () => app.members.map((m) => `${m.userId}|${m.displayName}|${m.avatar}`).join();
 async function checkNews() {
   if (!app.fam || checking || document.hidden) return;
   checking = true;
   try {
     app.activity = await app.api.activity(app.fam.id);
-    if (app.activity.some((e) => !app.memberMap.has(e.userId))) {
-      // 새로 들어온 가족이 있으면 이름 다시 받기
+    const unknown = [...new Set(app.activity.map((e) => e.userId))]
+      .filter((id) => !app.memberMap.has(id) && !askedAbout.has(id));
+    if (unknown.length) {
+      // 새로 들어온 가족이 있으면 이름 다시 받기 — 바뀐 게 있을 때만 카드를 다시 그려요
+      unknown.forEach((id) => askedAbout.add(id));
+      const before = memberKey();
       await app.reloadMembers();
-      Feed.drawStrip(app);
-      Feed.redrawCards(app);
+      if (memberKey() !== before) {
+        Feed.drawStrip(app);
+        Feed.redrawCards(app);
+      }
     }
     refreshBadges();
     if (location.hash.startsWith('#/activity')) Activity.update(app);

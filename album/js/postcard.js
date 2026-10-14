@@ -107,11 +107,16 @@ export function refreshCard(app, post) {
     const idx = slideIndex(old);
     const full = old.classList.contains('full');
     const coach = !!old.querySelector('.coach');
+    const capOpen = !!old.querySelector('.caption.open');
+    const bursting = !!old.querySelector('.burst.go');
     const tmp = document.createElement('div');
     tmp.innerHTML = String(postCard(app, post, { full, coach }));
     const card = tmp.firstElementChild;
     if (full) card.classList.add('full');
+    // 펼쳐 둔 글, 막 시작한 하트 애니메이션은 새 카드에서도 그대로
+    if (capOpen) card.querySelector('.caption')?.classList.add('open');
     old.replaceWith(card);
+    if (bursting) burst(card);
     bindCard(card);
     observeImages(card);
     if (idx) goSlide(card, idx, false);
@@ -145,12 +150,18 @@ function flashCount(card, ms) {
   c._t = setTimeout(() => c.classList.remove('show'), ms);
 }
 
+// 글이 두 줄을 넘으면 '더 보기' 버튼 보이기. 화면에 붙어 있는 카드만 잴 수 있어요
+// (숨어 있는 홈 화면의 카드는 홈으로 돌아올 때 다시 재요)
+export function measureCaption(card) {
+  const cap = card.querySelector('.caption:not(.open)');
+  const btn = card.querySelector('.more-btn');
+  if (!cap || !btn || !card.isConnected) return;
+  btn.hidden = !(cap.scrollHeight > cap.clientHeight + 1);
+}
+
 // 카드를 화면에 넣은 뒤: 사진 넘기기 표시, '더 보기' 버튼
 export function bindCard(card) {
-  const cap = card.querySelector('.caption:not(.open)');
-  if (cap) requestAnimationFrame(() => {
-    if (cap.scrollHeight > cap.clientHeight + 1) card.querySelector('.more-btn').hidden = false;
-  });
+  if (card.querySelector('.caption:not(.open)')) requestAnimationFrame(() => measureCaption(card));
   const t = card.querySelector('.track');
   if (!t || t.children.length < 2) return;
   const n = t.children.length;
@@ -236,9 +247,11 @@ export async function handlePostClick(app, e, { onDeleted } = {}) {
 
 function burst(card) {
   const b = card.querySelector('.burst');
+  if (!b) return;
   b.classList.remove('go');
   void b.offsetWidth;
   b.classList.add('go');
+  b.addEventListener('animationend', () => b.classList.remove('go'), { once: true });
 }
 
 export async function toggleLike(app, post, on) {

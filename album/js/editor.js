@@ -40,7 +40,13 @@ function makeCanvas(w, h) {
 export async function loadPhoto(file) {
   const url = URL.createObjectURL(file);
   try {
-    const img = await loadImg(url);
+    const img = await loadImg(url).catch((e) => {
+      // 갤럭시의 '고효율 사진(HEIF)'은 크롬에서 열리지 않아요 → 무엇을 하면 되는지 알려 주기
+      if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name || '')) {
+        throw new Error('이 사진은 고효율(HEIF) 형식이라 이 브라우저에서 열 수 없어요. 카메라 설정에서 ‘고효율 사진’을 끄거나, 사파리·삼성 인터넷에서 올려 주세요.');
+      }
+      throw e;
+    });
     const k = Math.min(1, MAX_SRC / Math.max(img.naturalWidth, img.naturalHeight));
     const c = makeCanvas(img.naturalWidth * k, img.naturalHeight * k);
     const x = c.getContext('2d');

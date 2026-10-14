@@ -97,6 +97,11 @@ export function openComments(app, post, { onClose } = {}) {
       };
 
       el.querySelector('form').addEventListener('submit', (e) => { e.preventDefault(); post1(input.value); });
+      // 이모지를 눌러도 글자판(키보드)이 내려가지 않게 입력칸에서 초점을 뺏지 않아요
+      const keepFocus = (e) => { if (document.activeElement === input) e.preventDefault(); };
+      const bar = el.querySelector('.emoji-bar');
+      bar.addEventListener('pointerdown', keepFocus);
+      bar.addEventListener('mousedown', keepFocus);
       el.addEventListener('click', async (e) => {
         const q = e.target.closest('[data-quick]');
         if (q) return post1(q.dataset.quick);

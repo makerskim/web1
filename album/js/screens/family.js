@@ -268,7 +268,8 @@ async function openOriginalCleanup(app) {
   const now = Date.now();
   const options = [[3, '3개월'], [6, '6개월'], [12, '1년']].map(([m, label]) => {
     const before = new Date(now - m * 30.4 * 86400000).toISOString();
-    const olds = list.filter((it) => it.orig && it.createdAt < before);
+    // 그 게시물 폴더 안의 원본만 (다른 게시물의 파일을 가리키는 이상한 정보는 무시)
+    const olds = list.filter((it) => it.orig && it.createdAt < before && it.orig.startsWith(`${app.fam.id}/${it.postId}/`));
     return { m, label, count: olds.length, bytes: olds.reduce((n, it) => n + (it.origSize || 0), 0), paths: olds.map((it) => it.orig) };
   });
 
@@ -288,10 +289,10 @@ async function openOriginalCleanup(app) {
   if (!ok) return;
   const pr = progress('원본을 정리하는 중…');
   try {
-    await app.api.dropOriginals(app.fam.id, o.paths);
+    const n = await app.api.dropOriginals(app.fam.id, o.paths);
     Grid.invalidate();
     pr.close();
-    toast(`원본 ${o.count}장을 정리했어요. (${fmtBytes(o.bytes)} 비움)`);
+    toast(n === o.count ? `원본 ${o.count}장을 정리했어요. (${fmtBytes(o.bytes)} 비움)` : `원본 ${n}장을 정리했어요.`);
   } catch (err) {
     pr.close();
     toast(err.message);
@@ -431,9 +432,18 @@ async function memberMenu(app, m) {
       toast(v === 'owner' ? '관리자로 지정했어요.' : '관리자에서 뺐어요.');
     }
     if (v === 'remove') {
-      if (!(await confirmBox({ title: `‘${m.displayName}’${obj(m.displayName).slice(m.displayName.length)} 앨범에서 내보낼까요?`, message: '다시 들어오려면 초대 링크가 필요해요.', ok: '내보내기', danger: true }))) return;
-      await app.api.removeMember(app.fam.id, m.userId);
-      toast('내보냈어요.');
+      const cloud = app.api.mode === 'cloud';
+      if (!(await confirmBox({
+        title: `‘${m.displayName}’${obj(m.displayName).slice(m.displayName.length)} 앨범에서 내보낼까요?`,
+        message: cloud
+          ? '예전 초대 링크로 다시 들어오지 못하게 초대 링크가 새로 바뀌어요.\n아직 안 들어온 가족에게는 새 링크를 보내 주세요.'
+          : '다시 들어오려면 초대 링크가 필요해요.',
+        ok: '내보내기',
+        danger: true,
+      }))) return;
+      const code = await app.api.removeMember(app.fam.id, m.userId);
+      if (code) { app.fam.inviteCode = code; await app.reloadFamilies().catch(() => {}); }
+      toast(code ? '내보냈어요. 초대 링크가 새로 바뀌었어요.' : '내보냈어요.', 4000);
     }
     if (v) { await app.reloadMembers(); app.go('#/family'); }
   } catch (err) { toast(err.message); }

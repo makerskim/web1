@@ -15,7 +15,8 @@ const REACTIONS = ['😍', '🥰', '👏', '😂'];
 export function openViewer(app, items, start = 0, { postLink = false, story = false, onShown } = {}) {
   if (!items.length) return;
   let index = Math.max(0, Math.min(items.length - 1, start));
-  const st = { closed: false, holdTimer: null, onVis: null, onKey: null }; // 창이 닫힐 때 정리할 것들
+  // 창이 닫힐 때 정리할 것들 + 스토리를 멈추게 하는 이유들 (꾹 누름·댓글 창·사진 받는 중)
+  const st = { closed: false, holdTimer: null, onVis: null, onKey: null, held: false, comments: false, loading: false };
 
   const normalTop = html`
     <div class="v-top">
@@ -87,9 +88,10 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
       };
       const bars = el.querySelector('.st-bars');
       let paused = false;
-      const setPaused = (p) => {
-        paused = p;
-        el.classList.toggle('paused', p);
+      // 앱을 다시 열었을 때도 댓글 창이 열려 있거나 꾹 누르고 있으면 계속 멈춰 있어요
+      const updatePaused = () => {
+        paused = document.hidden || st.held || st.comments || st.loading;
+        el.classList.toggle('paused', paused);
       };
       const drawBars = (i) => {
         if (!bars) return;
@@ -123,6 +125,9 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
         scale = 1; tx = 0; ty = 0; apply();
         const it = items[i];
         if (story) {
+          // 사진이 다 받아질 때까지 시간 막대는 멈춰 있어요 (느린 인터넷에서 사진도 못 보고 넘어가지 않게)
+          st.loading = true;
+          updatePaused();
           drawBars(i);
           drawStoryHead(it);
           onShown?.(it);
@@ -136,10 +141,15 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
         box.style.backgroundImage = safePh(it.ph) ? `url(${safePh(it.ph)})` : '';
         img.removeAttribute('src');
         img.classList.remove('ready');
+        const loaded = () => { if (index === i && st.loading) { st.loading = false; updatePaused(); } };
         try {
           const url = await app.api.photoURL(it.path);
-          if (index === i) { img.src = url; img.onload = () => img.classList.add('ready'); }
-        } catch { /* 자리표시만 보임 */ }
+          if (index === i) {
+            img.onload = () => { img.classList.add('ready'); loaded(); };
+            img.onerror = loaded;
+            img.src = url;
+          }
+        } catch { loaded(); /* 자리표시만 보임 */ }
         [i + 1, i - 1].forEach((k) => items[k] && app.api.photoURL(items[k].path).catch(() => {}));
       };
 
@@ -169,12 +179,15 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
         }
         if (!post) return;
         if (v === 'like') {
-          await toggleLike(app, post, !post.likes.some((l) => l.userId === app.user.id));
-          drawStoryHead(it);
+          const pending = toggleLike(app, post, !post.likes.some((l) => l.userId === app.user.id));
+          drawStoryHead(it); // 누르자마자 하트 바꾸기
+          await pending;
+          if (!st.closed) drawStoryHead(items[index]); // 그 사이 다음 사진으로 넘어갔을 수 있어요
         }
         if (v === 'comments') {
-          setPaused(true);
-          openComments(app, post, { onClose: () => setPaused(false) });
+          st.comments = true;
+          updatePaused();
+          openComments(app, post, { onClose: () => { st.comments = false; updatePaused(); } });
         }
         if (b.dataset.react) {
           const emoji = b.dataset.react;
@@ -200,11 +213,13 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
       });
 
       st.onKey = (e) => {
+        // 댓글을 쓰는 중에 누른 화살표는 글자 사이를 옮기는 것
+        if (st.comments || e.target.closest?.('input, textarea, [contenteditable]')) return;
         if (e.key === 'ArrowLeft') go(-1);
         if (e.key === 'ArrowRight') go(1);
       };
       document.addEventListener('keydown', st.onKey);
-      st.onVis = () => { if (story) setPaused(document.hidden); };
+      st.onVis = () => { if (story) updatePaused(); };
       document.addEventListener('visibilitychange', st.onVis);
 
       // ----- 손가락 동작 -----
@@ -225,7 +240,8 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
       };
       const begin = () => {
         const p = [...pts.values()];
-        g = { scale, tx, ty, t: Date.now(), x: p[0].x, y: p[0].y, moved: false };
+        // multi: 두 손가락이 닿았던 동작은 '톡 누름'으로 치지 않아요
+        g = { scale, tx, ty, t: Date.now(), x: p[0].x, y: p[0].y, moved: false, multi: !!g?.multi || p.length > 1 };
         if (p.length === 2 && !story) {
           g.dist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
           g.mx = (p[0].x + p[1].x) / 2;
@@ -240,7 +256,7 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
         begin();
         if (story) {
           clearTimeout(st.holdTimer);
-          st.holdTimer = setTimeout(() => { if (g) g.held = true; setPaused(true); }, 200);
+          st.holdTimer = setTimeout(() => { st.held = true; updatePaused(); }, 200);
         }
       });
       stage.addEventListener('pointermove', (e) => {
@@ -282,13 +298,13 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
         if (!g) return;
         const dx = e.clientX - g.x;
         const dy = e.clientY - g.y;
-        const held = g.held;
+        const held = st.held;
         el.style.setProperty('--fade', '1');
         if (story) {
-          if (held) setPaused(false);
+          if (held) { st.held = false; updatePaused(); }
           if (dy > 120 && Math.abs(dy) > Math.abs(dx)) { ctl.close(); return; }
           tx = 0; ty = 0; apply(true);
-          if (!g.moved && !held) {
+          if (!g.moved && !held && !g.multi) {
             // 왼쪽 1/3을 누르면 이전, 나머지는 다음
             const c = center();
             go(e.clientX - c.left < c.w / 3 ? -1 : 1);
@@ -324,6 +340,7 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
       };
       stage.addEventListener('pointerup', end);
       stage.addEventListener('pointercancel', end);
+      if (story) stage.addEventListener('contextmenu', (e) => e.preventDefault()); // 꾹 누르기 = 멈춤
 
       show(index);
     },

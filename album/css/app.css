@@ -29,6 +29,8 @@
   --tab-h: calc(38px + 1.6rem);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
   color-scheme: light;
 }
 
@@ -518,7 +520,7 @@ body[data-screen="onboard"] #toast { top: calc(16px + var(--safe-t)); }
 .viewer { background: rgba(0, 0, 0, var(--fade, 1)); color: #fff; opacity: 0; transition: opacity .18s ease; touch-action: none; display: flex; flex-direction: column; }
 .viewer.shown { opacity: 1; }
 .viewer.closing { opacity: 0; }
-.v-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: calc(52px + var(--safe-t)); padding: var(--safe-t) 6px 0; }
+.v-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: calc(52px + var(--safe-t)); padding: var(--safe-t) calc(6px + var(--safe-r)) 0 calc(6px + var(--safe-l)); }
 .v-btn { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 10px; color: #fff; font-weight: 600; font-size: 1rem; }
 .v-count { font-weight: 600; font-size: .95rem; }
 .v-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
@@ -526,15 +528,17 @@ body[data-screen="onboard"] #toast { top: calc(16px + var(--safe-t)); }
 .v-img img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .2s ease; -webkit-touch-callout: none; user-select: none; }
 .v-img img.ready { opacity: 1; }
 .v-nav { position: absolute; top: 50%; z-index: 2; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-items: center; }
-.v-nav.prev { left: 6px; }
-.v-nav.next { right: 6px; }
-.v-bottom { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 10px 16px calc(14px + var(--safe-b)); }
+.v-nav.prev { left: calc(6px + var(--safe-l)); }
+.v-nav.next { right: calc(6px + var(--safe-r)); }
+.v-bottom { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 10px calc(16px + var(--safe-r)) calc(14px + var(--safe-b)) calc(16px + var(--safe-l)); }
 .v-date { font-size: .9rem; color: rgba(255, 255, 255, .85); }
 .v-date:empty { display: none; }
 .v-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .v-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; white-space: nowrap; flex: none; border: 1px solid rgba(255, 255, 255, .5); border-radius: 22px; color: #fff; font-weight: 600; font-size: .95rem; }
 
-.st-top { flex: none; padding: calc(8px + var(--safe-t)) 8px 0; }
+.st-top { flex: none; padding: calc(8px + var(--safe-t)) calc(8px + var(--safe-r)) 0 calc(8px + var(--safe-l)); }
+/* 스토리에서 꾹 누를 때 안드로이드의 '이미지 저장' 메뉴가 뜨지 않게 (누름은 바깥 칸이 받아요) */
+.viewer.story-mode .v-img img { pointer-events: none; }
 .st-bars { display: flex; gap: 4px; padding: 0 4px; }
 .st-bar { flex: 1; height: 2px; border-radius: 1px; background: rgba(255, 255, 255, .35); overflow: hidden; }
 .st-bar i { display: block; height: 100%; width: 0; background: #fff; }
@@ -545,7 +549,7 @@ body[data-screen="onboard"] #toast { top: calc(16px + var(--safe-t)); }
 .st-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 4px 4px; }
 .st-who { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
 .st-who small { color: rgba(255, 255, 255, .75); font-size: .85rem; }
-.st-bottom { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px 12px calc(14px + var(--safe-b)); }
+.st-bottom { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px calc(12px + var(--safe-r)) calc(14px + var(--safe-b)) calc(12px + var(--safe-l)); }
 .st-like { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 8px; color: #fff; font-weight: 600; white-space: nowrap; flex: none; }
 .st-like.on .ic { color: var(--heart); }
 .st-emojis { flex: 1; display: flex; justify-content: center; }

@@ -6,7 +6,10 @@ import { postCard, bindCard, handlePostClick } from '../postcard.js';
 import { observeImages } from '../media.js';
 import { openComments } from '../comments.js';
 
+let seq = 0; // 기다리는 동안 다른 화면으로 가면(또는 다시 그리면) 예전 그리기는 그만
+
 export async function render(app, view, id, extra) {
+  const my = ++seq;
   app.setTop(html`
     <button class="icon-btn" data-top="back" aria-label="뒤로">${icon('back', { size: 28 })}</button>
     <h1 class="top-title">사진</h1>`);
@@ -22,6 +25,7 @@ export async function render(app, view, id, extra) {
     const fresh = await app.api.post(id);
     if (fresh) post = fresh;
   } catch { /* 저장된 것 사용 */ }
+  if (my !== seq) return; // 기다리는 동안 다른 화면으로 갔어요
   if (!post) {
     view.innerHTML = String(html`<div class="empty"><div class="empty-art">${icon('image', { size: 40, stroke: 1.5 })}</div><h2>지워진 사진이에요</h2>
       <button class="btn ghost" onclick="location.hash='#/home'">홈으로</button></div>`);
@@ -39,5 +43,6 @@ export async function render(app, view, id, extra) {
 }
 
 export function leave() {
+  seq++;
   document.getElementById('view').onclick = null;
 }

@@ -120,6 +120,29 @@ drop trigger if exists comments_fill_family on public.comments;
 create trigger comments_fill_family before insert on public.comments
   for each row execute function public.fill_family_from_post();
 
+-- 게시물의 사진 파일 경로는 반드시 '가족ID/게시물ID/' 폴더 안이어야 해요
+-- (다른 게시물의 파일을 가리키는 가짜 게시물로 남의 사진을 지우게 만들 수 없게)
+create or replace function public.check_post_photos()
+returns trigger language plpgsql set search_path = public as $$
+declare
+  pre text := new.family_id::text || '/' || new.id::text || '/';
+begin
+  if exists (
+    select 1 from jsonb_array_elements(new.photos) x
+    where jsonb_typeof(x) <> 'object'
+       or coalesce(x->>'path', '') !~ ('^' || pre || '[0-9]+\.jpg$')
+       or coalesce(x->>'thumb', '') !~ ('^' || pre || '[0-9]+_t\.jpg$')
+       or (x ? 'orig' and coalesce(x->>'orig', '') !~ ('^' || pre || '[0-9]+_o\.(jpg|png|webp|heic|heif)$'))
+  ) then
+    raise exception 'bad_photo_path';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists posts_check_photos on public.posts;
+create trigger posts_check_photos before insert or update of photos, family_id on public.posts
+  for each row execute function public.check_post_photos();
+
 -- ---------- 앱에서 부르는 기능(RPC) ----------
 
 -- 새 가족 앨범 만들기.
@@ -215,29 +238,67 @@ begin
 end $$;
 
 -- 저장공간 사용량 (가족 화면의 막대 그래프용, 숫자만 알려줘요)
+-- 무료 1GB는 프로젝트 전체가 함께 쓰므로 전체 합계를 알려줘요 (앨범 가족만)
 create or replace function public.storage_usage()
-returns bigint language sql stable security definer set search_path = public as $$
-  select coalesce(sum((metadata->>'size')::bigint), 0)::bigint from storage.objects where bucket_id = 'photos';
-$$;
+returns bigint language plpgsql stable security definer set search_path = public as $$
+begin
+  if not exists (select 1 from members where user_id = auth.uid()) then
+    raise exception 'not_member';
+  end if;
+  return (select coalesce(sum((metadata->>'size')::bigint), 0)::bigint
+          from storage.objects where bucket_id = 'photos');
+end $$;
 
--- 오래된 사진의 '원본'을 지운 뒤 게시물 정보에서도 빼기 (관리자만)
+-- 오래된 사진의 '원본'을 지운 뒤 게시물 정보에서도 빼기 (관리자만). 정보에서 뺀 경로를 돌려줘요
 -- 공간이 모자랄 때 원본만 정리하는 용도 — 꾸민 사진은 그대로 남아요
-create or replace function public.forget_originals(p_family uuid, p_paths text[])
-returns integer language plpgsql security definer set search_path = public as $$
+drop function if exists public.forget_originals(uuid, text[]);
+create function public.forget_originals(p_family uuid, p_paths text[])
+returns text[] language plpgsql security definer set search_path = public as $$
 declare
-  n integer;
+  cleared text[];
 begin
   if not is_owner(p_family) then
     raise exception 'not_owner';
   end if;
+  select coalesce(array_agg(x->>'orig'), '{}') into cleared
+  from posts p, jsonb_array_elements(p.photos) x
+  where p.family_id = p_family and x->>'orig' = any(p_paths);
   update posts p set photos = (
     select jsonb_agg(case when t.ph->>'orig' = any(p_paths) then t.ph - 'orig' - 'origName' - 'origSize' else t.ph end
                      order by t.i)
     from jsonb_array_elements(p.photos) with ordinality as t(ph, i))
   where p.family_id = p_family
     and exists (select 1 from jsonb_array_elements(p.photos) x where x->>'orig' = any(p_paths));
-  get diagnostics n = row_count;
-  return n;
+  return cleared;
+end $$;
+
+-- 앨범을 지울 때: 이 앨범 폴더 안의 파일 전부 (올리다 실패해서 남은 파일까지) — 관리자만
+create or replace function public.family_files(p_family uuid)
+returns text[] language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_owner(p_family) then
+    raise exception 'not_owner';
+  end if;
+  return (select coalesce(array_agg(o.name), '{}') from storage.objects o
+          where o.bucket_id = 'photos' and o.name like p_family::text || '/%');
+end $$;
+
+-- 가족 한 명 내보내기 (관리자만). 같은 링크로 다시 들어오지 못하게 초대 코드도 새로 만들어요
+create or replace function public.remove_member(p_family uuid, p_user uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  new_code text;
+begin
+  if not is_owner(p_family) then
+    raise exception 'not_owner';
+  end if;
+  if p_user = auth.uid() then
+    raise exception 'use_leave';
+  end if;
+  delete from members where family_id = p_family and user_id = p_user;
+  update families set invite_code = gen_invite_code() where id = p_family
+  returning invite_code into new_code;
+  return new_code;
 end $$;
 
 -- ---------- 접근 권한 ----------
@@ -254,7 +315,8 @@ grant select, delete on public.families to authenticated;
 grant update (name, baby_name, baby_birthday) on public.families to authenticated;
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
-grant select, insert, delete on public.posts to authenticated;
+grant select, delete on public.posts to authenticated;
+grant insert (id, family_id, caption, taken_at, photos) on public.posts to authenticated; -- 올린 시각(created_at)은 서버가 정해요
 grant update (caption, taken_at) on public.posts to authenticated;
 grant select, insert, delete on public.likes to authenticated;
 grant select, insert, delete on public.comments to authenticated;
@@ -263,13 +325,15 @@ revoke execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text),
   public.gen_invite_code(), public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
-  public.storage_usage(), public.forget_originals(uuid, text[])
+  public.storage_usage(), public.forget_originals(uuid, text[]), public.family_files(uuid),
+  public.remove_member(uuid, uuid), public.check_post_photos()
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
-  public.storage_usage(), public.forget_originals(uuid, text[])
+  public.storage_usage(), public.forget_originals(uuid, text[]), public.family_files(uuid),
+  public.remove_member(uuid, uuid)
   to authenticated;
 
 -- families
