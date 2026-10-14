@@ -10,7 +10,7 @@ import {
 } from './decor.js';
 
 const MAX_SRC = 2048;   // 편집용 원본 최대 크기
-const OUT_MAX = 1600;   // 올리는 사진 최대 크기
+const OUT_MAX = 1440;   // 올리는 사진 최대 크기 (인스타그램은 1080px — 무료 저장공간을 아끼면서 확대해도 선명하게)
 const ASPECTS = [
   { id: 'orig', name: '원본' },
   { id: '1:1', name: '정사각형', r: 1 },
@@ -351,8 +351,8 @@ export async function exportPhoto(ps, baby) {
   const L = layout(ps, OUT_MAX);
   const c = makeCanvas(L.W, L.H);
   render(c.getContext('2d'), ps, L, { baby, cache: false });
-  const blob = await toBlob(c, 0.86);
-  const thumb = await toBlob(scaled(c, 480), 0.8);
+  const blob = await toBlob(c, 0.84);
+  const thumb = await toBlob(scaled(c, 400), 0.78);
   const ph = scaled(c, 24).toDataURL('image/jpeg', 0.6);
   return { blob, thumb, w: L.W, h: L.H, ph };
 }
