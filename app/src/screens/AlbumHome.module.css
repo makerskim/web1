@@ -1,0 +1,27 @@
+.title { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.03em; max-width: 70vw; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile { padding: var(--s-2) var(--gutter) var(--s-4); }
+.head { display: flex; align-items: center; gap: var(--s-6); }
+.babyPic { flex: none; width: 88px; height: 88px; border-radius: 50%; padding: 3px; background: var(--c-ring); }
+.babyPic > * { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 0 0 3px var(--c-canvas); }
+.babyPic > span { display: grid; place-items: center; background: linear-gradient(140deg, #fde3ea, #ece4fb); font-size: 2rem; font-weight: 800; color: var(--c-accent-strong); }
+.babyImg { overflow: hidden; }
+.stats { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+.stats > * { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.stats b { font-size: var(--t-headline); font-weight: 800; letter-spacing: -0.02em; }
+.stats span { font-size: var(--t-footnote); color: var(--c-label-2); }
+.bio { margin-top: var(--s-3); display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.bio b { font-size: var(--t-callout); font-weight: 700; }
+.bio p { font-size: var(--t-sub); color: var(--c-label-2); }
+.link { color: var(--c-accent-strong); font-size: var(--t-sub); font-weight: 600; min-height: 32px; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); margin-top: var(--s-4); }
+.section { padding: var(--s-5) var(--gutter) var(--s-2); font-size: var(--t-callout); font-weight: 700; scroll-margin-top: 70px; }
+.members { list-style: none; margin: 0; padding: 0; }
+.members li { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-2) var(--s-2) var(--gutter); min-height: 60px; }
+.mText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mText b { display: flex; align-items: center; gap: var(--s-1); font-size: var(--t-callout); font-weight: 700; }
+.mText em { font-style: normal; font-size: var(--t-caption); font-weight: 600; color: var(--c-label-2); background: var(--c-fill); border-radius: 6px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 2px; }
+.mText em.owner { color: var(--c-accent-strong); background: var(--c-accent-soft); }
+.mText small { font-size: var(--t-caption); color: var(--c-label-3); }
+.more { width: 40px; height: 40px; display: grid; place-items: center; color: var(--c-label-2); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+.tile { aspect-ratio: 1; }

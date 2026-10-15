@@ -1,0 +1,287 @@
+// Supabase 데이터: 앨범, 가족, 게시물, 좋아요, 댓글, 소식
+import { uuid } from './uuid';
+import { sb } from './supabase';
+import { friendly } from './errors';
+import { removeFiles, uploadFile, isDrive } from './storage';
+import { remember } from './photoCache';
+import type { ActivityEvent, Album, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
+
+type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+function check<T>({ data, error }: { data: T; error: unknown }): T {
+  if (error) throw new Error(friendly(error));
+  return data;
+}
+
+const album = (r: Row, m?: Row): Album => ({
+  id: r.id, name: r.name, babyName: r.baby_name, babyBirthday: r.baby_birthday, inviteCode: r.invite_code,
+  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id,
+  createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
+});
+const member = (r: Row): Member => ({ userId: r.user_id, displayName: r.display_name, avatar: r.avatar || '', role: r.role, joinedAt: r.joined_at });
+const comment = (r: Row): Comment => ({ id: r.id, postId: r.post_id, authorId: r.author_id, body: r.body, createdAt: r.created_at });
+const post = (r: Row): Post => ({
+  id: r.id, albumId: r.family_id, authorId: r.author_id, caption: r.caption, takenAt: r.taken_at, createdAt: r.created_at,
+  photos: r.photos || [],
+  likes: (r.likes || []).map((l: Row) => ({ userId: l.user_id, createdAt: l.created_at })),
+  comments: (r.comments || []).map(comment).sort((a: Comment, b: Comment) => a.createdAt.localeCompare(b.createdAt)),
+});
+const POST_COLS = '*, likes(user_id, created_at), comments(id, post_id, author_id, body, created_at)';
+
+// ---------- 로그인 ----------
+export function meFrom(u: { id: string; email?: string | null; user_metadata?: Row; app_metadata?: Row } | null): Me | null {
+  if (!u) return null;
+  const md = u.user_metadata || {};
+  const name = md.full_name || md.name || md.nickname || md.preferred_username || md.user_name || (u.email || '').split('@')[0] || '';
+  let avatarUrl: string = md.avatar_url || md.picture || '';
+  if (avatarUrl.startsWith('http://')) avatarUrl = `https://${avatarUrl.slice(7)}`;
+  if (!/^https:\/\/([a-z0-9-]+\.)*(googleusercontent\.com|kakaocdn\.net|kakao\.com)\//.test(avatarUrl)) avatarUrl = '';
+  return { id: u.id, email: u.email || null, name: String(name).slice(0, 20), avatarUrl, provider: u.app_metadata?.provider || '' };
+}
+
+export async function signIn(provider: 'kakao' | 'google') {
+  const redirectTo = `${location.origin}${location.pathname}`;
+  const { error } = await sb.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo, ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}) },
+  });
+  if (error) throw new Error(friendly(error));
+}
+
+export async function signOut() { await sb.auth.signOut(); }
+
+// ---------- 앨범 ----------
+export async function albums(uid: string): Promise<Album[]> {
+  const rows = check(await sb.from('members').select('role, display_name, avatar, joined_at, families(*)').eq('user_id', uid).order('joined_at'));
+  return (rows as Row[]).filter((r) => r.families).map((r) => album(r.families, r));
+}
+
+export async function createAlbum(p: { name: string; babyName: string; babyBirthday: string | null; displayName: string; avatar: string }) {
+  const f = check(await sb.rpc('create_family', {
+    p_name: p.name, p_baby_name: p.babyName, p_baby_birthday: p.babyBirthday, p_display_name: p.displayName, p_avatar: p.avatar,
+  })) as Row;
+  return f.id as string;
+}
+
+export async function inviteInfo(code: string) {
+  const rows = check(await sb.rpc('invite_info', { p_code: code })) as Row[];
+  return rows?.[0] ? { name: rows[0].name as string, babyName: rows[0].baby_name as string } : null;
+}
+
+export async function joinAlbum(code: string, displayName: string, avatar: string) {
+  const f = check(await sb.rpc('join_family', { p_code: code, p_display_name: displayName, p_avatar: avatar })) as Row;
+  return f.id as string;
+}
+
+export async function updateAlbum(id: string, patch: { name?: string; babyName?: string; babyBirthday?: string | null; storage?: StorageKind }) {
+  const row: Row = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.babyName !== undefined) row.baby_name = patch.babyName;
+  if (patch.babyBirthday !== undefined) row.baby_birthday = patch.babyBirthday || null;
+  if (patch.storage !== undefined) row.storage = patch.storage;
+  check(await sb.from('families').update(row).eq('id', id));
+}
+
+export const resetInvite = async (id: string) => check(await sb.rpc('reset_invite_code', { p_family: id })) as string;
+
+export async function deleteAlbum(id: string, uid: string) {
+  // Supabase 파일 전부 (관리자 확인 포함)
+  const paths = (check(await sb.rpc('family_files', { p_family: id })) as string[]) || [];
+  if (paths.length) await removeFiles(id, paths);
+  // 드라이브 파일은 관리자 드라이브의 앨범 폴더에 그대로 남겨요 (가족 추억이 사라지지 않게)
+  const rows = check(await sb.from('families').delete().eq('id', id).select('id')) as Row[];
+  if (!rows.length) throw new Error('앨범 관리자만 할 수 있어요.');
+  void uid;
+}
+
+// ---------- 가족 ----------
+export async function members(albumId: string): Promise<Member[]> {
+  return (check(await sb.from('members').select('*').eq('family_id', albumId).order('joined_at')) as Row[]).map(member);
+}
+
+export async function updateMe(albumId: string, uid: string, p: { displayName?: string; avatar?: string }) {
+  const row: Row = {};
+  if (p.displayName) row.display_name = p.displayName;
+  if (p.avatar !== undefined) row.avatar = p.avatar;
+  check(await sb.from('members').update(row).eq('family_id', albumId).eq('user_id', uid));
+}
+
+// 내가 고른 프로필 사진: 앨범 폴더/avatars/내아이디-시각.jpg
+export async function setAvatarPhoto(albumId: string, uid: string, blob: Blob, old: string) {
+  const path = `${albumId}/avatars/${uid}-${Date.now()}.jpg`;
+  const { error } = await sb.storage.from('photos').upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
+  if (error) throw new Error(friendly(error));
+  remember(path, blob);
+  try {
+    await updateMe(albumId, uid, { avatar: `sb:${path}` });
+  } catch (e) {
+    await sb.storage.from('photos').remove([path]);
+    throw e;
+  }
+  if (old.startsWith(`sb:${albumId}/avatars/${uid}-`)) await sb.storage.from('photos').remove([old.slice(3)]);
+}
+
+export async function leaveAlbum(albumId: string, uid: string) {
+  check(await sb.from('members').delete().eq('family_id', albumId).eq('user_id', uid));
+}
+export const removeMember = async (albumId: string, uid: string) =>
+  check(await sb.rpc('remove_member', { p_family: albumId, p_user: uid })) as string;
+export const setRole = async (albumId: string, uid: string, role: 'owner' | 'member') =>
+  check(await sb.rpc('set_member_role', { p_family: albumId, p_user: uid, p_role: role }));
+
+// ---------- 게시물 ----------
+export async function posts(albumId: string, before?: string, limit = 8): Promise<Post[]> {
+  let q = sb.from('posts').select(POST_COLS).eq('family_id', albumId).order('created_at', { ascending: false }).limit(limit);
+  if (before) q = q.lt('created_at', before);
+  return (check(await q) as Row[]).map(post);
+}
+
+export async function getPost(id: string): Promise<Post | null> {
+  const r = check(await sb.from('posts').select(POST_COLS).eq('id', id).maybeSingle()) as Row | null;
+  return r ? post(r) : null;
+}
+
+export interface GridItem extends PhotoMeta { postId: string; authorId: string; takenAt: string; createdAt: string; index: number; count: number }
+
+export async function allPhotos(albumId: string): Promise<GridItem[]> {
+  const out: GridItem[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = check(await sb.from('posts').select('id, author_id, photos, taken_at, created_at')
+      .eq('family_id', albumId).order('taken_at', { ascending: false }).range(from, from + 999)) as Row[];
+    for (const r of rows) {
+      (r.photos as PhotoMeta[]).forEach((ph, i) => out.push({
+        ...ph, postId: r.id, authorId: r.author_id, takenAt: r.taken_at, createdAt: r.created_at, index: i, count: r.photos.length,
+      }));
+    }
+    if (rows.length < 1000) return out;
+  }
+}
+
+export interface NewPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string; dec: boolean; orig?: File }
+export interface OrigInfo { type: string; ext: string }
+
+const ORIG_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+export function originalInfo(file: File): OrigInfo | null {
+  const ext = (file.name.match(/\.([a-z0-9]{2,5})$/i)?.[1] || '').toLowerCase();
+  const byType = Object.entries(ORIG_TYPES).find(([, t]) => t === file.type);
+  const type = byType ? file.type : ORIG_TYPES[ext];
+  if (!type) return null;
+  const e = byType ? byType[0] : ext;
+  return { type, ext: e === 'jpeg' ? 'jpg' : e };
+}
+
+// 사진 올리기: 화면용·작은 사진을 먼저 모두, 그다음 원본(실패해도 그 원본만 빼고 계속)
+export async function createPost(
+  a: Album, p: { caption: string; takenAt: string; photos: NewPhoto[] }, onProgress?: (f: number) => void,
+): Promise<{ post: Post; skippedOriginals: number }> {
+  const id = uuid();
+  const target = { albumId: a.id, storage: a.storage, postId: id };
+  const total = p.photos.reduce((n, ph) => n + ph.blob.size + ph.thumb.size + (ph.orig?.size || 0), 0) || 1;
+  let done = 0;
+  const step = (n: number) => { done += n; onProgress?.(done / total); };
+  const uploaded: string[] = [];
+  const put = async (name: string, blob: Blob, type: string, cache: boolean) => {
+    const path = await uploadFile(target, name, blob, type, cache);
+    uploaded.push(path);
+    step(blob.size);
+    return path;
+  };
+  let skippedOriginals = 0;
+  try {
+    const metas: PhotoMeta[] = [];
+    for (let i = 0; i < p.photos.length; i++) {
+      const ph = p.photos[i];
+      metas.push({
+        path: await put(`${i}.jpg`, ph.blob, 'image/jpeg', true),
+        thumb: await put(`${i}_t.jpg`, ph.thumb, 'image/jpeg', true),
+        w: ph.w, h: ph.h, ph: ph.ph, dec: ph.dec,
+      });
+    }
+    for (let i = 0; i < p.photos.length; i++) {
+      const ph = p.photos[i];
+      const info = ph.orig && originalInfo(ph.orig);
+      if (!ph.orig) continue;
+      if (!info) { step(ph.orig.size); continue; }
+      try {
+        const name = `${i}_o.${info.ext}`;
+        const path = await put(name, ph.orig, info.type, false).catch(() => put(name, ph.orig!, info.type, false));
+        Object.assign(metas[i], { orig: path, origName: ph.orig.name.slice(-80), origSize: ph.orig.size });
+      } catch {
+        skippedOriginals++;
+        step(ph.orig.size);
+      }
+    }
+    const row = check(await sb.from('posts').insert({
+      id, family_id: a.id, caption: p.caption, taken_at: p.takenAt, photos: metas,
+    }).select(POST_COLS).single()) as Row;
+    return { post: post(row), skippedOriginals };
+  } catch (e) {
+    // 게시물은 저장됐는데 응답만 못 받은 경우엔 지우지 않아요
+    const found = await sb.from('posts').select(POST_COLS).eq('id', id).maybeSingle().then((r) => r.data, () => null);
+    if (found) return { post: post(found as Row), skippedOriginals };
+    await removeFiles(a.id, uploaded).catch(() => {});
+    throw e;
+  }
+}
+
+export async function updatePost(id: string, p: { caption?: string; takenAt?: string }) {
+  const row: Row = {};
+  if (p.caption !== undefined) row.caption = p.caption;
+  if (p.takenAt) row.taken_at = p.takenAt;
+  return post(check(await sb.from('posts').update(row).eq('id', id).select(POST_COLS).single()) as Row);
+}
+
+export const filesOf = (ph: PhotoMeta) => [ph.path, ph.thumb, ph.orig].filter(Boolean) as string[];
+
+export async function deletePost(p: Post) {
+  // 드라이브 파일은 게시물이 남아 있을 때 지워야 서버가 '이 앨범 사진'인지 확인할 수 있어요
+  const paths = p.photos.flatMap(filesOf).filter((x) => isDrive(x) || x.startsWith(`${p.albumId}/${p.id}/`));
+  const drive = paths.filter(isDrive);
+  if (drive.length) await removeFiles(p.albumId, drive).catch(() => {});
+  const rows = check(await sb.from('posts').delete().eq('id', p.id).select('id')) as Row[];
+  if (!rows.length) throw new Error('지울 수 있는 권한이 없어요.');
+  await removeFiles(p.albumId, paths.filter((x) => !isDrive(x))).catch(() => {});
+}
+
+// ---------- 좋아요·댓글 ----------
+export async function like(p: Post, on: boolean, uid: string) {
+  if (on) {
+    const { error } = await sb.from('likes').insert({ post_id: p.id });
+    if (error && (error as { code?: string }).code !== '23505') throw new Error(friendly(error));
+  } else {
+    check(await sb.from('likes').delete().eq('post_id', p.id).eq('user_id', uid));
+  }
+}
+
+export const addComment = async (p: Post, body: string) =>
+  comment(check(await sb.from('comments').insert({ post_id: p.id, body }).select().single()) as Row);
+export async function deleteComment(c: Comment) { check(await sb.from('comments').delete().eq('id', c.id)); }
+
+// ---------- 소식 ----------
+export async function activity(albumId: string): Promise<ActivityEvent[]> {
+  const [ps, ls, cs, ms] = await Promise.all([
+    sb.from('posts').select('id, author_id, photos, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).limit(30),
+    sb.from('likes').select('post_id, user_id, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).limit(40),
+    sb.from('comments').select('id, post_id, author_id, body, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).limit(40),
+    sb.from('members').select('user_id, joined_at').eq('family_id', albumId).order('joined_at', { ascending: false }).limit(20),
+  ]).then((rs) => rs.map((r) => check(r as { data: Row[]; error: unknown }) as Row[]));
+  const byId = new Map<string, { id: string; photos: PhotoMeta[] }>(ps.map((p) => [p.id, { id: p.id, photos: p.photos }]));
+  const missing = [...new Set([...ls, ...cs].map((x) => x.post_id))].filter((id) => !byId.has(id));
+  if (missing.length) (check(await sb.from('posts').select('id, photos').in('id', missing)) as Row[]).forEach((p) => byId.set(p.id, p as { id: string; photos: PhotoMeta[] }));
+  const month = new Date(Date.now() - 30 * 86400000).toISOString();
+  const ev: ActivityEvent[] = [
+    ...ps.map((p) => ({ type: 'post' as const, at: p.created_at, userId: p.author_id, postId: p.id, post: byId.get(p.id), count: p.photos.length })),
+    ...ls.map((l) => ({ type: 'like' as const, at: l.created_at, userId: l.user_id, postId: l.post_id, post: byId.get(l.post_id) })),
+    ...cs.map((c) => ({ type: 'comment' as const, at: c.created_at, userId: c.author_id, postId: c.post_id, post: byId.get(c.post_id), body: c.body })),
+    ...ms.filter((m) => m.joined_at > month).map((m) => ({ type: 'join' as const, at: m.joined_at, userId: m.user_id })),
+  ];
+  return ev.filter((e) => e.type === 'join' || e.post).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 80);
+}
+
+// ---------- 저장공간 ----------
+export async function storageUsage() { return Number(check(await sb.rpc('storage_usage'))) || 0; }
+
+export async function dropOriginals(albumId: string, paths: string[]) {
+  await removeFiles(albumId, paths);
+  return ((check(await sb.rpc('forget_originals', { p_family: albumId, p_paths: paths })) as string[]) || []).length;
+}

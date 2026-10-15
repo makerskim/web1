@@ -1,0 +1,6 @@
+.wrap { display: flex; flex-direction: column; gap: var(--s-4); }
+.lead { color: var(--c-label-2); font-size: var(--t-sub); line-height: 1.6; text-align: center; padding: 0 var(--s-4); }
+.code { display: flex; flex-direction: column; align-items: center; gap: var(--s-1); padding: var(--s-5); border-radius: var(--r-md); background: linear-gradient(120deg, #fff0f4, #f1ecff); }
+.code small { font-size: var(--t-footnote); color: var(--c-label-3); font-weight: 600; }
+.code strong { font-size: 2rem; font-weight: 800; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+.code span { font-size: var(--t-caption); color: var(--c-label-3); }

@@ -1,0 +1,9 @@
+.title { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.03em; }
+.group { padding: var(--s-4) var(--gutter) var(--s-2); font-size: var(--t-callout); font-weight: 700; }
+.row { display: flex; align-items: center; gap: var(--s-3); width: 100%; padding: var(--s-2) var(--gutter); min-height: 64px; text-align: left; }
+.text { flex: 1; min-width: 0; font-size: var(--t-sub); line-height: 1.45; }
+.text b { font-weight: 700; }
+.text time { color: var(--c-label-3); margin-left: 2px; white-space: nowrap; }
+.quote { display: block; color: var(--c-label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thumb { flex: none; width: 44px; height: 44px; border-radius: 8px; }
+.empty { text-align: center; color: var(--c-label-3); padding: var(--s-10) var(--gutter); line-height: 1.7; font-size: var(--t-sub); }

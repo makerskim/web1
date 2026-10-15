@@ -1,0 +1,52 @@
+# master에 합쳐지면 앱을 빌드해서 GitHub Pages에 올려요
+# (처음 한 번: Settings → Pages → Source 를 'GitHub Actions' 로 바꿔 주세요)
+name: Deploy site
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install
+        working-directory: app
+        run: npm ci
+      - name: Type check and build
+        working-directory: app
+        run: npm run build
+      - name: Assemble site (practice pages at the root, app at /album/)
+        run: |
+          mkdir -p _site/album
+          for f in *.html *.jpg *.png; do [ -f "$f" ] && cp "$f" _site/; done
+          cp -r app/dist/. _site/album/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}album/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

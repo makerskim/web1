@@ -1,0 +1,74 @@
+/* ================================================================
+   Pastel Memories — Design tokens
+   - 4pt spacing grid, Apple-style type scale, three radii, one motion curve
+   - Text size setting scales everything through html font-size (16 / 18 / 20px)
+   ================================================================ */
+
+:root {
+  /* Colour — warm cream canvas, white surfaces, blush accent */
+  --c-canvas: #fbf7f6;
+  --c-surface: #ffffff;
+  --c-surface-2: #f6f1f3;
+  --c-fill: #efe8ec;
+  --c-hairline: rgba(60, 40, 52, 0.09);
+  --c-hairline-strong: rgba(60, 40, 52, 0.16);
+  --c-label: #1f1a21;
+  --c-label-2: #5f5664;
+  --c-label-3: #8b8290;
+  --c-accent: #e2718f;          /* icons, large text, fills */
+  --c-accent-strong: #c3506f;   /* text-only accent with 4.9:1 contrast */
+  --c-accent-soft: #fde7ee;
+  --c-accent-gradient: linear-gradient(135deg, #f8a8bd 0%, #f6b9a6 45%, #c9b5f5 100%);
+  --c-ink-on-accent: #ffffff;
+  --c-heart: #ff4d6d;
+  --c-danger: #d6455d;
+  --c-ring: conic-gradient(from 200deg, #ffb3c6, #ffd1a8, #fff0a8, #bfe8d0, #b5dcff, #d4c3ff, #ffb3c6);
+  --c-scrim: rgba(25, 18, 24, 0.38);
+  --c-glass: rgba(251, 247, 246, 0.78);
+
+  /* Type */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --font-display: "Cormorant Garamond", "Gowun Batang", Georgia, serif;
+  --t-caption: 0.75rem;   /* 12 */
+  --t-footnote: 0.8125rem;/* 13 */
+  --t-sub: 0.875rem;      /* 14 */
+  --t-body: 0.9375rem;    /* 15 */
+  --t-callout: 1rem;      /* 16 */
+  --t-headline: 1.0625rem;/* 17 */
+  --t-title3: 1.25rem;    /* 20 */
+  --t-title2: 1.5rem;     /* 24 */
+  --t-title1: 1.75rem;    /* 28 */
+  --t-large: 2.125rem;    /* 34 */
+
+  /* Space (4pt grid) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --gutter: 16px;
+
+  /* Shape */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-full: 999px;
+
+  /* Elevation */
+  --e-1: 0 1px 2px rgba(60, 40, 52, 0.05), 0 2px 10px rgba(60, 40, 52, 0.04);
+  --e-2: 0 8px 30px rgba(60, 40, 52, 0.12);
+  --e-3: 0 20px 60px rgba(40, 25, 35, 0.22);
+
+  /* Layout */
+  --col: 600px;
+  --bar-h: 52px;
+  --tab-h: 56px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+
+  /* Motion — one curve everywhere (Apple-like ease-out) */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-1: 160ms;
+  --dur-2: 280ms;
+  --dur-3: 420ms;
+
+  color-scheme: light;
+}

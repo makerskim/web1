@@ -1,0 +1,17 @@
+.page { display: flex; flex-direction: column; gap: var(--s-6); padding: var(--s-2) var(--gutter) var(--s-8); }
+.segRow { padding: var(--s-3) var(--s-4); }
+.foot { text-align: center; font-family: var(--font-display); font-style: italic; font-size: var(--t-callout); color: var(--c-label-3); }
+.saveBtn { color: var(--c-accent-strong); font-weight: 700; padding: 0 var(--s-3); min-height: 44px; }
+.profile { display: flex; flex-direction: column; gap: var(--s-6); }
+.pic { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); }
+.pic span { font-size: var(--t-sub); font-weight: 600; color: var(--c-accent-strong); }
+.driveCard { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-3); padding: var(--s-6) var(--s-5); border-radius: var(--r-md); background: var(--c-surface); box-shadow: var(--e-1); color: var(--c-accent-strong); }
+.driveCard b { font-size: var(--t-headline); color: var(--c-label); }
+.driveCard p { font-size: var(--t-sub); color: var(--c-label-2); line-height: 1.6; }
+.meter { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
+.meter p { font-size: var(--t-sub); color: var(--c-label-2); }
+.bar { height: 6px; border-radius: 3px; background: var(--c-fill); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 3px; background: var(--c-accent-gradient); }
+.bar i.warn { background: var(--c-danger); }
+.install { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-3); padding: var(--s-6) var(--s-4); color: var(--c-accent-strong); }
+.install p { color: var(--c-label-2); font-size: var(--t-callout); line-height: 1.6; }
