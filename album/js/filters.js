@@ -2,6 +2,11 @@
 
 export const FILTERS = [
   { id: 'none', name: '원본' },
+  { id: 'pastel', name: '파스텔', fade: 0.1, sat: 0.84, bright: 1.05, contrast: 0.92, tint: [8, 2, 10] },
+  { id: 'peach', name: '피치', warm: 10, tint: [10, 2, -2], fade: 0.06, bright: 1.03, sat: 0.95 },
+  { id: 'lavender', name: '라벤더', tint: [6, -3, 14], sat: 0.88, fade: 0.06, bright: 1.02 },
+  { id: 'mint', name: '민트', tint: [-6, 8, 4], sat: 0.9, fade: 0.06, bright: 1.03 },
+  { id: 'milk', name: '우유빛', bright: 1.08, contrast: 0.86, fade: 0.1, sat: 0.9 },
   { id: 'soft', name: '뽀샤시', bright: 1.07, contrast: 0.9, sat: 0.92, fade: 0.05, tint: [6, 2, 4] },
   { id: 'warm', name: '따뜻하게', warm: 16, sat: 1.06, contrast: 1.02 },
   { id: 'vivid', name: '화사하게', sat: 1.28, contrast: 1.08, bright: 1.03 },
@@ -13,6 +18,30 @@ export const FILTERS = [
 ];
 
 export const filterById = (id) => FILTERS.find((f) => f.id === id) || FILTERS[0];
+
+// 필터 강도 (0~1): 모든 값을 '원본' 쪽으로 섞어요
+export function scaleFilter(f, t) {
+  if (t >= 1 || f.id === 'none') return f;
+  const one = (v) => (v === undefined ? undefined : 1 + (v - 1) * t);
+  const lin = (v) => (v === undefined ? undefined : v * t);
+  return {
+    ...f, contrast: one(f.contrast), bright: one(f.bright), sat: one(f.sat),
+    fade: lin(f.fade), warm: lin(f.warm), gray: lin(f.gray), sepia: lin(f.sepia), vignette: lin(f.vignette),
+    tint: f.tint && f.tint.map((x) => x * t),
+  };
+}
+
+// 조정: 밝기·대비·채도·따뜻함 (-50 ~ 50)
+export const ADJUSTS = [
+  { id: 'bright', name: '밝기' }, { id: 'contrast', name: '대비' }, { id: 'sat', name: '채도' }, { id: 'warm', name: '따뜻함' },
+];
+export const hasAdjust = (a) => !!a && ADJUSTS.some((x) => a[x.id]);
+export function adjustFilter(a) {
+  return {
+    id: 'adjust', bright: 1 + (a.bright || 0) / 250, contrast: 1 + (a.contrast || 0) / 200,
+    sat: 1 + (a.sat || 0) / 100, warm: (a.warm || 0) / 2.5,
+  };
+}
 
 // 밝기·대비·색 바꾸기를 미리 계산해 둔 표(LUT)
 function luts(f) {

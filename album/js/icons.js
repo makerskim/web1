@@ -41,9 +41,14 @@ const P = {
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   album: '<rect x="2" y="6" width="16" height="16" rx="2"/><path d="M6 2h14a2 2 0 0 1 2 2v14"/>',
   zoom: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
 };
 
 export function icon(name, { size = 24, stroke = 2, fill = 'none', cls = '' } = {}) {
   return raw(`<svg class="ic ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`);
 }
+
+// Pastel Memories 로고: 파스텔 바탕 위 하트 폴라로이드
+export const LOGO_SVG = '<svg class="logo-mark" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="pm-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD3DE"/><stop offset=".55" stop-color="#E6D9FF"/><stop offset="1" stop-color="#CDEBFF"/></linearGradient></defs><rect width="120" height="120" rx="34" fill="url(#pm-g)"/><g transform="rotate(-8 60 60)"><rect x="33" y="27" width="54" height="66" rx="7" fill="#fff"/><rect x="39" y="33" width="42" height="41" rx="4" fill="#FFE8EE"/><path d="M60 67c-6.2-4.7-11.2-8.5-11.2-13.4a5.7 5.7 0 0 1 11.2-1.7 5.7 5.7 0 0 1 11.2 1.7C71.2 58.5 66.2 62.3 60 67z" fill="#F38FAA"/><rect x="45" y="80" width="30" height="3.4" rx="1.7" fill="#E9DDF0"/></g></svg>';
+export const logo = () => raw(LOGO_SVG);

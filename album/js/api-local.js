@@ -83,6 +83,14 @@ export class LocalApi {
     await this.db.put('members', m);
   }
 
+  async setAvatarPhoto(fid, blob, old) {
+    const path = `${fid}/avatars/${ME}-${Date.now()}.jpg`;
+    await this.db.put('photos', blob, path);
+    await this.updateMe(fid, { avatar: `img:${path}` });
+    if (typeof old === 'string' && old.startsWith('img:')) await this.db.del('photos', old.slice(4)).catch(() => {});
+    return path;
+  }
+
   async removeMember(fid, userId) { await this.db.del('members', [fid, userId]); }
   async leaveFamily(fid) { await this.removeMember(fid, ME); }
   async setRole() { /* 체험 모드는 혼자라서 필요 없음 */ }

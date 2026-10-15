@@ -2,7 +2,7 @@
 // 크게 보기: 두 손가락·두 번 톡톡·[크게 보기] 버튼으로 확대, 옆으로 넘기기, 아래로 내려 닫기
 // 스토리: 6초마다 다음 사진, 오른쪽 누르면 다음·왼쪽 누르면 이전, 꾹 누르면 멈춤, 한 번에 반응 보내기
 
-import { html, fmtDate, timeAgo } from './util.js';
+import { html, fmtDate, timeAgo, av } from './util.js';
 import { icon } from './icons.js';
 import { openOverlay, toast } from './ui.js';
 import { saveWithChoice, safePh } from './media.js';
@@ -28,7 +28,7 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
     <div class="st-top">
       <div class="st-bars"></div>
       <div class="st-head">
-        <span class="avatar s32" data-st="avatar"></span>
+        <span class="st-av" data-st="avatar"></span>
         <span class="st-who"><b data-st="name"></b><small data-st="sub"></small></span>
         <button class="v-btn" data-close aria-label="닫기">${icon('close', { size: 24 })}<span>닫기</span></button>
       </div>
@@ -108,7 +108,7 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
       };
       const drawStoryHead = (it) => {
         const m = app.memberOf(it.authorId);
-        el.querySelector('[data-st=avatar]').textContent = m.avatar;
+        el.querySelector('[data-st=avatar]').innerHTML = String(av(m.avatar, 's32'));
         el.querySelector('[data-st=name]').textContent = m.displayName;
         const age = app.ageAt(it.takenAt);
         el.querySelector('[data-st=sub]').textContent = [age && age.split(' · ')[0], timeAgo(it.createdAt)].filter(Boolean).join(' · ');

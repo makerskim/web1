@@ -1,6 +1,6 @@
 // 댓글 창: 누르기만 하면 바로 남겨지는 '빠른 댓글'로 어르신도 쉽게, 실수하면 '되돌리기'
 
-import { html, timeAgo } from './util.js';
+import { html, timeAgo, av } from './util.js';
 import { sheet, toast, confirmBox } from './ui.js';
 import { refreshCard } from './postcard.js';
 
@@ -13,13 +13,13 @@ export function openComments(app, post, { onClose } = {}) {
   const listHTML = () => html`
     ${post.caption ? html`
       <div class="cmt cap">
-        <span class="avatar s32">${author.avatar}</span>
+        ${av(author.avatar, 's32')}
         <div class="cmt-main"><p class="cmt-b"><b>${author.displayName}</b> ${post.caption}</p><time>${timeAgo(post.createdAt)}</time></div>
       </div>` : ''}
     ${post.comments.length
       ? post.comments.map((c) => html`
         <div class="cmt" data-id="${c.id}">
-          <span class="avatar s32">${app.memberOf(c.authorId).avatar}</span>
+          ${av(app.memberOf(c.authorId).avatar, 's32')}
           <div class="cmt-main">
             <p class="cmt-h"><b>${app.nameOf(c.authorId)}</b> <time>${timeAgo(c.createdAt)}</time></p>
             <p class="cmt-b">${c.body}</p>
@@ -42,7 +42,7 @@ export function openComments(app, post, { onClose } = {}) {
           ${EMOJIS.map((e) => html`<button type="button" data-emoji="${e}" aria-label="${e} 넣기">${e}</button>`)}
         </div>
         <form class="cmt-form">
-          <span class="avatar s32">${app.me.avatar}</span>
+          ${av(app.me.avatar, 's32')}
           <div class="pill">
             <input type="text" maxlength="1000" placeholder="댓글을 입력하세요" enterkeyhint="send" aria-label="댓글 입력">
             <button type="submit" class="send-txt" disabled>보내기</button>

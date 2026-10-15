@@ -1,6 +1,6 @@
 // 소식: 누가 사진을 올렸는지, 좋아요·댓글을 남겼는지, 새 가족이 들어왔는지
 
-import { html, timeAgo, toDate, ymd, subj } from '../util.js';
+import { html, timeAgo, toDate, ymd, subj, av } from '../util.js';
 import { icon } from '../icons.js';
 import { observeImages, safePh } from '../media.js';
 
@@ -38,9 +38,9 @@ function aggregate(list) {
 
 function avatars(app, e) {
   if (e.type === 'like' && e.users.length > 1) {
-    return html`<span class="avatar-pair"><span class="avatar s32">${app.memberOf(e.users[0]).avatar}</span><span class="avatar s32">${app.memberOf(e.users[1]).avatar}</span></span>`;
+    return html`<span class="avatar-pair">${av(app.memberOf(e.users[0]).avatar, 's32')}${av(app.memberOf(e.users[1]).avatar, 's32')}</span>`;
   }
-  return html`<span class="avatar s44">${app.memberOf(e.userId).avatar}</span>`;
+  return html`${av(app.memberOf(e.userId).avatar, 's44')}`;
 }
 
 function line(app, e) {

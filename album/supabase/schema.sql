@@ -20,12 +20,17 @@ create table if not exists public.members (
   family_id    uuid not null references public.families(id) on delete cascade,
   user_id      uuid not null default auth.uid() references auth.users(id) on delete cascade,
   display_name text not null check (char_length(display_name) between 1 and 20),
-  avatar       text not null default '🙂' check (char_length(avatar) <= 8),
+  avatar       text not null default '🙂',
   role         text not null default 'member' check (role in ('owner', 'member')),
   joined_at    timestamptz not null default now(),
   primary key (family_id, user_id)
 );
 create index if not exists members_user_idx on public.members (user_id);
+-- 얼굴: 이모지(8글자 이하) 또는 내가 올린 프로필 사진 'img:가족ID/avatars/내ID-시각.jpg'
+alter table public.members drop constraint if exists members_avatar_check;
+alter table public.members add constraint members_avatar_check check (
+  char_length(avatar) <= 8
+  or avatar ~ ('^img:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$'));
 
 create table if not exists public.posts (
   id         uuid primary key default gen_random_uuid(),

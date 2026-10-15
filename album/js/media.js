@@ -34,6 +34,19 @@ async function load(img) {
   }
 }
 
+// 새로 화면에 붙은 <img data-path> (프로필 사진 등)도 저절로 불러오기
+if ('MutationObserver' in window) {
+  new MutationObserver((ms) => {
+    for (const m of ms) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.matches('img[data-path]:not([data-loaded])')) io ? io.observe(n) : load(n);
+        else if (n.querySelector('img[data-path]:not([data-loaded])')) observeImages(n);
+      }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+}
+
 // root 안의 <img data-path> 들을 화면에 가까워지면 불러오기
 export function observeImages(root) {
   for (const img of root.querySelectorAll('img[data-path]:not([data-loaded])')) {
