@@ -22,6 +22,8 @@ create table if not exists public.families (
 alter table public.families add column if not exists storage text not null default 'supabase';
 alter table public.families add column if not exists drive_folder_id text;
 alter table public.families add column if not exists drive_email text;
+alter table public.families drop constraint if exists families_storage_check;
+alter table public.families add constraint families_storage_check check (storage in ('supabase', 'drive'));
 
 create table if not exists public.members (
   family_id    uuid not null references public.families(id) on delete cascade,
@@ -36,6 +38,12 @@ create index if not exists members_user_idx on public.members (user_id);
 -- 얼굴 사진: 비어 있음 / 카카오·구글 프로필 사진 주소 / 내가 올린 사진 'sb:가족ID/avatars/내ID-시각.jpg'
 alter table public.members alter column avatar set default '';
 alter table public.members drop constraint if exists members_avatar_check;
+-- v1의 이모지 얼굴(🙂 등)과 'img:' 사진은 새 규칙에 맞지 않아서 비워요 (이름 첫 글자로 보여요)
+update public.members set avatar = ''
+where not (
+  avatar = ''
+  or (char_length(avatar) <= 600 and avatar ~ '^https://([a-z0-9-]+\.)*(googleusercontent\.com|kakaocdn\.net|kakao\.com)/')
+  or avatar ~ ('^sb:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$'));
 alter table public.members add constraint members_avatar_check check (
   avatar = ''
   or (char_length(avatar) <= 600 and avatar ~ '^https://([a-z0-9-]+\.)*(googleusercontent\.com|kakaocdn\.net|kakao\.com)/')
