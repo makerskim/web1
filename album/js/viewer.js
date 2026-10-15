@@ -142,6 +142,7 @@ export function openViewer(app, items, start = 0, { postLink = false, story = fa
         img.removeAttribute('src');
         img.classList.remove('ready');
         const loaded = () => { if (index === i && st.loading) { st.loading = false; updatePaused(); } };
+        if (story) setTimeout(loaded, 15000); // 사진이 너무 늦으면 그래도 넘어가게
         try {
           const url = await app.api.photoURL(it.path);
           if (index === i) {

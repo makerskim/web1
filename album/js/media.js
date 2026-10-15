@@ -52,9 +52,9 @@ function originalName(p, blob, fallback) {
   return { name: `${stem || fallback}.${ext}`, type: MIME_EXT[blob.type] ? blob.type : EXT_MIME[ext] };
 }
 
-// 카카오톡 안의 브라우저는 사진 저장·보내기를 못 해요 → 휴대폰 브라우저로 열도록 안내 (성공했다고 속이지 않기)
+// 안드로이드 카카오톡 안의 브라우저는 사진 저장·보내기를 못 해요 → 휴대폰 브라우저로 열도록 안내 (성공했다고 속이지 않기)
 function kakaoBlocked(what) {
-  if (!isKakaoInApp()) return false;
+  if (!isKakaoInApp() || isIOS()) return false;
   const code = window.ssukApp?.fam?.inviteCode;
   const url = `${location.origin}${location.pathname}${code ? `?invite=${code}` : ''}`;
   sheet({
@@ -180,8 +180,11 @@ export async function saveWithChoice(photos, takenAt) {
 export async function sharePhotos(photos, text) {
   if (kakaoBlocked('보내기')) return;
   let files = null;
+  const prog = photos.length > 1 ? progress('사진을 준비하는 중…') : null;
   try {
-    const blobs = await Promise.all(photos.map((p) => api.photoBlob(p.path)));
+    let n = 0;
+    const blobs = await Promise.all(photos.map((p) => api.photoBlob(p.path).then((b) => { prog?.set(++n / photos.length); return b; })));
+    prog?.close();
     files = blobs.map((b, i) => new File([b], `ssukssuk_${i + 1}.jpg`, { type: 'image/jpeg' }));
     if (navigator.canShare?.({ files })) {
       await navigator.share({ files, text });
@@ -192,6 +195,7 @@ export async function sharePhotos(photos, text) {
       return;
     }
   } catch (e) {
+    prog?.close();
     if (e.name === 'AbortError') return;
     // 사진을 받느라 시간이 걸리면 휴대폰이 공유 창을 막아요 → 준비된 뒤 한 번 더 누르게
     if (e.name === 'NotAllowedError' && files) {
