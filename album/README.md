@@ -1,4 +1,4 @@
-# 🌱 쑥쑥 앨범 — 멀리 있는 가족과 함께 보는 아기 사진 앨범
+# 🤍 Pastel Memories — 멀리 있는 가족과 함께 보는 아기 사진 앨범
 
 할머니·할아버지도 쉽게 쓸 수 있는, 인스타그램처럼 보기 편한 **우리 가족 전용** 아기 사진 앱이에요.
 
@@ -81,7 +81,7 @@
 
 > Publishable(anon) 키는 원래 공개되어도 되는 키예요. 실제 보안은 ②에서 넣은 데이터베이스 규칙이 지켜요.
 
-> 🔄 **앱을 새 버전으로 바꿨다면** ②의 `schema.sql`을 **한 번 더 실행**해 주세요. (원본 사진 30MB·아이폰 HEIC 허용, 새 보안 규칙이 들어가요. 여러 번 실행해도 데이터는 그대로예요)
+> 🔄 **앱을 새 버전으로 바꿨다면** ②의 `schema.sql`을 **한 번 더 실행**해 주세요. (프로필 사진 기능도 이때 켜져요) (원본 사진 30MB·아이폰 HEIC 허용, 새 보안 규칙이 들어가요. 여러 번 실행해도 데이터는 그대로예요)
 
 ### ⑤ 앨범 만들고 가족 초대하기
 1. 앱에서 **새 가족 앨범 만들기** → 아기 이름, 생일, “나는 아기의 [엄마]” 고르기
@@ -127,7 +127,7 @@
 1. **Authentication → URL Configuration → Site URL** 에 `https://makerskim.github.io/web1/album/`
 2. **Authentication → Emails → Templates** 에서 **Magic Link** 와 **Change Email Address** 템플릿 본문에 아래 한 줄 추가:
    ```html
-   <p>쑥쑥 앨범 인증번호: <strong>{{ .Token }}</strong></p>
+   <p>Pastel Memories 인증번호: <strong>{{ .Token }}</strong></p>
    ```
    (앱에 6자리 숫자를 입력하는 방식이라 아이폰 홈 화면 앱에서도 잘 돼요)
 3. ⚠️ Supabase 무료 기본 메일은 **Supabase에 가입한 본인 이메일(과 팀원)** 에게만 보내져요. 그래서 이메일 연결은 Supabase 프로젝트를 만든 사람만 쓸 수 있어요.

@@ -3,7 +3,7 @@
 import { createApi } from './api.js';
 import { setMediaApi } from './media.js';
 import { html, babyAge, babyMilestone, isKakaoInApp } from './util.js';
-import { icon } from './icons.js';
+import { icon, logo } from './icons.js';
 import { closeAllOverlays, toast } from './ui.js';
 import * as Feed from './screens/feed.js';
 import * as Grid from './screens/grid.js';
@@ -87,6 +87,14 @@ const app = {
     this.members = await this.api.members(this.fam.id);
     this.indexMembers();
     saveSnap();
+  },
+
+  // 이름·얼굴이 바뀐 뒤: 가족 목록 다시 받고 화면 다시 그리기
+  async refreshMembers() {
+    await this.reloadMembers();
+    Feed.drawStrip(app);
+    Feed.redrawCards(app);
+    if (location.hash.startsWith('#/family')) route();
   },
 
   indexMembers() {
@@ -226,7 +234,7 @@ function renderShell() {
     <nav class="tabbar" aria-label="메뉴">
       <a href="#/home" data-tab="home">${icon('home', { size: 27, stroke: 1.9 })}<span>홈</span><i class="badge dot" hidden></i></a>
       <a href="#/grid" data-tab="grid">${icon('grid', { size: 27, stroke: 1.9 })}<span>모아보기</span></a>
-      <button type="button" data-tab="new" aria-label="사진 올리기">${icon('plusSquare', { size: 27, stroke: 1.9 })}<span>올리기</span></button>
+      <button type="button" data-tab="new" aria-label="사진 올리기">${icon('plus', { size: 24, stroke: 2.4 })}<span>올리기</span></button>
       <a href="#/activity" data-tab="activity">${icon('bell', { size: 27, stroke: 1.9 })}<span>소식</span><i class="badge num" hidden></i></a>
       <a href="#/family" data-tab="family">${icon('users', { size: 27, stroke: 1.9 })}<span>가족</span></a>
     </nav>`);
@@ -274,7 +282,7 @@ app.start = start;
 function fatal(msg) {
   document.getElementById('app').innerHTML = String(html`
     <div class="fatal">
-      <div class="logo-big">🌱</div>
+      <div class="logo-big">${logo()}</div>
       <h1>앱을 열지 못했어요</h1>
       <p>${msg}</p>
       <button class="btn primary block" onclick="location.reload()">다시 시도</button>
@@ -288,7 +296,7 @@ function escapeKakao() {
   document.body.dataset.screen = 'onboard';
   document.getElementById('app').innerHTML = String(html`
     <div class="onboard kakao">
-      <div class="hero"><div class="logo-big">🌱</div><h1>쑥쑥 앨범</h1>
+      <div class="hero"><div class="logo-big">${logo()}</div><h1 class="brand">Pastel Memories</h1>
         <p>사진 저장이 잘 되도록<br>휴대폰 인터넷 앱으로 열게요.</p></div>
       <div class="ob-actions">
         <button class="btn primary big block" data-k="go">계속</button>

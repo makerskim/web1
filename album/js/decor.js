@@ -12,8 +12,8 @@ export const STICKER_SETS = [
 ];
 
 const LABEL_COLORS = [
-  ['#FF8A80', '#fff'], ['#FFB74D', '#fff'], ['#81C784', '#fff'], ['#64B5F6', '#fff'],
-  ['#BA68C8', '#fff'], ['#F06292', '#fff'], ['#4DB6AC', '#fff'], ['#FFE082', '#5D4037'],
+  ['#FFD1DC', '#8A3B57'], ['#FFE2C6', '#8A4B22'], ['#D4F1DE', '#2E6B47'], ['#D3E8FF', '#2F5A8A'],
+  ['#E6DBFF', '#5B3F94'], ['#FFF1B8', '#7A5A12'], ['#CDEFEA', '#24665E'], ['#FFFFFF', '#8A3B57'],
 ];
 
 // '{age}'는 사진 찍은 날 기준 '생후 N일', '{date}'는 날짜로 바뀌어요
@@ -25,6 +25,8 @@ export const LABELS = [
 
 export const TEXT_FONTS = [
   { id: 'basic', name: '기본', family: 'Pretendard Variable, Pretendard, system-ui, sans-serif', weight: 800, k: 1 },
+  { id: 'soft', name: '고운돋움', family: '"Gowun Dodum"', weight: 400, k: 1.05 },
+  { id: 'serif', name: '명조', family: '"Gowun Batang"', weight: 700, k: 1.05 },
   { id: 'round', name: '동글동글', family: 'Jua', weight: 400, k: 1.05 },
   { id: 'hand', name: '손글씨', family: 'Gaegu', weight: 700, k: 1.15 },
   { id: 'pen', name: '펜글씨', family: '"Nanum Pen Script"', weight: 400, k: 1.35 },

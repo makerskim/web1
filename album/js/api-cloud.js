@@ -159,6 +159,22 @@ export class CloudApi {
     check(await this.sb.from('members').update(patch).eq('family_id', fid).eq('user_id', this.uid));
   }
 
+  // 프로필 사진: 앨범 폴더/avatars/내아이디-시각.jpg 로 올리고 내 얼굴로 쓰기 (예전 사진은 지워요)
+  async setAvatarPhoto(fid, blob, old) {
+    const path = `${fid}/avatars/${this.uid}-${Date.now()}.jpg`;
+    check(await this.sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false }));
+    remember(path, blob);
+    try {
+      check(await this.sb.from('members').update({ avatar: `img:${path}` }).eq('family_id', fid).eq('user_id', this.uid));
+    } catch (e) {
+      await this.sb.storage.from(BUCKET).remove([path]).catch(() => {});
+      throw e;
+    }
+    const prev = typeof old === 'string' && old.startsWith('img:') ? old.slice(4) : '';
+    if (prev && prev.startsWith(`${fid}/avatars/${this.uid}-`)) await this.sb.storage.from(BUCKET).remove([prev]).catch(() => {});
+    return path;
+  }
+
   // 관리자가 가족을 내보내면 초대 코드도 바뀌어요 (같은 링크로 다시 못 들어오게). 새 코드를 돌려줘요
   async removeMember(fid, userId) {
     return check(await this.sb.rpc('remove_member', { p_family: fid, p_user: userId }));

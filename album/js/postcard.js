@@ -1,6 +1,6 @@
 // 게시물 카드 (인스타그램 순서: 이름·아기 나이 → 사진 → ♡ 💬 저장 → 좋아요 → 글 → 댓글 → 시간)
 
-import { html, raw, fmtDate, timeAgo, ymd, toDate, subj } from './util.js';
+import { html, raw, fmtDate, timeAgo, ymd, toDate, subj, av } from './util.js';
 import { icon } from './icons.js';
 import { menu, confirmBox, toast, sheet, copyText } from './ui.js';
 import { observeImages, saveWithChoice, sharePhotos, safePh } from './media.js';
@@ -51,8 +51,8 @@ export function postCard(app, post, { full = false, coach = false } = {}) {
   <article class="post" data-id="${post.id}" data-author="${post.authorId}">
     <header class="post-head">
       ${ring
-        ? html`<button class="avatar-ring" data-act="story" aria-label="${author.displayName} 새 소식 보기"><span class="avatar s36">${author.avatar}</span></button>`
-        : html`<span class="avatar s36">${author.avatar}</span>`}
+        ? html`<button class="avatar-ring" data-act="story" aria-label="${author.displayName} 새 소식 보기">${av(author.avatar, 's36')}</button>`
+        : html`${av(author.avatar, 's36')}`}
       <div class="who">
         <b>${author.displayName}</b>
         <button class="sub" data-act="month" data-month="${monthKey(post.takenAt)}">${subtitle(app, post)}</button>
@@ -87,12 +87,12 @@ export function postCard(app, post, { full = false, coach = false } = {}) {
       <div class="coach"><p>❤️ 누르면 좋아요 · 💬 누르면 댓글 · 사진을 누르면 크게 보여요</p><button class="link-btn" data-act="coach">알겠어요</button></div>` : ''}
     <div class="post-body">
       ${post.likes.length ? html`
-        <button class="likes-line" data-act="likers"><span class="lk-avs">${likers.map((a) => html`<span class="avatar s22">${a}</span>`)}</span><span>${likesText(app, post.likes)}</span></button>` : ''}
+        <button class="likes-line" data-act="likers"><span class="lk-avs">${likers.map((a) => av(a, 's22'))}</span><span>${likesText(app, post.likes)}</span></button>` : ''}
       ${post.caption ? html`<div class="cap-wrap"><p class="caption ${full ? 'open' : ''}"><b>${author.displayName}</b> ${post.caption}</p><button class="more-btn" data-act="caption" hidden>더 보기</button></div>` : ''}
       ${!full && post.comments.length > 2 ? html`<button class="link-btn muted" data-act="comments">댓글 ${post.comments.length}개 모두 보기</button>` : ''}
       ${shownComments.length ? html`<div class="cmts">${shownComments.map((c) => html`<p><b>${app.nameOf(c.authorId)}</b> ${c.body}</p>`)}</div>` : ''}
       <time class="post-time" datetime="${post.createdAt}">${timeAgo(post.createdAt)}</time>
-      <button class="fake-input" data-act="comments"><span class="avatar s28">${app.me.avatar}</span>댓글 달기…</button>
+      <button class="fake-input" data-act="comments">${av(app.me.avatar, 's28')}댓글 달기…</button>
     </div>
   </article>`;
 }
@@ -282,7 +282,7 @@ function openLikers(app, post) {
     title: '좋아한 가족',
     body: html`<ul class="people">${post.likes.map((l) => {
       const m = app.memberOf(l.userId);
-      return html`<li><span class="avatar s44">${m.avatar}</span><b>${m.displayName}</b><small>${timeAgo(l.createdAt)}</small></li>`;
+      return html`<li>${av(m.avatar, 's44')}<b>${m.displayName}</b><small>${timeAgo(l.createdAt)}</small></li>`;
     })}</ul>`,
   });
 }

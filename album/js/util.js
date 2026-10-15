@@ -246,5 +246,13 @@ export function originalInfo(file) {
   return { type, ext: byType ? (byType[0] === 'jpeg' ? 'jpg' : byType[0]) : (ext === 'jpeg' ? 'jpg' : ext) };
 }
 
+// 얼굴: 이모지 또는 'img:경로' (내가 올린 프로필 사진). 사진은 media.js가 화면에 붙을 때 불러와요
+export function av(a, size = '') {
+  if (typeof a === 'string' && a.startsWith('img:')) {
+    return html`<span class="avatar photo ${size}"><img data-path="${a.slice(4)}" alt=""></span>`;
+  }
+  return html`<span class="avatar ${size}">${a || '🙂'}</span>`;
+}
+
 // 게시물 사진 한 장에 딸린 파일들 (보여주기용, 작은 사진, 원본)
 export const filesOf = (ph) => [ph.path, ph.thumb, ph.orig].filter(Boolean);

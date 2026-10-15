@@ -1,6 +1,6 @@
 // 홈: 가족 사진 소식 (인스타그램 피드처럼) + 최근 사진 스토리 줄
 
-import { html, babyDay, babyMilestone, ymd, callName, obj, hasBatchim } from '../util.js';
+import { html, babyDay, babyMilestone, ymd, callName, obj, hasBatchim, av } from '../util.js';
 import { icon } from '../icons.js';
 import { toast } from '../ui.js';
 import { postCard, bindCard, measureCaption, handlePostClick, viewerItems } from '../postcard.js';
@@ -129,7 +129,7 @@ function strip(app) {
         const m = app.memberOf(g.authorId);
         return html`
           <button class="story ${g.unseen ? 'unseen' : 'seen'}" role="listitem" data-story="${g.authorId}" aria-label="${m.displayName} 소식 보기">
-            <span class="ring"><span class="avatar s57">${m.avatar}</span></span>
+            <span class="ring">${av(m.avatar, 's57')}</span>
             <span class="nm">${g.authorId === app.user.id ? '내 소식' : m.displayName}</span>
           </button>`;
       })}
@@ -152,7 +152,6 @@ function emptyState(app) {
       <p>첫 사진을 올려서 가족에게 우리 아기 소식을 전해 보세요!</p>
       <button class="btn primary big" data-feed="compose">${icon('camera')} 사진 올리기</button>
       ${app.api.canInvite && app.members.length < 2 ? html`<button class="btn soft big" data-feed="invite">${icon('users')} 가족 초대하기</button>` : ''}
-      ${app.api.mode === 'local' ? html`<p class="note">지금은 <b>체험 모드</b>예요. 사진은 이 기기에만 저장돼요.</p>` : ''}
     </div>`;
 }
 
@@ -232,7 +231,7 @@ function drawEnd(app) {
   if (!end) return;
   if (S.loading && !S.posts.length) end.innerHTML = '<div class="spinner center"></div>';
   else if (!S.posts.length && S.done) end.innerHTML = String(emptyState(app));
-  else if (S.done) end.innerHTML = String(html`<p class="end-note">처음 사진까지 다 봤어요 🌱</p>`);
+  else if (S.done) end.innerHTML = String(html`<p class="end-note">처음 사진까지 다 봤어요 🤍</p>`);
   else end.innerHTML = String(html`<button class="btn ghost" data-feed="more">더 보기</button>`);
 }
 

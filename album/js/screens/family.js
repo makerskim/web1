@@ -1,6 +1,6 @@
 // 가족: 아기 프로필(인스타그램 프로필처럼) + 가족 목록. 설정은 [⚙ 설정] 창 안에.
 
-import { html, fmtDate, babyAge, babyDay, babyMonths, isIOS, isAndroid, isStandalone, obj, subj, callName, timeAgo } from '../util.js';
+import { html, fmtDate, babyAge, babyDay, babyMonths, isIOS, isAndroid, isStandalone, obj, subj, callName, timeAgo, av } from '../util.js';
 import { icon } from '../icons.js';
 import { sheet, menu, confirmBox, alertBox, toast, progress, closeAllOverlays, copyText } from '../ui.js';
 import { clearCache, cacheCount } from '../photo-cache.js';
@@ -117,13 +117,16 @@ function openProfile(app) {
       el.querySelector('[data-save]').addEventListener('click', async () => {
         const v = get();
         if (!v.displayName) return toast('이름을 적어 주세요.');
+        const p = v.photo ? progress('사진을 올리는 중…') : null;
         try {
-          await app.api.updateMe(app.fam.id, v);
-          await app.reloadMembers();
+          await app.api.updateMe(app.fam.id, { displayName: v.displayName, avatar: v.photo ? undefined : v.avatar });
+          if (v.photo) await app.api.setAvatarPhoto(app.fam.id, v.photo, app.me.avatar);
+          p?.close();
+          await app.refreshMembers();
           await app.reloadFamilies().catch(() => {});
           toast('바꿨어요.');
           app.go('#/family'); // 창을 닫고 화면 새로 그리기
-        } catch (err) { toast(err.message); }
+        } catch (err) { p?.close(); toast(err.message); }
       });
     },
   });
@@ -161,7 +164,7 @@ export async function openInstall(app) {
   if (app.installPrompt) {
     app.installPrompt.prompt();
     const r = await app.installPrompt.userChoice.catch(() => null);
-    if (r?.outcome === 'accepted') { app.installPrompt = null; toast('설치했어요! 홈 화면의 🌱 아이콘으로 열어 보세요.'); }
+    if (r?.outcome === 'accepted') { app.installPrompt = null; toast('설치했어요! 홈 화면의 Pastel Memories 아이콘으로 열어 보세요.'); }
     return;
   }
   const code = app.fam?.inviteCode;
@@ -313,7 +316,7 @@ async function openSettings(app) {
     body: html`
       <h3 class="group-h">나</h3>
       <div class="group">
-        ${row('profile', html`<span class="avatar s36">${app.me.avatar}</span>`, '이름·얼굴 바꾸기', app.me.displayName)}
+        ${row('profile', html`${av(app.me.avatar, 's36')}`, '이름·얼굴 바꾸기', app.me.displayName)}
         ${cloud ? row('email', icon('shield', { size: 22 }), '계정 지키기', u?.email && !u.isAnonymous ? `${u.email} 연결됨` : '이메일 연결하기 (앨범 만든 분 권장)') : ''}
       </div>
       <h3 class="group-h">보기</h3>
@@ -343,7 +346,7 @@ async function openSettings(app) {
         ${!app.isOwner || owners > 1 ? row('leave', icon('logout', { size: 22 }), '이 앨범에서 나가기', '', 'danger') : ''}
         ${cloud && u?.email && !u.isAnonymous ? row('logout', icon('logout', { size: 22 }), '로그아웃') : ''}
       </div>
-      <p class="app-foot">🌱 쑥쑥 앨범 · ${cloud ? '가족 공유 모드' : '체험 모드 (이 기기에만 저장)'}</p>`,
+      <p class="app-foot">Pastel Memories · 우리 가족만의 앨범</p>`,
     mount: (el) => {
       storageInfo(app).then((info) => {
         const s = el.querySelector('[data-storage]');
@@ -476,17 +479,16 @@ export async function render(app, view) {
         ${!b && app.isOwner ? html`<button class="link-btn" data-f="album">아기 생일 넣기 <small>(사진마다 ‘생후 며칠’이 표시돼요)</small></button>` : ''}
       </div>
       <div class="pf-btns">
-        <button class="btn ghost" data-f="invite">${icon('users', { size: 20 })} 가족 초대하기</button>
-        <button class="btn ghost" data-f="textsize"><span class="aa">가</span> 글자 크기</button>
+        <button class="btn ghost" data-f="me">프로필 편집</button>
+        <button class="btn ghost" data-f="invite">가족 초대하기</button>
       </div>
-      ${app.api.canInvite ? '' : html`<div class="notice">🧪 <b>체험 모드</b>예요. 사진이 이 기기에만 저장되고 가족과 공유되지 않아요. 설명서(README)를 따라 무료 클라우드를 연결하면 가족 모두 함께 볼 수 있어요.</div>`}
       <div class="storage-warn" data-storage-warn hidden></div>
 
       <h2 class="list-h" id="members">우리 가족 ${app.members.length}명</h2>
       <ul class="member-list">
         ${app.members.map((m) => html`
           <li>
-            <span class="avatar s44">${m.avatar}</span>
+            ${av(m.avatar, 's44')}
             <span class="m-name">${m.displayName}
               ${m.userId === app.user.id ? html`<small class="tag">나</small>` : ''}
               ${m.role === 'owner' ? html`<small class="tag">${icon('crown', { size: 12 })} 관리자</small>` : ''}
@@ -500,6 +502,10 @@ export async function render(app, view) {
   Grid.items(app).then((list) => {
     const s = view.querySelector('[data-stat=photos]');
     if (s) s.textContent = String(list.length);
+    // 아기 프로필 사진 = 가장 최근 사진
+    const pf = view.querySelector('.pf-avatar');
+    const latest = [...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    if (pf && latest) pf.innerHTML = String(html`<img data-path="${latest.thumb}" alt="">`);
   }).catch(() => {});
 
   // 관리자에게만: 저장공간이 80% 넘으면 알려 주기
@@ -519,7 +525,7 @@ export async function render(app, view) {
     if (!b2) return;
     const act = b2.dataset.f;
     if (act === 'invite') openInvite(app);
-    if (act === 'textsize') openTextSize(app);
+    if (act === 'me') openProfile(app);
     if (act === 'album') openAlbumEdit(app);
     if (act === 'grid') app.go('#/grid');
     if (act === 'members') document.getElementById('members')?.scrollIntoView({ behavior: 'smooth' });

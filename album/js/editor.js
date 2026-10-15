@@ -4,7 +4,7 @@
 import { html, uuid, babyAge, fmtDateDots, toDate, readPhotoDate } from './util.js';
 import { icon } from './icons.js';
 import { openOverlay, confirmBox, toast } from './ui.js';
-import { FILTERS, filterById, applyFilter, drawVignette } from './filters.js';
+import { FILTERS, filterById, applyFilter, drawVignette, scaleFilter, ADJUSTS, hasAdjust, adjustFilter } from './filters.js';
 import {
   STICKER_SETS, LABELS, TEXT_FONTS, TEXT_COLORS, FRAMES, EMOJI_FONT, fontById, frameById, loadFont,
 } from './decor.js';
@@ -17,8 +17,8 @@ const ASPECTS = [
   { id: '4:5', name: '세로 4:5', r: 0.8 },
   { id: '16:9', name: '가로 16:9', r: 16 / 9 },
 ];
-const LABEL_FONT = 'Jua, "Pretendard Variable", sans-serif';
-const CAPTION_FONT = 'Gaegu, "Pretendard Variable", sans-serif';
+const LABEL_FONT = '"Gowun Dodum", "Pretendard Variable", sans-serif';
+const CAPTION_FONT = '"Gowun Batang", "Pretendard Variable", serif';
 
 // ---------- 사진 불러오기 ----------
 function loadImg(url) {
@@ -99,20 +99,27 @@ export function layout(ps, maxSide) {
   };
 }
 
+const strengthOf = (ps) => (ps.strength ?? 100) / 100;
+
 function filtered(ps, L, cache) {
   const f = filterById(ps.filter);
+  const t = strengthOf(ps);
+  const a = ps.adj || {};
+  const adj = hasAdjust(a);
   const k = L.pw / L.sw;
   const w = Math.max(1, Math.round(L.rw * k));
   const h = Math.max(1, Math.round(L.rh * k));
-  const key = `${ps.rot}|${f.id}|${w}x${h}`;
+  const key = `${ps.rot}|${f.id}|${t}|${a.bright | 0},${a.contrast | 0},${a.sat | 0},${a.warm | 0}|${w}x${h}`;
   if (cache && ps._flt?.key === key) return ps._flt;
   const c = makeCanvas(w, h);
-  const x = c.getContext('2d', { willReadFrequently: f.id !== 'none' });
+  const busy = f.id !== 'none' || adj;
+  const x = c.getContext('2d', { willReadFrequently: busy });
   x.imageSmoothingQuality = 'high';
   x.drawImage(L.r, 0, 0, w, h);
-  if (f.id !== 'none') {
+  if (busy) {
     const d = x.getImageData(0, 0, w, h);
-    applyFilter(d, f);
+    if (f.id !== 'none' && t > 0) applyFilter(d, scaleFilter(f, t));
+    if (adj) applyFilter(d, adjustFilter(a));
     x.putImageData(d, 0, 0);
   }
   const out = { key, c, k: w / L.rw };
@@ -320,7 +327,7 @@ export function render(ctx, ps, L, { baby = null, selected = null, cache = true 
   if (fr.glyph || fr.emoji) drawPattern(ctx, fr, L);
   const F = filtered(ps, L, cache);
   ctx.drawImage(F.c, L.sx * F.k, L.sy * F.k, L.sw * F.k, L.sh * F.k, L.px, L.py, L.pw, L.ph);
-  drawVignette(ctx, L.px, L.py, L.pw, L.ph, filterById(ps.filter).vignette);
+  drawVignette(ctx, L.px, L.py, L.pw, L.ph, (filterById(ps.filter).vignette || 0) * strengthOf(ps));
   if (fr.film) drawFilm(ctx, L);
   if (fr.caption) drawCaption(ctx, ps, L, baby);
   if (ps.stamp) drawStamp(ctx, ps, L);
@@ -331,13 +338,13 @@ export function render(ctx, ps, L, { baby = null, selected = null, cache = true 
 async function ensureFonts(ps, baby) {
   const jobs = [];
   for (const it of ps.items) {
-    if (it.kind === 'label') jobs.push(loadFont('400 40px Jua', labelText(it.text, ps, baby)));
+    if (it.kind === 'label') jobs.push(loadFont('400 40px "Gowun Dodum"', labelText(it.text, ps, baby)));
     if (it.kind === 'text') {
       const f = fontById(it.font);
       jobs.push(loadFont(`${f.weight} 40px ${f.family}`, it.text));
     }
   }
-  if (frameById(ps.frame).caption) jobs.push(loadFont('700 40px Gaegu', captionText(ps, baby)));
+  if (frameById(ps.frame).caption) jobs.push(loadFont('700 40px "Gowun Batang"', captionText(ps, baby)));
   await Promise.all(jobs);
 }
 
@@ -353,7 +360,7 @@ function scaled(src, max) {
 }
 
 // 필터·스티커·테두리·자르기 등을 하나라도 했는지
-export const isDecorated = (ps) => ps.filter !== 'none' || ps.frame !== 'none' || ps.items.length > 0
+export const isDecorated = (ps) => ps.filter !== 'none' || hasAdjust(ps.adj) || ps.frame !== 'none' || ps.items.length > 0
   || ps.stamp || ps.rot !== 0 || ps.aspect !== 'orig';
 
 // 올릴 사진 만들기: 본 사진, 작은 사진(모아보기용), 아주 작은 자리표시
@@ -376,7 +383,7 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
   let selected = null;
   let L = null;
   let stickerSet = STICKER_SETS[0].id;
-  let textStyle = { font: 'round', color: '#FFFFFF', box: false };
+  let textStyle = { font: 'basic', color: '#FFFFFF', box: false };
   let draft = ''; // 아직 넣지 않은 글씨
   let dirty = false;
 
@@ -403,6 +410,7 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
         <div class="ed-panel"></div>
         <nav class="ed-tools">
           <button data-tool="filter" class="on">${icon('sparkles')}<span>필터</span></button>
+          <button data-tool="adjust">${icon('sliders')}<span>조정</span></button>
           <button data-tool="sticker">${icon('smile')}<span>스티커</span></button>
           <button data-tool="text">${icon('text')}<span>글씨</span></button>
           <button data-tool="frame">${icon('frame')}<span>테두리</span></button>
@@ -482,7 +490,7 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
     touch();
     draw();
     const after = () => draw();
-    if (it.kind === 'label') loadFont('400 40px Jua', labelText(it.text, ps, baby)).then(after);
+    if (it.kind === 'label') loadFont('400 40px "Gowun Dodum"', labelText(it.text, ps, baby)).then(after);
     if (it.kind === 'text') { const f = fontById(it.font); loadFont(`${f.weight} 40px ${f.family}`, it.text).then(after); }
   };
 
@@ -494,8 +502,16 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
         <div class="ed-row">${FILTERS.map((f) => html`
           <button class="ed-opt ${ps.filter === f.id ? 'on' : ''}" data-filter="${f.id}"><canvas data-fthumb="${f.id}"></canvas><span>${f.name}</span></button>`)}
         </div>
+        ${ps.filter !== 'none' ? html`<label class="ed-slider"><span>강도</span><input type="range" min="0" max="100" step="1" value="${ps.strength ?? 100}" data-range="strength"><b data-val="strength">${ps.strength ?? 100}</b></label>` : ''}
         ${photos.length > 1 ? html`<button class="link-btn sm" data-all="filter">이 필터를 모든 사진에 쓰기</button>` : ''}`);
       requestAnimationFrame(filterThumbs);
+    } else if (tool === 'adjust') {
+      const a = ps.adj || {};
+      panel.innerHTML = String(html`
+        <div class="ed-sliders">${ADJUSTS.map((x) => html`
+          <label class="ed-slider"><span>${x.name}</span><input type="range" min="-50" max="50" step="1" value="${a[x.id] || 0}" data-range="${x.id}"><b data-val="${x.id}">${a[x.id] || 0}</b></label>`)}
+        </div>
+        <button class="link-btn sm" data-adj="reset">처음대로</button>`);
     } else if (tool === 'sticker') {
       const set = STICKER_SETS.find((s) => s.id === stickerSet);
       panel.innerHTML = String(html`
@@ -545,7 +561,7 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
         </div>`);
       panel.querySelector('[data-caption]')?.addEventListener('input', (e) => {
         ps.frameText = e.target.value;
-        loadFont('700 40px Gaegu', ps.frameText).then(draw);
+        loadFont('700 40px "Gowun Batang"', ps.frameText).then(draw);
         touch();
         draw();
       });
@@ -581,6 +597,19 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
   };
 
   // ----- 버튼 -----
+  // 강도·조정 막대
+  el.addEventListener('input', (e) => {
+    const r = e.target.closest?.('[data-range]');
+    if (!r) return;
+    const v = Math.round(+r.value);
+    if (r.dataset.range === 'strength') ps.strength = v;
+    else ps.adj = { ...(ps.adj || {}), [r.dataset.range]: v };
+    const out = panel.querySelector(`[data-val="${r.dataset.range}"]`);
+    if (out) out.textContent = String(v);
+    touch();
+    draw();
+  });
+
   el.addEventListener('click', async (e) => {
     const t = e.target.closest('button');
     if (!t) return;
@@ -604,7 +633,8 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
     }
     if (d.pick !== undefined) return switchPhoto(+d.pick);
     if (d.filter) { ps.filter = d.filter; touch(); drawPanel(); draw(); return; }
-    if (d.all === 'filter') { photos.forEach((p) => { p.filter = ps.filter; }); photos.forEach((_, i) => drawThumb(i)); toast('모든 사진에 같은 필터를 썼어요.'); return; }
+    if (d.adj === 'reset') { ps.adj = {}; ps.strength = 100; touch(); drawPanel(); draw(); return; }
+    if (d.all === 'filter') { photos.forEach((p) => { p.filter = ps.filter; p.strength = ps.strength; p.adj = { ...(ps.adj || {}) }; }); photos.forEach((_, i) => drawThumb(i)); toast('모든 사진에 같은 필터를 썼어요.'); return; }
     if (d.all === 'frame') { photos.forEach((p) => { p.frame = ps.frame; p.stamp = ps.stamp; }); photos.forEach((_, i) => drawThumb(i)); toast('모든 사진에 같은 테두리를 썼어요.'); return; }
     if (d.set) { stickerSet = d.set; drawPanel(); return; }
     if (d.emoji) { addItem({ kind: 'emoji', text: d.emoji }); return; }
@@ -632,7 +662,7 @@ export function openEditor(photos, { baby, onNext, onCancel }) {
       draw();
       return;
     }
-    if (d.frame) { ps.frame = d.frame; touch(); drawPanel(); fit(); if (frameById(d.frame).caption) loadFont('700 40px Gaegu', captionText(ps, baby)).then(draw); return; }
+    if (d.frame) { ps.frame = d.frame; touch(); drawPanel(); fit(); if (frameById(d.frame).caption) loadFont('700 40px "Gowun Batang"', captionText(ps, baby)).then(draw); return; }
     if (d.stamp !== undefined) { ps.stamp = !ps.stamp; touch(); drawPanel(); draw(); return; }
     if (d.aspect) { ps.aspect = d.aspect; ps.cx = 0.5; ps.cy = 0.5; touch(); fit(); drawPanel(); return; }
     if (d.rotate !== undefined) { ps.rot = (ps.rot + 90) % 360; ps._flt = null; ps.cx = 0.5; ps.cy = 0.5; touch(); fit(); drawPanel(); return; }
