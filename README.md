@@ -27,6 +27,10 @@ v1(익명 로그인)으로 만든 앨범은 새 로그인과 연결되지 않아
 Supabase → **SQL Editor → New query** → [`supabase/schema.sql`](supabase/schema.sql) 내용을 **전부** 붙여넣고 **Run**.
 (GitHub에서 파일을 열고 오른쪽 위 복사 버튼 → 붙여넣기. 마지막 줄이 `photos_delete` 정책인지 확인)
 
+- 결과에 **Success. No rows returned** 가 나오면 성공이에요.
+- 중간에 오류가 나면 그 실행 전체가 취소돼요. 고친 파일로 다시 실행하면 돼요 (여러 번 실행해도 안전).
+- `members_avatar_check ... violated by some row` 오류가 났었다면: 예전 v1 가족의 이모지 얼굴 때문이었어요. 지금 파일은 그걸 자동으로 비우니 **최신 파일을 다시 복사**해서 실행하세요.
+
 ## 2. 주소 설정 (Supabase)
 
 **Authentication → URL Configuration**
@@ -58,9 +62,10 @@ Supabase → **SQL Editor → New query** → [`supabase/schema.sql`](supabase/s
 
 ## 5. 앱 올리기 (GitHub)
 
-1. 이 브랜치를 `master`에 합치기 (Pull request → Merge)
-2. **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 바꾸기 (처음 한 번만)
-3. **Actions** 탭에서 *Deploy site* 가 초록색이 되면 끝 (1~2분)
+1. 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 바꾸기 (처음 한 번만)
+2. https://github.com/makerskim/web1/compare/master...claude/nifty-hopper-2vokua 열기 → **Create pull request** → 한 번 더 **Create pull request** → **Merge pull request** → **Confirm merge**
+3. **Actions** 탭에서 *Deploy site* 가 초록색 ✓ 이 되면 끝 (1~2분)
+   - 1번보다 먼저 합쳤다면: **Actions → Deploy site → Run workflow → Run workflow** 로 한 번 다시 실행
 4. 휴대폰으로 **https://makerskim.github.io/web1/album/** 열기 → 카카오나 구글로 시작 → 앨범 만들기 → 가족 초대
 
 > 이후로는 `master`에 합칠 때마다 자동으로 다시 빌드되고 올라가요.
