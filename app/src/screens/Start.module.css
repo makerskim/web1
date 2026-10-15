@@ -1,0 +1,26 @@
+.start { min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--s-10) + var(--safe-t)) var(--gutter) calc(var(--s-6) + var(--safe-b)); gap: var(--s-8); }
+.hello { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-3); margin-top: 6vh; }
+.hello h1 { font-size: var(--t-title2); font-weight: 800; letter-spacing: -0.03em; margin-top: var(--s-2); }
+.hello p { color: var(--c-label-2); font-size: var(--t-callout); line-height: 1.6; }
+.choices { display: flex; flex-direction: column; gap: var(--s-3); }
+.choice { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4); border-radius: var(--r-md); background: var(--c-surface); box-shadow: var(--e-1); text-align: left; }
+.choice b { display: block; font-size: var(--t-headline); font-weight: 700; letter-spacing: -0.02em; }
+.choice small { display: block; margin-top: 2px; font-size: var(--t-sub); color: var(--c-label-3); }
+.choiceArt { flex: none; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: var(--c-surface-2); }
+.code { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--c-accent-strong); background: var(--c-accent-soft); }
+.out { margin-top: auto; align-self: center; font-size: var(--t-sub); color: var(--c-label-3); min-height: 44px; }
+
+.formPage { min-height: 100dvh; }
+.form { display: flex; flex-direction: column; gap: var(--s-6); padding: var(--s-2) var(--gutter) calc(var(--s-8) + var(--safe-b)); }
+.submit { position: sticky; bottom: calc(var(--s-4) + var(--safe-b)); }
+
+.codeHero { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); padding: var(--s-6) 0 var(--s-2); text-align: center; }
+.codeHelp { color: var(--c-label-2); font-size: var(--t-callout); min-height: 3em; display: grid; place-items: center; }
+.found { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); }
+.found h2 { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; margin-top: var(--s-2); }
+.found p { color: var(--c-label-2); font-size: var(--t-sub); }
+.codeInput {
+  width: 100%; max-width: 320px; height: 64px; border: 0; border-radius: var(--r-md); background: var(--c-surface); box-shadow: var(--e-1);
+  text-align: center; font-size: 1.75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; outline: none; font-variant-numeric: tabular-nums;
+}
+.codeInput:focus { box-shadow: var(--e-1), 0 0 0 2px var(--c-accent); }

@@ -1,0 +1,33 @@
+.top {
+  position: sticky; top: 0; z-index: 30;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s-2);
+  min-height: calc(var(--bar-h) + var(--safe-t)); padding: var(--safe-t) var(--s-2) 0;
+  background: var(--c-canvas);
+  transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.scrolled { background: var(--c-glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 1px 0 var(--c-hairline); }
+.side { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.right { justify-content: flex-end; }
+.title { font-size: var(--t-headline); font-weight: 700; letter-spacing: -0.02em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+.large { display: flex; padding-left: var(--s-4); }
+.titleLarge { flex: 1; min-width: 0; font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.03em; }
+.iconBtn { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--c-label); }
+.dot { position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--c-heart); box-shadow: 0 0 0 2px var(--c-canvas); }
+
+.page { min-height: 60dvh; padding-bottom: calc(var(--tab-h) + var(--safe-b) + var(--s-6)); }
+
+.tabs {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 40;
+  width: min(100%, var(--col)); height: calc(var(--tab-h) + var(--safe-b)); padding-bottom: var(--safe-b);
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--c-glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 -1px 0 var(--c-hairline);
+}
+.tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--c-label-3); font-size: 10px; font-weight: 600; letter-spacing: 0; }
+.tab.on { color: var(--c-label); }
+.tab span { line-height: 1; }
+.compose { color: var(--c-label); }
+.plus { width: 44px; height: 32px; border-radius: 11px; display: grid; place-items: center; background: var(--c-accent-gradient); color: #fff; box-shadow: 0 4px 12px rgba(226, 113, 143, .35); }
+.badge { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--c-heart); color: #fff; font-size: 11px; font-weight: 700; font-style: normal; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--c-canvas); }
+.tab .dot { top: 8px; right: calc(50% - 18px); }
+html[data-text='large'] .tab, html[data-text='xlarge'] .tab { font-size: 11px; }

@@ -1,0 +1,10 @@
+.wrap { display: inline-flex; flex: none; }
+.face {
+  flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 50%;
+  background: linear-gradient(140deg, #fde3ea, #ece4fb); color: var(--c-accent-strong); font-weight: 700; line-height: 1;
+}
+.face img { width: 100%; height: 100%; object-fit: cover; }
+.ring { flex: none; display: inline-grid; place-items: center; padding: 2px; border-radius: 50%; background: var(--c-ring); }
+.ring .face { box-shadow: 0 0 0 2.5px var(--c-surface); }
+.seen { background: var(--c-hairline-strong); padding: 1px; }
+.seen .face { box-shadow: 0 0 0 3px var(--c-surface); }
