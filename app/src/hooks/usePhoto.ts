@@ -26,7 +26,9 @@ export function useNearScreen<T extends Element>(margin = '600px') {
     const el = ref.current;
     if (!el || near) return;
     if (!('IntersectionObserver' in window)) { setNear(true); return; }
-    const io = new IntersectionObserver((en) => { if (en.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { root, rootMargin: `${margin} 0px` });
+    // 시트처럼 화면 밖(body)에 띄운 곳에 있으면 화면 전체를 기준으로
+    const r = root && root.contains(el) ? root : null;
+    const io = new IntersectionObserver((en) => { if (en.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { root: r, rootMargin: `${margin} 0px` });
     io.observe(el);
     return () => io.disconnect();
   }, [near, margin, root]);

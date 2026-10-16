@@ -67,6 +67,9 @@ export async function signOut() { await sb.auth.signOut(); }
 
 // 계정 삭제: 나 혼자 있는 앨범은 사진 파일까지 먼저 지우고, 그다음 계정을 지워요
 export async function deleteAccount(uid: string, mine: Album[]) {
+  // 막히는 게 있으면 아무것도 지우기 전에 알려 줘요 (혼자 있는 앨범 사진이 먼저 지워지지 않게)
+  const blocked = check(await sb.rpc('delete_account_check')) as string | null;
+  if (blocked) throw new Error(friendly(blocked));
   for (const a of mine) {
     const others = (check(await sb.from('members').select('user_id').eq('family_id', a.id).neq('user_id', uid).limit(1)) as Row[]).length;
     if (!others) await deleteAlbum(a.id, uid);

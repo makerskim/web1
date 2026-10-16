@@ -368,6 +368,18 @@ drop trigger if exists members_keep_owner on public.members;
 create trigger members_keep_owner after delete on public.members
   for each row execute function public.keep_an_owner();
 
+-- 계정을 지우기 전에 (나 혼자 있는 앨범을 지우기 전에) 막히는 게 있는지: 없으면 null
+-- 다른 가족이 있고 내가 관리자인 앨범이 내 구글 드라이브를 쓰고 있으면 'drive_connected'
+create or replace function public.delete_account_check()
+returns text language sql stable security definer set search_path = public as $$
+  select case when exists (
+    select 1 from drive_tokens t
+    join members m on m.family_id = t.family_id and m.user_id = t.connected_by and m.role = 'owner'
+    where t.connected_by = auth.uid()
+      and exists (select 1 from members o where o.family_id = t.family_id and o.user_id <> t.connected_by)
+  ) then 'drive_connected' end
+$$;
+
 -- 계정 삭제: 나 혼자 있는 앨범은 앱에서 먼저 지워야 해요 (사진 파일 정리)
 -- 올린 사진·댓글은 가족 앨범에 남아요
 create or replace function public.delete_account()
@@ -378,10 +390,14 @@ begin
              and not exists (select 1 from members o where o.family_id = m.family_id and o.user_id <> m.user_id)) then
     raise exception 'sole_member';
   end if;
-  -- 내 구글 드라이브에 연결된 앨범이 있으면 먼저 연결을 끊어야 해요 (지운 사람의 드라이브를 계속 쓰지 않게)
-  if exists (select 1 from drive_tokens where connected_by = auth.uid()) then
+  -- 내가 관리자로 있는 앨범이 내 구글 드라이브를 쓰고 있으면 먼저 연결을 끊어야 해요
+  if public.delete_account_check() is not null then
     raise exception 'drive_connected';
   end if;
+  -- 이미 나갔거나 관리자가 아닌 앨범에 남은 내 드라이브 연결은 여기서 끊어요 (지운 사람의 드라이브를 계속 쓰지 않게)
+  update families set storage = 'supabase', drive_email = null
+    where id in (select family_id from drive_tokens where connected_by = auth.uid());
+  delete from drive_tokens where connected_by = auth.uid();
   delete from likes where user_id = auth.uid();
   delete from auth.users where id = auth.uid();
 end $$;
@@ -415,14 +431,14 @@ revoke execute on function
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
   public.family_files(uuid), public.check_post_photos(), public.clear_cover_on_post_delete(), public.keep_an_owner(),
-  public.delete_account()
+  public.delete_account_check(), public.delete_account()
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
-  public.family_files(uuid), public.delete_account()
+  public.family_files(uuid), public.delete_account_check(), public.delete_account()
   to authenticated;
 
 drop policy if exists families_select on public.families;

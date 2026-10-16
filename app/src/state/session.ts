@@ -3,10 +3,18 @@ import { create } from 'zustand';
 import { sb } from '../lib/supabase';
 import * as api from '../lib/api';
 import type { Album, Me, Member } from '../lib/types';
+import { kidsFrom } from '../lib/kids';
 
 export type TextSize = 'normal' | 'large' | 'xlarge';
 
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : d; } catch { return d; } };
+// 예전 버전이 저장해 둔 앨범에는 아이들·소개가 없어요 → 같은 모양으로 맞춰요
+const normAlbum = (a: Album): Album => ({
+  ...a,
+  children: Array.isArray(a.children) ? a.children : kidsFrom(null, a.babyName || '', a.babyBirthday ?? null),
+  bio: a.bio ?? '',
+  cover: a.cover ?? '',
+});
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 
 interface Session {
@@ -35,7 +43,7 @@ const unknownMember = (uid: string): Member => ({ userId: uid, displayName: '가
 export const useSession = create<Session>((set, get) => ({
   ready: false,
   me: null,
-  albums: load<Album[]>('pm-albums', []),
+  albums: load<Album[]>('pm-albums', []).map(normAlbum),
   albumsLoaded: false,
   albumId: load<string | null>('pm-album', null),
   members: load<Member[]>('pm-members', []),

@@ -5,7 +5,7 @@
 // - 화면마다 스크롤이 따로라서, 뒤로 오면 보던 자리 그대로예요
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigationType, type Location } from 'react-router-dom';
-import { AnimatePresence, animate, motion, useMotionValue, useTransform, type MotionValue, type Variants } from 'motion/react';
+import { AnimatePresence, animate, motion, useIsPresent, useMotionValue, useTransform, type MotionValue, type Variants } from 'motion/react';
 import { isIOS, isStandalone } from '../lib/device';
 import s from './Stack.module.css';
 
@@ -31,6 +31,8 @@ export const markBack = () => { backByApp = true; };
 // ---------- 지금 화면의 스크롤 영역 ----------
 const PageCtx = createContext<HTMLElement | null>(null);
 export const usePageScroll = () => useContext(PageCtx);
+/** 아래 탭 화면이 기억해 둔 자리를 잊어요 (다음에 열면 맨 위부터) */
+export const forgetScroll = (path: string) => { tabScrolls.delete(path); };
 export function scrollPageTop(smooth = false) {
   document.querySelector<HTMLElement>('[data-stack="current"] [data-scroller]')?.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
 }
@@ -103,6 +105,17 @@ function Page({ loc, dir, restore, swipe, children }: {
   const W = width();
   const dim = useTransform(x, [-W * BACK_SHIFT, 0], [0.14, 0], { clamp: true });
   const shadow = useTransform(x, (v) => (v > 1 ? '-10px 0 30px rgba(20, 10, 16, 0.16)' : 'none'));
+  // 사라지는 중인 화면은 눌리지 않게 (두 번 눌러 같은 화면이 두 번 쌓이지 않게)
+  const present = useIsPresent();
+
+  // 같은 화면(주소)인데 다른 기록으로 돌아왔으면, 밀어 둔 화면을 제자리로
+  const shownKey = useRef(loc.key);
+  useLayoutEffect(() => {
+    if (shownKey.current === loc.key) return;
+    shownKey.current = loc.key;
+    x.stop();
+    x.jump(0);
+  }, [loc.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     const sc = scroller.current!;
@@ -154,8 +167,21 @@ function Page({ loc, dir, restore, swipe, children }: {
       animate(x, W, t).then(() => {
         instantNext = true; // 이미 다 보이니까 바뀔 때 움직임 없이
         markBack();
+        const k = loc.key;
+        let done = false;
+        const settle = () => {
+          if (done) return;
+          done = true;
+          window.removeEventListener('popstate', settle);
+          setTimeout(() => {
+            swipe.setPeek(false);
+            // 뒤로 갔는데 이 화면의 기록 그대로면(남아 있던 기록) 화면을 제자리로
+            if ((history.state as { key?: string } | null)?.key === k) { x.stop(); x.jump(0); }
+          }, 60);
+        };
+        window.addEventListener('popstate', settle);
+        setTimeout(settle, 700);
         history.back();
-        setTimeout(() => swipe.setPeek(false), 60);
       });
     } else {
       animate(swipe.peekX, -W * BACK_SHIFT, t);
@@ -165,7 +191,7 @@ function Page({ loc, dir, restore, swipe, children }: {
 
   return (
     <motion.div className={s.frame} custom={dir} variants={variants} initial="init" animate="in" exit="out"
-      style={{ x, zIndex: dir === 'pop' ? 1 : 2, boxShadow: shadow }} data-stack="current">
+      style={{ x, zIndex: dir === 'pop' ? 1 : 2, boxShadow: shadow, pointerEvents: present ? undefined : 'none' }} data-stack={present ? 'current' : 'leaving'}>
       <div ref={scroller} className={s.scroller} data-scroller>
         <PageCtx.Provider value={el}>{children}</PageCtx.Provider>
       </div>

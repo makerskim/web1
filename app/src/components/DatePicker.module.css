@@ -11,12 +11,12 @@
 .nav:active { background: var(--c-accent-soft); }
 
 .cal { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.week, .grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.week, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .week span { text-align: center; padding: var(--s-1) 0 var(--s-2); font-size: var(--t-footnote); font-weight: 600; color: var(--c-label-3); }
 .viewport { position: relative; overflow: hidden; min-height: calc(6 * 48px); }
 .grid { row-gap: 2px; }
 .day {
-  justify-self: center; width: 44px; height: 44px; border-radius: 50%;
+  justify-self: center; width: 100%; max-width: 44px; aspect-ratio: 1; border-radius: 50%;
   display: grid; place-items: center; font-size: var(--t-callout); font-weight: 500; color: var(--c-label);
   font-variant-numeric: tabular-nums; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }

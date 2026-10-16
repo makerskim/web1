@@ -1,7 +1,7 @@
 // 사진 올리기: 고르기 → 편집 → 글 쓰기 → 올리기
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { create } from 'zustand';
 import { Editor } from '../editor/Editor';
@@ -11,7 +11,7 @@ import { Button } from '../components/Button';
 import { Avatar } from '../components/Avatar';
 import { progress, toast, useBackClose } from '../components/ui';
 import { useSession } from '../state/session';
-import { scrollPageTop } from '../components/Stack';
+import { forgetScroll, scrollPageTop } from '../components/Stack';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import s from './Compose.module.css';
@@ -79,6 +79,7 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
   const me = useSession((st) => st.me)!;
   const mine = useSession((st) => st.member(me.id));
   const nav = useNavigate();
+  const onHome = /^\/(home)?$/.test(useLocation().pathname);
   // 찍은 날은 기록만 해 두고, 화면의 날짜·아이 나이는 올린 날 기준이에요
   const first = new Date(Math.min(...photos.map((p) => +p.takenAt || Date.now())));
   const [caption, setCaption] = useState('');
@@ -121,9 +122,11 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
       p.close();
       usePosts.getState().prepend(post);
       // 글쓰기 기록을 홈으로 바꿔 끼워요 (뒤로 눌렀을 때 빈 화면이 남지 않게)
+      // 다른 탭에서 올렸으면 홈이 예전 자리 말고 맨 위(방금 올린 사진)에서 열려요
+      forgetScroll('/home');
       nav('/home', { replace: true });
       onDone();
-      scrollPageTop();
+      if (onHome) scrollPageTop();
       toast(skippedOriginals ? `올렸어요 · 원본 ${skippedOriginals}장은 올리지 못했어요` : '사진을 올렸어요');
     } catch (e) {
       p.close();
