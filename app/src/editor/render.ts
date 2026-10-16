@@ -1,17 +1,18 @@
 // 사진 꾸미기: 배치 계산, 그리기, 내보내기
 // 화면에 보이는 그대로(필터·스티커·글씨·테두리) 한 장의 사진으로 만들어 올립니다.
 import { babyAge, fmtDots, readPhotoDate } from '../lib/dates';
-import { filterById, applyFilter, drawVignette, scaleFilter, hasAdjust, adjustFilter } from './filters';
+import { filterById, applyFilter, drawVignette, scaleFilter, hasAdjust, hasPixelAdjust, adjustFilter, adjustKey, adjustVignette } from './filters';
 import { EMOJI_FONT, fontById, frameById, loadFont, type Frame } from './decor';
 
 const MAX_SRC = 2048;   // 편집용 원본 최대 크기
 const OUT_MAX = 1440;   // 올리는 사진 최대 크기 (인스타그램은 1080px — 무료 저장공간을 아끼면서 확대해도 선명하게)
 
-export const ASPECTS: { id: string; name: string; r?: number }[] = [
-  { id: 'orig', name: '원본' },
-  { id: '1:1', name: '정사각형', r: 1 },
-  { id: '4:5', name: '세로 4:5', r: 0.8 },
-  { id: '16:9', name: '가로 16:9', r: 16 / 9 },
+export const ASPECTS: { id: string; name: string; sub: string; r?: number }[] = [
+  { id: 'orig', name: '원본', sub: '자르지 않기' },
+  { id: '1:1', name: '1:1', sub: '정사각형', r: 1 },
+  { id: '4:5', name: '4:5', sub: '세로', r: 0.8 },
+  { id: '3:4', name: '3:4', sub: '세로', r: 0.75 },
+  { id: '16:9', name: '16:9', sub: '가로', r: 16 / 9 },
 ];
 const LABEL_FONT = '"Gowun Dodum", "Pretendard Variable", sans-serif';
 const CAPTION_FONT = '"Gowun Batang", "Pretendard Variable", serif';
@@ -31,7 +32,10 @@ interface ItemBase {
 }
 export interface EmojiItem extends ItemBase { kind: 'emoji'; text: string }
 export interface LabelItem extends ItemBase { kind: 'label'; text: string; bg: string; fg: string }
-export interface TextItem extends ItemBase { kind: 'text'; text: string; font: string; color: string; box: boolean }
+/** 글씨 배경: 없음 · 꽉 찬 상자 · 반투명 상자 */
+export type TextBg = 'none' | 'solid' | 'soft';
+export type TextAlign = 'center' | 'left' | 'right';
+export interface TextItem extends ItemBase { kind: 'text'; text: string; font: string; color: string; box: TextBg; align?: TextAlign }
 export type Item = EmojiItem | LabelItem | TextItem;
 
 interface RotCache { rot: number; c: HTMLCanvasElement }
@@ -68,7 +72,13 @@ export interface Layout {
   canPan: boolean;
 }
 
-export interface RenderOpts { baby?: string | null; selected?: string | null; cache?: boolean }
+export interface RenderOpts {
+  baby?: string | null;
+  selected?: string | null;
+  /** 고치는 중이라 잠깐 숨기는 스티커·글씨 */
+  hidden?: string | null;
+  cache?: boolean;
+}
 
 // ---------- 사진 불러오기 ----------
 function loadImg(url: string): Promise<HTMLImageElement> {
@@ -160,11 +170,11 @@ function filtered(p: EditPhoto, L: Layout, cache: boolean): FilterCache {
   const f = filterById(p.filter);
   const t = strengthOf(p);
   const a = p.adj || {};
-  const adj = hasAdjust(a);
+  const adj = hasPixelAdjust(a);
   const k = L.pw / L.sw;
   const w = Math.max(1, Math.round(L.rw * k));
   const h = Math.max(1, Math.round(L.rh * k));
-  const key = `${p.rot}|${f.id}|${t}|${a.bright | 0},${a.contrast | 0},${a.sat | 0},${a.warm | 0}|${w}x${h}`;
+  const key = `${p.rot}|${f.id}|${t}|${adjustKey(a)}|${w}x${h}`;
   const prev = p._flt as FilterCache | null | undefined;
   if (cache && prev?.key === key) return prev;
   const c = makeCanvas(w, h);
@@ -195,22 +205,44 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.closePath();
 }
 
+// 경로에 둥근 네모를 더하기만 해요 (여러 개를 한 번에 칠하면 겹친 곳이 진해지지 않아요)
+function addRR(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 const luma = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
   return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
 };
 const isLight = (hex: string) => luma(hex) > 170;
+const withAlpha = (hex: string, a: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+};
+/** 글씨 상자 위 글자색 */
+export const inkOn = (hex: string) => (isLight(hex) ? '#222222' : '#FFFFFF');
+/** 반투명 상자 색 */
+export const softBox = (hex: string) => withAlpha(hex, 0.5);
 
-export function labelText(text: string, p: EditPhoto, baby: string | null | undefined): string {
+// 사진에 넣는 날짜·아이 나이는 앨범과 똑같이 '올리는 날' 기준이에요
+export function labelText(text: string, _p: EditPhoto, baby: string | null | undefined): string {
+  const today = new Date();
   return text
-    .replace('{age}', (baby && babyAge(baby, p.takenAt, { short: true })) || '오늘의 기록')
-    .replace('{date}', fmtDots(p.takenAt));
+    .replace('{age}', (baby && babyAge(baby, today, { short: true })) || '오늘의 기록')
+    .replace('{date}', fmtDots(today));
 }
 
 export function captionText(p: EditPhoto, baby: string | null | undefined): string {
   if (p.frameText !== null && p.frameText !== undefined) return p.frameText;
-  const age = baby ? babyAge(baby, p.takenAt, { short: true }) : '';
-  return `${fmtDots(p.takenAt)}${age ? `  ·  ${age}` : ''}`;
+  const today = new Date();
+  const age = baby ? babyAge(baby, today, { short: true }) : '';
+  return `${fmtDots(today)}${age ? `  ·  ${age}` : ''}`;
 }
 
 function drawPattern(ctx: CanvasRenderingContext2D, fr: Frame, L: Layout) {
@@ -285,8 +317,8 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: EditPhoto, L: Layout, bab
 }
 
 // 필름 카메라처럼 오른쪽 아래 주황색 날짜
-function drawStamp(ctx: CanvasRenderingContext2D, p: EditPhoto, L: Layout) {
-  const d = p.takenAt instanceof Date && !isNaN(+p.takenAt) ? p.takenAt : new Date();
+function drawStamp(ctx: CanvasRenderingContext2D, _p: EditPhoto, L: Layout) {
+  const d = new Date();
   const t = `'${String(d.getFullYear()).slice(2)} ${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getDate()).padStart(2, '0')}`;
   const size = L.pw * 0.058;
   ctx.save();
@@ -331,26 +363,41 @@ function drawText(ctx: CanvasRenderingContext2D, it: TextItem, L: Layout): [numb
   const size = L.pw * 0.075 * it.scale * f.k;
   ctx.font = `${f.weight} ${size}px ${f.family}`;
   const lines = it.text.split('\n');
-  const lh = size * 1.15;
-  const tw = Math.max(...lines.map((l) => ctx.measureText(l).width), size);
-  const w = tw + (it.box ? size * 1.1 : size * 0.4);
-  const h = lh * lines.length + (it.box ? size * 0.7 : size * 0.2);
-  const lineY = (i: number) => (i - (lines.length - 1) / 2) * lh + size * 0.05;
+  const lh = size * 1.2;
+  const widths = lines.map((l) => ctx.measureText(l).width);
+  const tw = Math.max(...widths, size * 0.5);
+  const box = it.box === 'solid' || it.box === 'soft';
+  const padX = box ? size * 0.35 : size * 0.15;
+  const padY = size * 0.1;
+  const w = tw + padX * 2;
+  const h = lh * lines.length + padY * 2;
+  const align = it.align || 'center';
+  // 줄마다 정렬 기준점
+  const ax = align === 'left' ? -tw / 2 : align === 'right' ? tw / 2 : 0;
+  const lineY = (i: number) => (i - (lines.length - 1) / 2) * lh;
+  ctx.textAlign = align;
   let color = it.color;
-  if (it.box) {
-    ctx.fillStyle = it.color;
-    rr(ctx, -w / 2, -h / 2, w, h, size * 0.4);
-    ctx.fill();
-    color = isLight(it.color) ? '#222222' : '#FFFFFF';
+  if (box) {
+    // 인스타그램처럼 줄마다 글씨에 딱 맞는 둥근 상자
+    ctx.beginPath();
+    lines.forEach((l, i) => {
+      if (!l.trim()) return;
+      const lw = widths[i] + padX * 2;
+      const x0 = align === 'left' ? ax - padX : align === 'right' ? ax + padX - lw : -lw / 2;
+      addRR(ctx, x0, lineY(i) - lh / 2 - padY, lw, lh + padY * 2, size * 0.3);
+    });
+    ctx.fillStyle = it.box === 'soft' ? softBox(it.color) : it.color;
+    ctx.fill('nonzero');
+    color = inkOn(it.color);
   } else {
-    // 어떤 사진 위에서도 읽히도록 테두리
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = size * 0.16;
-    ctx.strokeStyle = luma(it.color) > 200 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.95)';
-    lines.forEach((l, i) => ctx.strokeText(l, 0, lineY(i)));
+    // 어떤 사진 위에서도 읽히도록 은은한 그림자
+    ctx.shadowColor = luma(it.color) > 120 ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.6)';
+    ctx.shadowBlur = size * 0.18;
+    ctx.shadowOffsetY = size * 0.03;
   }
   ctx.fillStyle = color;
-  lines.forEach((l, i) => ctx.fillText(l, 0, lineY(i)));
+  lines.forEach((l, i) => ctx.fillText(l, ax, lineY(i) + size * 0.04));
+  ctx.shadowColor = 'transparent';
   return [w, h];
 }
 
@@ -380,7 +427,7 @@ function drawItem(ctx: CanvasRenderingContext2D, it: Item, L: Layout, p: EditPho
   ctx.restore();
 }
 
-export function render(ctx: CanvasRenderingContext2D, p: EditPhoto, L: Layout, { baby = null, selected = null, cache = true }: RenderOpts = {}) {
+export function render(ctx: CanvasRenderingContext2D, p: EditPhoto, L: Layout, { baby = null, selected = null, hidden = null, cache = true }: RenderOpts = {}) {
   const fr = frameById(p.frame);
   ctx.save();
   ctx.clearRect(0, 0, L.W, L.H);
@@ -397,10 +444,11 @@ export function render(ctx: CanvasRenderingContext2D, p: EditPhoto, L: Layout, {
   const F = filtered(p, L, cache);
   ctx.drawImage(F.c, L.sx * F.k, L.sy * F.k, L.sw * F.k, L.sh * F.k, L.px, L.py, L.pw, L.ph);
   drawVignette(ctx, L.px, L.py, L.pw, L.ph, (filterById(p.filter).vignette || 0) * strengthOf(p));
+  drawVignette(ctx, L.px, L.py, L.pw, L.ph, adjustVignette(p.adj));
   if (fr.film) drawFilm(ctx, L);
   if (fr.caption) drawCaption(ctx, p, L, baby);
   if (p.stamp) drawStamp(ctx, p, L);
-  for (const it of p.items) drawItem(ctx, it, L, p, baby, it.id === selected);
+  for (const it of p.items) if (it.id !== hidden) drawItem(ctx, it, L, p, baby, it.id === selected);
   ctx.restore();
 }
 

@@ -2,15 +2,15 @@
 
 export const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Android Emoji",sans-serif';
 
-export interface StickerSet { id: string; name: string; items: string[] }
+export interface StickerSet { id: string; name: string; icon: string; items: string[] }
 
 export const STICKER_SETS: StickerSet[] = [
-  { id: 'baby', name: '👶 아기', items: ['👶', '🍼', '🧸', '🎀', '🐣', '👣', '🛁', '💤', '🌙', '⭐', '🍭', '🎈', '🧦', '👒', '🦆', '🪀'] },
-  { id: 'love', name: '💕 하트', items: ['❤️', '💕', '💖', '💗', '💓', '💞', '💘', '🥰', '😍', '😘', '🤍', '💛', '💚', '💙', '💜', '🫶'] },
-  { id: 'face', name: '😊 표정', items: ['😊', '😆', '🤣', '😮', '😴', '🤤', '😋', '😎', '🤗', '😇', '🥺', '😭', '😤', '🤭', '🫣', '😜'] },
-  { id: 'animal', name: '🐻 동물', items: ['🐻', '🐰', '🐶', '🐱', '🐥', '🐷', '🦊', '🐼', '🐨', '🐯', '🦁', '🐮', '🐸', '🐳', '🦄', '🐝'] },
-  { id: 'nature', name: '🌸 꽃·날씨', items: ['🌸', '🌷', '🌼', '🌻', '🍀', '🌈', '☀️', '☁️', '🌙', '✨', '❄️', '🍂', '🌊', '🍓', '🍒', '🍎'] },
-  { id: 'party', name: '🎉 축하', items: ['🎉', '🎊', '🎂', '🎁', '🥳', '👑', '🏆', '💐', '🎈', '🍰', '🧁', '🎵', '👏', '💯', '🙌', '✌️'] },
+  { id: 'baby', name: '아기', icon: '👶', items: ['👶', '🍼', '🧸', '🎀', '🐣', '👣', '🛁', '💤', '🌙', '⭐', '🍭', '🎈', '🧦', '👒', '🦆', '🪀'] },
+  { id: 'love', name: '하트', icon: '💕', items: ['❤️', '💕', '💖', '💗', '💓', '💞', '💘', '🥰', '😍', '😘', '🤍', '💛', '💚', '💙', '💜', '🫶'] },
+  { id: 'face', name: '표정', icon: '😊', items: ['😊', '😆', '🤣', '😮', '😴', '🤤', '😋', '😎', '🤗', '😇', '🥺', '😭', '😤', '🤭', '🫣', '😜'] },
+  { id: 'animal', name: '동물', icon: '🐻', items: ['🐻', '🐰', '🐶', '🐱', '🐥', '🐷', '🦊', '🐼', '🐨', '🐯', '🦁', '🐮', '🐸', '🐳', '🦄', '🐝'] },
+  { id: 'nature', name: '꽃·날씨', icon: '🌸', items: ['🌸', '🌷', '🌼', '🌻', '🍀', '🌈', '☀️', '☁️', '🌙', '✨', '❄️', '🍂', '🌊', '🍓', '🍒', '🍎'] },
+  { id: 'party', name: '축하', icon: '🎉', items: ['🎉', '🎊', '🎂', '🎁', '🥳', '👑', '🏆', '💐', '🎈', '🍰', '🧁', '🎵', '👏', '💯', '🙌', '✌️'] },
 ];
 
 // 파스텔 배경 + 같은 계열의 진한 글씨
@@ -21,7 +21,7 @@ const LABEL_COLORS: [string, string][] = [
 
 export interface LabelPreset { text: string; bg: string; fg: string }
 
-// '{age}'는 사진 찍은 날 기준 '생후 N일', '{date}'는 날짜로 바뀌어요
+// '{age}'는 올리는 날 기준 '생후 N일', '{date}'는 올리는 날짜로 바뀌어요
 export const LABELS: LabelPreset[] = [
   '{age}', '{date}', '백일 축하해 🎉', '첫 돌 🎂', '까꿍! 👀', '사랑해 ♥', '보고 싶어요', '할머니 안녕 👋',
   '할아버지 안녕 👋', '첫 이유식 🥄', '첫 걸음마 👣', '뒤집기 성공!', '잘 자요 💤', '냠냠 😋',
@@ -40,7 +40,11 @@ export const TEXT_FONTS: TextFont[] = [
 ];
 export const fontById = (id: string): TextFont => TEXT_FONTS.find((f) => f.id === id) || TEXT_FONTS[0];
 
-export const TEXT_COLORS = ['#FFFFFF', '#222222', '#FF6B6B', '#FF9F43', '#FFD93D', '#6BCB77', '#4D96FF', '#C77DFF', '#FF8FB1'];
+// 두 줄 × 6개
+export const TEXT_COLORS = [
+  '#FFFFFF', '#222222', '#FF6B6B', '#FF9F43', '#FFD93D', '#6BCB77',
+  '#4D96FF', '#C77DFF', '#FF8FB1', '#FFD1DC', '#A8E6CF', '#8D6E63',
+];
 
 export interface Frame {
   id: string;

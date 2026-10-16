@@ -83,30 +83,34 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 
 ## 5. 앱 올리기 (GitHub)
 
-1. 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 바꾸기 (처음 한 번만)
-2. https://github.com/makerskim/web1/compare/master...claude/nifty-hopper-2vokua 열기 → **Create pull request** → 한 번 더 **Create pull request** → **Merge pull request** → **Confirm merge**
-3. **Actions** 탭에서 *Deploy site* 가 초록색 ✓ 이 되면 끝 (1~2분)
-   - 1번보다 먼저 합쳤다면: **Actions → Deploy site → Run workflow → Run workflow** 로 한 번 다시 실행
-4. 휴대폰으로 **https://makerskim.github.io/web1/album/** 열기 → 카카오나 구글로 시작 → 앨범 만들기 → 가족 초대
+1. 저장소 **Settings → Pages → Build and deployment → Source** 가 **GitHub Actions** 인지 확인 (아니면 바꾸기 — 저장 버튼 없이 바로 적용돼요)
+2. https://github.com/makerskim/web1/compare/master...claude/nifty-hopper-2vokua 열기 → 초록 **Create pull request** → 한 번 더 **Create pull request** → 맨 아래 **Merge pull request** → **Confirm merge**
+   - 'Squash and merge'로 보이면 옆 화살표에서 **Create a merge commit**을 고르세요
+   - 'Delete branch' 버튼은 누르지 마세요
+3. **Actions** 탭 → *Deploy site* 의 두 단계(build, deploy)가 초록색 ✓ 이 되면 끝 (1~2분)
+   - 다시 올리고 싶을 때: **Actions → Deploy site → Run workflow** → Branch는 **master** → **Run workflow**
+4. 휴대폰으로 **https://makerskim.github.io/web1/album/** 열기 → 카카오나 구글로 로그인 → 앨범 만들기 → 가족 초대
 
 > 이후로는 `master`에 합칠 때마다 자동으로 다시 빌드되고 올라가요.
 
 ## 6. (선택) 사진을 구글 드라이브에 저장하기
 
-앨범 관리자의 구글 드라이브(무료 15GB)에 사진을 모을 수 있어요. 앨범마다 **설정 → 사진 저장 위치**에서 고를 수 있고, 사진은 드라이브의 `Pastel Memories · 앨범이름` 폴더에 **비공개**로 저장돼요. 가족은 앱 안에서만 볼 수 있고, 저장은 각자 휴대폰에 돼요.
+앨범 관리자의 구글 드라이브(무료 15GB)에 사진을 모을 수 있어요. 앨범마다 **설정 → 앨범 설정 → 사진 저장 위치**에서 고를 수 있고, 사진은 드라이브의 `Pastel Memories · 앨범이름` 폴더에 **비공개**로 저장돼요. 가족은 앱 안에서만 볼 수 있고, 내려받으면 각자 휴대폰에 저장돼요.
 
-1. Google Cloud Console(4번과 같은 프로젝트) → **API 및 서비스 → 라이브러리 → Google Drive API → 사용**
-2. **OAuth 동의 화면 → 데이터 액세스(범위) → 범위 추가** → `.../auth/drive.file` 추가 → 저장
-   - `drive.file`은 앱이 만든 파일만 다루는 권한이라 구글 심사 없이 쓸 수 있어요. 앱은 꼭 **게시(프로덕션)** 상태여야 해요 (테스트 상태면 7일마다 연결이 끊겨요).
+1. Google Cloud Console(4번과 같은 프로젝트) → **API 및 서비스 → 라이브러리** → `Google Drive API` 검색 → **사용**
+2. **Google 인증 플랫폼 → 데이터 액세스 → 범위 추가 또는 삭제** → `.../auth/drive.file` 체크 (목록에 없으면 아래 '직접 범위 추가' 칸에 `https://www.googleapis.com/auth/drive.file` 붙여넣고 **테이블에 추가**) → **업데이트** → **저장**
+   - `drive.file`은 앱이 만든 파일만 다루는 권한이라 구글 심사가 필요 없어요. 앱은 꼭 **게시(프로덕션)** 상태여야 해요 (테스트 상태면 7일마다 연결이 끊겨요).
+   - 리디렉션 URI는 더 넣을 필요 없어요. 4-3의 **승인된 JavaScript 원본** `https://makerskim.github.io` 만 있으면 돼요.
 3. Supabase → **Edge Functions → Deploy a new function → Via Editor**
-   - 함수 이름: `drive`
-   - [`supabase/functions/drive/index.ts`](supabase/functions/drive/index.ts) 내용을 전부 붙여넣고 **Deploy**
-   - 함수의 **Details(설정)** 에서 **Verify JWT (JWT 확인)** 를 **끄기** — 함수 안에서 로그인한 가족인지 직접 확인해요
-4. Supabase → **Edge Functions → Secrets** 에 두 개 추가
-   - `GOOGLE_CLIENT_ID` = 4번의 클라이언트 ID
-   - `GOOGLE_CLIENT_SECRET` = 4번의 클라이언트 보안 비밀번호
-5. GitHub에서 [`app/src/lib/config.ts`](app/src/lib/config.ts) → `googleClientId: ''` 에 클라이언트 ID 넣고 저장 (자동으로 다시 올라가요)
-6. 앱 → **가족 → ⚙ 설정 → 사진 저장 위치 → 구글 드라이브 연결** → 구글 계정 고르기 → 허용
+   - 편집기의 내용을 모두 지우고 [`supabase/functions/drive/index.ts`](supabase/functions/drive/index.ts) 내용을 전부 붙여넣기
+   - **Function name**: `drive` → **Deploy function**
+4. **Edge Functions → drive → Settings** → **Verify JWT with legacy secret** 끄기 → **Save changes**
+   - 함수 안에서 로그인한 가족인지 직접 확인해요
+5. **Edge Functions → Secrets → Add new secrets**
+   - `GOOGLE_CLIENT_ID` = 4-3의 클라이언트 ID → **Add another**
+   - `GOOGLE_CLIENT_SECRET` = 4-3의 보안 비밀번호 → **Bulk save**
+6. `app/src/lib/config.ts` 의 `googleClientId: ''` 에 클라이언트 ID가 들어가야 해요. **master에서 직접 고치지 말고** 저에게 클라이언트 ID를 알려 주시면 브랜치에 넣어 드릴게요 (직접 고치면 다음 합치기에서 충돌이 날 수 있어요).
+7. 합치고 배포가 끝나면, 앱(크롬·사파리에서. 카카오톡 안 브라우저는 안 돼요) → **가족 → ⚙ 설정 → 앨범 설정 → 사진 저장 위치 → 구글 드라이브 연결** → 구글 계정 고르기 → 허용
 
 ## 무료로 얼마나?
 
@@ -129,8 +133,9 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
 | “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 |
-| 드라이브 연결 버튼이 회색이에요 | 6-5번 `googleClientId` 확인 |
-| “구글 드라이브 기능이 아직 설정되지 않았어요” | 6-3·6-4번 확인 |
+| 드라이브 연결 버튼이 회색이에요 | 6-6번 `googleClientId` 확인 |
+| “구글 드라이브 기능이 아직 설정되지 않았어요” | 6-3 ~ 6-5번 확인 |
+| 드라이브 연결 창에 **origin_mismatch** | 4-3 승인된 JavaScript 원본이 `https://makerskim.github.io` (경로·끝 / 없이) 인지 |
 
 ## 개발
 
