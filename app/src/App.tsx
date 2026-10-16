@@ -14,7 +14,7 @@ import { Grid } from './screens/Grid';
 import { Activity, activitySeenAt } from './screens/Activity';
 import { AlbumHome } from './screens/AlbumHome';
 import { PostPage } from './screens/PostPage';
-import { Settings, AlbumInfo, StorageSettings, Install } from './screens/Settings';
+import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, StorageSettings, Install } from './screens/Settings';
 import { ComposeHost, startCompose } from './screens/Compose';
 
 // 초대 링크(?invite=코드)는 로그인 뒤에 쓰려고 기억해 둬요
@@ -80,7 +80,10 @@ function Shell() {
         <Route path="/p/:id" element={<PostPage />} />
         <Route path="/p/:id/:extra" element={<PostPage />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/album" element={<AlbumInfo />} />
+        <Route path="/settings/account" element={<AccountSettings />} />
+        <Route path="/settings/account/delete" element={<DeleteAccount />} />
+        <Route path="/settings/album" element={<AlbumSettings />} />
+        <Route path="/settings/album/info" element={<AlbumInfo />} />
         <Route path="/settings/storage" element={<StorageSettings />} />
         <Route path="/settings/install" element={<Install />} />
         <Route path="/create" element={<CreateAlbum />} />

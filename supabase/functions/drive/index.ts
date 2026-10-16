@@ -5,12 +5,20 @@
 //
 // 필요한 비밀값 (Supabase → Edge Functions → Secrets):
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET   (Google Cloud의 '웹 애플리케이션' OAuth 클라이언트)
-// SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY 는 Supabase가 자동으로 넣어 줘요.
+// SUPABASE_URL 과 서버용 비밀 키는 Supabase가 자동으로 넣어 줘요.
+// (새 키 방식이면 SUPABASE_SECRET_KEYS, 예전 방식이면 SUPABASE_SERVICE_ROLE_KEY)
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+function serviceKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, string>;
+    if (keys.default) return keys.default;
+  } catch { /* 예전 방식으로 */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+}
+const SERVICE_KEY = serviceKey();
 const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
 const DRIVE = 'https://www.googleapis.com/drive/v3';

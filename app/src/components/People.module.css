@@ -1,0 +1,17 @@
+.list { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; gap: var(--s-3); min-height: 64px; padding: var(--s-2) 0; }
+.name { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.name b { font-size: var(--t-callout); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me, .owner {
+  display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 8px; border-radius: var(--r-full);
+  font-size: var(--t-caption); font-weight: 600; font-style: normal; line-height: 1;
+}
+.me { background: var(--c-surface-2); color: var(--c-label-2); }
+.owner { background: var(--c-accent-soft); color: var(--c-accent-strong); }
+
+.stack { display: inline-flex; flex: none; }
+.stackFace { position: relative; display: inline-flex; border-radius: 50%; box-shadow: 0 0 0 2px var(--c-surface); }
+.stackFace + .stackFace { margin-left: -7px; }
+.stackFace:nth-child(1) { z-index: 3; }
+.stackFace:nth-child(2) { z-index: 2; }
+.stackFace:nth-child(3) { z-index: 1; }

@@ -10,6 +10,8 @@ export interface Album {
   storage: StorageKind;
   driveEmail: string | null;
   driveReady: boolean;
+  /** 가족 탭 맨 위 앨범 사진: '' | 이 앨범 사진 경로 | drive:파일ID */
+  cover: string;
   createdAt: string;
   myRole: Role;
   myName: string;

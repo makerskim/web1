@@ -9,6 +9,7 @@ export function friendly(err: unknown): string {
     [/not_member/, '이 앨범의 가족만 볼 수 있어요.'],
     [/last_owner/, '관리자는 최소 한 명 있어야 해요.'],
     [/use_leave/, '나 자신은 [앨범 나가기]로 나갈 수 있어요.'],
+    [/sole_member/, '나 혼자 있는 앨범이 있어요. 그 앨범을 먼저 지워 주세요.'],
     [/bad_photo_path/, '사진 정보가 올바르지 않아요. 다시 올려 주세요.'],
     [/drive_not_connected/, '이 앨범의 구글 드라이브 연결이 끊겼어요. 관리자에게 다시 연결해 달라고 해 주세요.'],
     [/drive_quota/, '구글 드라이브 공간이 가득 찼어요.'],

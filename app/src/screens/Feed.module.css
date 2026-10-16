@@ -1,11 +1,5 @@
 .wordmark { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.03em; max-width: 70vw; }
 .wordmark span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.strip { display: flex; gap: var(--s-4); overflow-x: auto; padding: var(--s-2) var(--gutter) var(--s-4); scrollbar-width: none; }
-.strip::-webkit-scrollbar { display: none; }
-.story { flex: none; width: 68px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.story > span:last-child { font-size: var(--t-caption); color: var(--c-label-2); max-width: 72px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.story[data-story='unseen'] > span:last-child { color: var(--c-label); font-weight: 600; }
-.addRing { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; border: 1.5px dashed var(--c-hairline-strong); color: var(--c-label-2); background: var(--c-surface); }
 .milestone { display: flex; align-items: center; gap: var(--s-2); margin: 0 var(--gutter) var(--s-4); padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #ffeef3, #f1ecff); }
 .milestone p { flex: 1; font-size: var(--t-sub); }
 .milestone button { width: 36px; height: 36px; display: grid; place-items: center; color: var(--c-label-3); }
@@ -17,4 +11,5 @@
 .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-3); padding: var(--s-8) 0; }
 .emptyArt { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(140deg, #ffe3ea, #ece4fb); color: var(--c-accent-strong); }
 .empty h2 { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; }
-.empty p { color: var(--c-label-2); font-size: var(--t-sub); margin-bottom: var(--s-2); }
+.empty p { color: var(--c-label-2); font-size: var(--t-sub); line-height: 1.6; }
+.plusHint { display: inline-grid; place-items: center; width: 22px; height: 22px; margin: 0 2px; border-radius: 7px; background: var(--c-accent-gradient); color: #fff; vertical-align: -5px; }

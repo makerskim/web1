@@ -22,12 +22,12 @@ export function Field({ label, hint, ...rest }: { label: string; hint?: string }
   );
 }
 
-export function Row({ icon, label, detail, onClick, danger = false, chevron = true, children }: {
+export function Row({ icon, label, detail, onClick, danger = false, chevron = true, children, ...data }: {
   icon?: ReactNode; label: ReactNode; detail?: ReactNode; onClick?: () => void; danger?: boolean; chevron?: boolean; children?: ReactNode;
-}) {
+} & { [k: `data-${string}`]: string | undefined }) {
   const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag className={`${s.row} ${s.nav} ${danger ? s.danger : ''}`} onClick={onClick} type={onClick ? 'button' : undefined}>
+    <Tag className={`${s.row} ${s.nav} ${danger ? s.danger : ''} ${onClick ? '' : s.static}`} onClick={onClick} type={onClick ? 'button' : undefined} {...data}>
       {icon && <span className={s.icon}>{icon}</span>}
       <span className={s.navLabel}>{label}</span>
       {detail && <span className={s.detail}>{detail}</span>}
@@ -49,4 +49,9 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
       ))}
     </div>
   );
+}
+
+// 켜고 끄기 스위치 (아이폰처럼)
+export function Toggle({ checked, onChange, label, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: string } & Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'checked'>) {
+  return <input type="checkbox" role="switch" className={s.switch} checked={checked} aria-label={label} onChange={(e) => onChange(e.target.checked)} {...rest} />;
 }

@@ -1,4 +1,2 @@
 .edit { display: flex; flex-direction: column; gap: var(--s-4); }
 .edit textarea { width: 100%; border: 0; border-radius: var(--r-md); background: var(--c-surface-2); padding: var(--s-4); font-size: var(--t-callout); line-height: 1.5; resize: none; outline: none; }
-.dateRow { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 var(--s-4); border-radius: var(--r-md); background: var(--c-surface-2); font-weight: 500; }
-.dateRow input { border: 0; background: transparent; font-size: var(--t-callout); outline: none; }

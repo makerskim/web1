@@ -45,18 +45,25 @@ export function scaleFilter(f: Filter, t: number): Filter {
   };
 }
 
-// 조정: 밝기·대비·채도·따뜻함 (-50 ~ 50)
-export type AdjustId = 'bright' | 'contrast' | 'sat' | 'warm';
+// 조정: 밝기·대비·채도·따뜻함·빛바램·비네트 (-50 ~ 50, 0이 원래대로)
+export type AdjustId = 'bright' | 'contrast' | 'sat' | 'warm' | 'fade' | 'vignette';
 export const ADJUSTS: { id: AdjustId; name: string }[] = [
-  { id: 'bright', name: '밝기' }, { id: 'contrast', name: '대비' }, { id: 'sat', name: '채도' }, { id: 'warm', name: '따뜻함' },
+  { id: 'bright', name: '밝기' }, { id: 'contrast', name: '대비' }, { id: 'sat', name: '채도' },
+  { id: 'warm', name: '따뜻함' }, { id: 'fade', name: '빛바램' }, { id: 'vignette', name: '비네트' },
 ];
+/** 픽셀 색을 바꾸는 조정 (비네트는 그 위에 따로 그려요) */
+const PIXEL_ADJUSTS: AdjustId[] = ['bright', 'contrast', 'sat', 'warm', 'fade'];
 export const hasAdjust = (a?: Record<string, number> | null): boolean => !!a && ADJUSTS.some((x) => a[x.id]);
+export const hasPixelAdjust = (a?: Record<string, number> | null): boolean => !!a && PIXEL_ADJUSTS.some((x) => a[x]);
+export const adjustKey = (a?: Record<string, number> | null): string => PIXEL_ADJUSTS.map((x) => (a?.[x] || 0) | 0).join(',');
 export function adjustFilter(a: Record<string, number>): Filter {
   return {
     id: 'adjust', bright: 1 + (a.bright || 0) / 250, contrast: 1 + (a.contrast || 0) / 200,
-    sat: 1 + (a.sat || 0) / 100, warm: (a.warm || 0) / 2.5,
+    sat: 1 + (a.sat || 0) / 100, warm: (a.warm || 0) / 2.5, fade: (a.fade || 0) / 250,
   };
 }
+/** 비네트 세기: 양수는 가장자리를 어둡게, 음수는 하얗게 */
+export const adjustVignette = (a?: Record<string, number> | null): number => (a?.vignette || 0) / 75;
 
 // 밝기·대비·색 바꾸기를 미리 계산해 둔 표(LUT)
 function luts(f: Filter): Uint8ClampedArray[] {
@@ -72,7 +79,8 @@ function luts(f: Filter): Uint8ClampedArray[] {
       let x = (v - 128) * c + 128;
       x *= b;
       x += shift[ch];
-      x = x * (1 - fade) + 255 * fade;
+      // 빛바램: 양수는 어두운 곳을 밝게 띄우고, 음수는 더 진하게
+      x = fade >= 0 ? x * (1 - fade) + 255 * fade : (x + 255 * fade) / (1 + fade);
       out[ch][v] = x;
     }
   }
@@ -109,12 +117,14 @@ export function applyFilter(img: ImageData, f: Filter | null): ImageData {
   return img;
 }
 
-// 가장자리를 살짝 어둡게
+// 가장자리를 살짝 어둡게 (음수면 하얗게 — 몽글몽글한 느낌)
 export function drawVignette(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, amount: number) {
   if (!amount) return;
+  const a = Math.min(1, Math.abs(amount));
+  const rgb = amount > 0 ? '0,0,0' : '255,255,255';
   const g = ctx.createRadialGradient(x + w / 2, y + h / 2, Math.min(w, h) * 0.35, x + w / 2, y + h / 2, Math.hypot(w, h) / 2);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, `rgba(0,0,0,${amount})`);
+  g.addColorStop(0, `rgba(${rgb},0)`);
+  g.addColorStop(1, `rgba(${rgb},${a})`);
   ctx.save();
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
