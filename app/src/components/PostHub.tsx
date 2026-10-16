@@ -1,9 +1,10 @@
-// 게시물 관련 창들을 한 곳에서: 댓글, 크게 보기·스토리, 더보기 메뉴, 글 고치기
+// 게시물 관련 창들을 한 곳에서: 댓글, 크게 보기, 좋아요한 가족, 더보기 메뉴, 글 고치기
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import { create } from 'zustand';
 import { Comments } from './Comments';
+import { LikesSheet } from './LikesSheet';
 import { Viewer, type ViewItem } from './Viewer';
 import { Sheet, confirm, menu, progress, toast, copyText } from './ui';
 import { Button } from './Button';
@@ -11,18 +12,18 @@ import { useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { saveWithChoice, sharePhotos } from '../lib/media';
-import { ymd } from '../lib/dates';
 import { callName, subj } from '../lib/korean';
 import type { PostHandlers } from './PostCard';
 import type { Post } from '../lib/types';
 import s from './PostHub.module.css';
 
-interface ViewerReq { items: ViewItem[]; start: number; story?: boolean; onShown?: (it: ViewItem) => void; postLink?: boolean }
-interface HubState { comments: string | null; viewer: ViewerReq | null; edit: string | null }
-export const useHub = create<HubState>(() => ({ comments: null, viewer: null, edit: null }));
+interface ViewerReq { items: ViewItem[]; start: number; postLink?: boolean }
+interface HubState { comments: string | null; viewer: ViewerReq | null; edit: string | null; likes: string | null }
+export const useHub = create<HubState>(() => ({ comments: null, viewer: null, edit: null, likes: null }));
 
 export const openComments = (postId: string) => useHub.setState({ comments: postId });
 export const openViewer = (req: ViewerReq) => useHub.setState({ viewer: req });
+export const openLikes = (postId: string) => useHub.setState({ likes: postId });
 
 export const viewItems = (posts: Post[]): ViewItem[] => posts.flatMap((p) => p.photos.map((ph) => ({
   ...ph, albumId: p.albumId, postId: p.id, authorId: p.authorId, takenAt: p.takenAt, createdAt: p.createdAt,
@@ -33,7 +34,8 @@ export function usePostHandlers(extra: Partial<PostHandlers> = {}): PostHandlers
   return {
     onComments: (p) => openComments(p.id),
     onView: (p, i) => openViewer({ items: viewItems([p]), start: i }),
-    onSave: (p) => saveWithChoice(p.albumId, p.photos, p.takenAt),
+    onSave: (p) => saveWithChoice(p.albumId, p.photos, p.createdAt),
+    onLikes: (p) => openLikes(p.id),
     onShare: (p) => shareText(p).then((t) => sharePhotos(p.albumId, p.photos, t)),
     onMore: (p) => postMenu(p),
     ...extra,
@@ -55,10 +57,10 @@ async function postMenu(p: Post) {
     { label: '보내기', value: 'share', icon: 'send' },
     { label: '링크 복사', value: 'link', icon: 'link' },
   ];
-  if (mine) items.push({ label: '글·날짜 고치기', value: 'edit', icon: 'edit' });
+  if (mine) items.push({ label: '글 고치기', value: 'edit', icon: 'edit' });
   if (mine || st.isOwner()) items.push({ label: '게시물 지우기', value: 'delete', icon: 'trash', danger: true });
   const v = await menu(items);
-  if (v === 'save') saveWithChoice(p.albumId, p.photos, p.takenAt);
+  if (v === 'save') saveWithChoice(p.albumId, p.photos, p.createdAt);
   if (v === 'share') sharePhotos(p.albumId, p.photos, await shareText(p));
   if (v === 'link' && await copyText(`${location.origin}${location.pathname}#/p/${p.id}`)) toast('링크를 복사했어요');
   if (v === 'edit') useHub.setState({ edit: p.id });
@@ -76,11 +78,9 @@ async function postMenu(p: Post) {
 
 function EditPost({ post, onClose }: { post: Post; onClose: () => void }) {
   const [caption, setCaption] = useState(post.caption);
-  const [date, setDate] = useState(ymd(post.takenAt));
   const save = async () => {
     try {
-      const takenAt = date !== ymd(post.takenAt) ? new Date(`${date}T12:00:00`).toISOString() : undefined;
-      const next = await api.updatePost(post.id, { caption: caption.trim(), takenAt });
+      const next = await api.updatePost(post.id, { caption: caption.trim() });
       usePosts.getState().put(next);
       toast('고쳤어요');
       onClose();
@@ -89,7 +89,6 @@ function EditPost({ post, onClose }: { post: Post; onClose: () => void }) {
   return (
     <div className={s.edit}>
       <textarea value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} rows={5} placeholder="사진 이야기" aria-label="사진 이야기" data-f="caption" />
-      <label className={s.dateRow}><span>찍은 날</span><input type="date" value={date} max={ymd(new Date())} onChange={(e) => setDate(e.target.value)} /></label>
       <Button size="lg" block onClick={save} data-save>저장</Button>
     </div>
   );
@@ -97,7 +96,7 @@ function EditPost({ post, onClose }: { post: Post; onClose: () => void }) {
 
 // 앱에 한 번만 넣어요
 export function PostHubOverlays() {
-  const { comments, viewer, edit } = useHub();
+  const { comments, viewer, edit, likes } = useHub();
   const byId = usePosts((st) => st.byId);
   const nav = useNavigate();
   const close = (k: keyof HubState) => useHub.setState({ [k]: null } as Partial<HubState>);
@@ -105,14 +104,13 @@ export function PostHubOverlays() {
     <>
       <AnimatePresence>
         {viewer && (
-          <Viewer key="viewer" items={viewer.items} start={viewer.start} story={viewer.story} hold={!!comments}
-            onShown={viewer.onShown} onClose={() => close('viewer')}
-            onComments={viewer.story ? (id) => openComments(id) : undefined}
+          <Viewer key="viewer" items={viewer.items} start={viewer.start} onClose={() => close('viewer')}
             onOpenPost={viewer.postLink ? (id) => { close('viewer'); setTimeout(() => nav(`/p/${id}`), 50); } : undefined} />
         )}
       </AnimatePresence>
       <Comments post={comments ? byId[comments] || null : null} open={!!comments} onClose={() => close('comments')} />
-      <Sheet open={!!edit && !!byId[edit]} onClose={() => close('edit')} title="글·날짜 고치기">
+      <LikesSheet post={likes ? byId[likes] || null : null} onClose={() => close('likes')} />
+      <Sheet open={!!edit && !!byId[edit]} onClose={() => close('edit')} title="글 고치기">
         {edit && byId[edit] && <EditPost post={byId[edit]} onClose={() => close('edit')} />}
       </Sheet>
     </>

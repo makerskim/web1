@@ -8,17 +8,16 @@ import { Editor } from '../editor/Editor';
 import { drawPreview, exportPhoto, isDecorated, loadPhoto, type EditPhoto } from '../editor/render';
 import { Icon } from '../components/Icon';
 import { Button } from '../components/Button';
+import { Avatar } from '../components/Avatar';
 import { progress, toast, useBackClose } from '../components/ui';
 import { useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { babyAge, toDate, ymd } from '../lib/dates';
 import s from './Compose.module.css';
 
 const MAX_PHOTOS = 10;
 const MAX_ORIGINAL = 25 * 1024 * 1024;
 const ORIG_PREF = 'pm-upload-original';
-const IDEAS = ['오늘의 우리 아이', '까꿍!', '잘 자요', '냠냠 맛있어요', '산책 나왔어요', '보고 싶어요'];
 const mb = (n: number) => (n / 1048576 < 10 ? (n / 1048576).toFixed(1) : String(Math.round(n / 1048576)));
 const canKeep = (f: File) => f.size <= MAX_ORIGINAL && !!api.originalInfo(f);
 
@@ -77,18 +76,27 @@ export function ComposeHost() {
 
 function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => void; onDone: () => void }) {
   const album = useSession((st) => st.album())!;
+  const me = useSession((st) => st.me)!;
+  const mine = useSession((st) => st.member(me.id));
   const nav = useNavigate();
+  // 찍은 날은 기록만 해 두고, 화면의 날짜·아이 나이는 올린 날 기준이에요
   const first = new Date(Math.min(...photos.map((p) => +p.takenAt || Date.now())));
   const [caption, setCaption] = useState('');
-  const [date, setDate] = useState(ymd(first));
   const [withOrig, setWithOrig] = useState(() => { try { return localStorage.getItem(ORIG_PREF) !== 'off'; } catch { return true; } });
   const [busy, setBusy] = useState(false);
   const preview = useRef<HTMLCanvasElement>(null);
+  const text = useRef<HTMLTextAreaElement>(null);
   const origBytes = photos.reduce((n, p) => n + (canKeep(p.file) ? p.file.size : 0), 0);
   const decorated = photos.some(isDecorated);
-  const age = album.babyBirthday ? babyAge(album.babyBirthday, toDate(date), { short: true }) : '';
 
-  useEffect(() => { if (preview.current) drawPreview(preview.current, photos[0], 240, album.babyBirthday); }, [photos, album.babyBirthday]);
+  useEffect(() => { if (preview.current) drawPreview(preview.current, photos[0], 480, album.babyBirthday); }, [photos, album.babyBirthday]);
+  // 글이 길어지면 칸도 같이 늘어나요
+  useEffect(() => {
+    const t = text.current;
+    if (!t) return;
+    t.style.height = 'auto';
+    t.style.height = `${Math.max(96, t.scrollHeight)}px`;
+  }, [caption]);
 
   const share = async () => {
     if (busy) return;
@@ -110,8 +118,7 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
       }
       if (skipped) toast(`${skipped}장은 원본으로 올릴 수 없어 일반 화질로 올려요`);
       p.set(0.15, '가족에게 올리는 중');
-      const takenAt = date !== ymd(first) ? new Date(`${date}T12:00:00`) : first;
-      const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: takenAt.toISOString(), photos: out }, (f) => p.set(0.15 + f * 0.85));
+      const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: first.toISOString(), photos: out }, (f) => p.set(0.15 + f * 0.85));
       p.close();
       usePosts.getState().prepend(post);
       onDone();
@@ -130,25 +137,20 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
   return (
     <motion.div className={s.write} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 380, damping: 38 }}>
       <header className={s.top}>
-        <button className={s.textBtn} onClick={onBack}><Icon name="back" size={22} />편집</button>
+        <button className={s.iconBtn} onClick={onBack} aria-label="편집으로 돌아가기"><Icon name="back" size={26} /></button>
         <h2>새 게시물</h2>
-        <button className={`${s.textBtn} ${s.accent}`} onClick={share} disabled={busy} data-w="post">공유</button>
+        <span />
       </header>
       <div className={s.body}>
-        <div className={s.compose}>
-          <span className={s.thumb}><canvas ref={preview} />{photos.length > 1 && <i>+{photos.length - 1}</i>}</span>
-          <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={4} maxLength={2000} placeholder="사진에 이야기를 남겨 보세요" aria-label="사진 이야기" data-w="caption" />
+        <div className={s.preview}>
+          <span className={s.thumb}><canvas ref={preview} />{photos.length > 1 && <i><Icon name="layers" size={14} stroke={2} />{photos.length}</i>}</span>
         </div>
-        <div className={s.ideas}>
-          {IDEAS.map((t) => <button key={t} onClick={() => setCaption((c) => (c ? `${c.trimEnd()} ${t}` : t))} data-idea={t}>{t}</button>)}
-        </div>
+        <label className={s.captionBox}>
+          <Avatar src={mine.avatar} name={mine.displayName} size={32} />
+          <textarea ref={text} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000}
+            placeholder="사진에 이야기를 남겨 보세요" aria-label="사진 이야기" data-w="caption" />
+        </label>
         <div className={s.list}>
-          <label className={s.row}>
-            <Icon name="calendar" size={22} />
-            <span className={s.rowLabel}>찍은 날</span>
-            <span className={s.rowVal}>{toDate(date)!.getMonth() + 1}월 {toDate(date)!.getDate()}일{age ? ` · ${age}` : ''}</span>
-            <input type="date" className={s.dateOverlay} value={date} max={ymd(new Date())} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="찍은 날" />
-          </label>
           <label className={s.row}>
             <Icon name="image" size={22} />
             <span className={s.rowText}>
@@ -157,10 +159,10 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
             </span>
             <input type="checkbox" className={s.switch} checked={withOrig} onChange={(e) => setWithOrig(e.target.checked)} data-w="orig" />
           </label>
-          {album.storage === 'drive' && <p className={s.note}><Icon name="shield" size={16} /> 관리자의 구글 드라이브에 저장돼요</p>}
         </div>
+        {album.storage === 'drive' && <p className={s.note}><Icon name="shield" size={16} /> 관리자의 구글 드라이브에 저장돼요</p>}
       </div>
-      <div className={s.foot}><Button size="lg" block onClick={share} disabled={busy}>가족에게 공유</Button></div>
+      <div className={s.foot}><Button size="lg" block onClick={share} disabled={busy} data-w="post">공유</Button></div>
     </motion.div>
   );
 }

@@ -1,0 +1,42 @@
+.chips { display: flex; gap: var(--s-2); padding: var(--s-3) var(--gutter); }
+.chip {
+  display: inline-flex; align-items: center; height: 36px; border-radius: var(--r-full);
+  background: var(--c-surface); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); color: var(--c-label);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.chipMain { display: inline-flex; align-items: center; gap: 4px; height: 100%; padding: 0 var(--s-3) 0 var(--s-4); font-size: var(--t-sub); font-weight: 600; color: inherit; white-space: nowrap; }
+.chip:not(.on) .chipMain { padding-right: var(--s-3); }
+.chipX { display: grid; place-items: center; width: 32px; height: 100%; margin-left: -4px; color: inherit; }
+.chip.on { background: var(--c-label); color: var(--c-surface); box-shadow: none; }
+
+.list { display: flex; flex-direction: column; }
+.option {
+  width: 100%; display: flex; align-items: center; gap: var(--s-3); min-height: 60px; padding: var(--s-2) 0;
+  text-align: left; color: var(--c-label);
+}
+.option + .option, .list li + li .option { border-top: 1px solid var(--c-hairline); }
+.allIcon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--c-surface-2); color: var(--c-label-2); }
+.optLabel { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: var(--t-callout); font-weight: 600; }
+.optLabel em { font-style: normal; height: 20px; padding: 0 7px; border-radius: var(--r-full); background: var(--c-surface-2); color: var(--c-label-2); font-size: var(--t-caption); font-weight: 600; display: inline-flex; align-items: center; }
+.option small { font-size: var(--t-sub); color: var(--c-label-3); font-variant-numeric: tabular-nums; }
+.check { color: var(--c-accent-strong); flex: none; }
+
+.year { padding-top: var(--s-4); }
+.yearHead {
+  display: flex; align-items: baseline; gap: var(--s-2); min-height: 40px; padding: 0 var(--s-2); margin: 0 calc(var(--s-2) * -1);
+  border-radius: var(--r-sm);
+}
+.yearHead b { font-size: var(--t-headline); font-weight: 700; }
+.yearHead small { font-size: var(--t-sub); color: var(--c-label-3); }
+.months { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); margin-top: var(--s-2); }
+.month {
+  min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border-radius: var(--r-md); background: var(--c-surface-2); color: var(--c-label);
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.month b { font-size: var(--t-callout); font-weight: 700; }
+.month small { font-size: var(--t-caption); color: var(--c-label-3); min-height: 1em; font-variant-numeric: tabular-nums; }
+.month:active:not(:disabled) { transform: scale(.96); }
+.month:disabled { background: transparent; color: var(--c-label-3); opacity: .5; }
+.picked { background: var(--c-label) !important; color: var(--c-surface) !important; }
+.picked small { color: inherit; opacity: .75; }

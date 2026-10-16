@@ -1,12 +1,13 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Avatar } from './Avatar';
 import { Photo } from './Photo';
 import { Icon } from './Icon';
+import { FaceStack } from './People';
 import { useSession } from '../state/session';
 import { liked, toggleLike } from '../state/actions';
-import { babyAge, fmtShort, timeAgo, ymd } from '../lib/dates';
-import { subj } from '../lib/korean';
+import { babyAge, timeAgo } from '../lib/dates';
+import { hasBatchim } from '../lib/korean';
 import type { Post } from '../lib/types';
 import s from './PostCard.module.css';
 
@@ -16,14 +17,13 @@ export interface PostHandlers {
   onMore: (p: Post) => void;
   onSave: (p: Post) => void;
   onShare: (p: Post) => void;
-  onAuthor?: (uid: string) => void;
-  storyRing?: (uid: string) => 'unseen' | 'seen' | null;
+  onLikes: (p: Post) => void;
 }
+
 
 export function PostCard({ post, h, full = false }: { post: Post; h: PostHandlers; full?: boolean }) {
   const member = useSession((st) => st.member);
   const album = useSession((st) => st.album());
-  const me = useSession((st) => st.me);
   const author = member(post.authorId);
   const [idx, setIdx] = useState(0);
   const [burst, setBurst] = useState(0);
@@ -34,9 +34,8 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
   const isLiked = liked(post);
   const first = post.photos[0];
   const ratio = Math.min(1.25, Math.max(0.52, first.h / first.w)); // 4:5 ~ 1.91:1
-  const age = album?.babyBirthday ? babyAge(album.babyBirthday, post.takenAt, { short: true }) : '';
-  const sub = [age, ymd(post.takenAt) !== ymd(post.createdAt) ? fmtShort(post.takenAt) : ''].filter(Boolean).join(' · ');
-  const ring = h.storyRing?.(post.authorId) ?? null;
+  // 아이 나이는 올린 날 기준
+  const age = album?.babyBirthday ? babyAge(album.babyBirthday, post.createdAt, { short: true }) : '';
 
   const onTap = () => {
     const now = Date.now();
@@ -54,16 +53,27 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
     const t = track.current!;
     t.scrollTo({ left: (idx + d) * t.clientWidth, behavior: 'smooth' });
   };
-  const likers = post.likes.slice(-2).map((l) => member(l.userId));
+  // 좋아요한 가족 이름 (최근에 누른 사람부터): 3명까지는 모두, 4명부터는 "엄마, 아빠 외 2명이 좋아해요"
+  const likers = [...post.likes].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((l) => member(l.userId));
+  const named = likers.length <= 3 ? likers : likers.slice(0, 2);
+  const rest = likers.length - named.length;
+  const last = named[named.length - 1]?.displayName || '';
+  // 글이 두 줄을 넘으면 '더 보기'
+  const capRef = useRef<HTMLParagraphElement>(null);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = capRef.current;
+    setLong(!!el && !open && el.scrollHeight > el.clientHeight + 1);
+  }, [post.caption, open]);
   const shownComments = full ? [] : post.comments.slice(-2);
 
   return (
     <article className={s.card} data-id={post.id}>
       <header className={s.head}>
-        <button className={s.who} onClick={() => h.onAuthor?.(post.authorId)} disabled={!h.onAuthor}>
-          <Avatar src={author.avatar} name={author.displayName} size={34} ring={!!ring} seen={ring === 'seen'} />
-          <span className={s.whoText}><b>{author.displayName}</b>{sub && <small>{sub}</small>}</span>
-        </button>
+        <span className={s.who}>
+          <Avatar src={author.avatar} name={author.displayName} size={34} />
+          <span className={s.whoText}><b>{author.displayName}</b>{age && <small>{age}</small>}</span>
+        </span>
         <button className={s.iconBtn} onClick={() => h.onMore(post)} aria-label="더보기" data-act="more"><Icon name="more" size={22} /></button>
       </header>
 
@@ -99,17 +109,22 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
       </div>
 
       <div className={s.body}>
-        {post.likes.length > 0 && (
-          <p className={s.likes}>
-            {post.likes.length === 1
-              ? <><b>{likers[0].userId === me?.id ? '내' : likers[0].displayName}</b>{likers[0].userId === me?.id ? '가 좋아해요' : subj(likers[0].displayName).slice(likers[0].displayName.length) + ' 좋아해요'}</>
-              : <><b>{likers[likers.length - 1].displayName}</b> 외 {post.likes.length - 1}명이 좋아해요</>}
-          </p>
+        {likers.length > 0 && (
+          <button className={s.likes} onClick={() => h.onLikes(post)} data-act="likers">
+            <FaceStack people={likers.slice(0, 3)} />
+            <span>
+              {named.map((m, i) => <span key={m.userId}>{i > 0 && ', '}<b>{m.displayName}</b></span>)}
+              {rest > 0 ? ` 외 ${rest}명이 좋아해요` : `${hasBatchim(last) ? '이' : '가'} 좋아해요`}
+            </span>
+          </button>
         )}
         {post.caption && (
-          <p className={`${s.caption} ${open ? s.open : ''}`} onClick={() => setOpen(true)}>
-            <b>{author.displayName}</b> {post.caption}
-          </p>
+          <>
+            <p ref={capRef} className={`${s.caption} ${open ? s.open : ''}`} onClick={() => setOpen(true)}>
+              <b>{author.displayName}</b> {post.caption}
+            </p>
+            {long && <button className={s.more} onClick={() => setOpen(true)}>더 보기</button>}
+          </>
         )}
         {!full && post.comments.length > 2 && <button className={s.more} onClick={() => h.onComments(post)}>댓글 {post.comments.length}개 모두 보기</button>}
         {shownComments.map((c) => (

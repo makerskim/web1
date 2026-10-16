@@ -15,7 +15,7 @@ function check<T>({ data, error }: { data: T; error: unknown }): T {
 
 const album = (r: Row, m?: Row): Album => ({
   id: r.id, name: r.name, babyName: r.baby_name, babyBirthday: r.baby_birthday, inviteCode: r.invite_code,
-  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id,
+  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id, cover: r.cover || '',
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
 });
 const member = (r: Row): Member => ({ userId: r.user_id, displayName: r.display_name, avatar: r.avatar || '', role: r.role, joinedAt: r.joined_at });
@@ -39,16 +39,30 @@ export function meFrom(u: { id: string; email?: string | null; user_metadata?: R
   return { id: u.id, email: u.email || null, name: String(name).slice(0, 20), avatarUrl, provider: u.app_metadata?.provider || '' };
 }
 
+// 카카오는 닉네임·프로필 사진만 받아요. Supabase는 기본으로 이메일도 요청하는데,
+// 개인 개발자 앱은 이메일 동의항목을 켤 수 없어 KOE205 오류가 나요 → scope를 직접 정해서 보내요.
+const KAKAO_SCOPE = 'profile_nickname,profile_image';
+
 export async function signIn(provider: 'kakao' | 'google') {
   const redirectTo = `${location.origin}${location.pathname}`;
   const { error } = await sb.auth.signInWithOAuth({
     provider,
-    options: { redirectTo, ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}) },
+    options: { redirectTo, queryParams: provider === 'google' ? { prompt: 'select_account' } : { scope: KAKAO_SCOPE } },
   });
   if (error) throw new Error(friendly(error));
 }
 
 export async function signOut() { await sb.auth.signOut(); }
+
+// 계정 삭제: 나 혼자 있는 앨범은 사진 파일까지 먼저 지우고, 그다음 계정을 지워요
+export async function deleteAccount(uid: string, mine: Album[]) {
+  for (const a of mine) {
+    const others = (check(await sb.from('members').select('user_id').eq('family_id', a.id).neq('user_id', uid).limit(1)) as Row[]).length;
+    if (!others) await deleteAlbum(a.id, uid);
+  }
+  check(await sb.rpc('delete_account'));
+  await sb.auth.signOut().catch(() => {});
+}
 
 // ---------- 앨범 ----------
 export async function albums(uid: string): Promise<Album[]> {
@@ -73,13 +87,35 @@ export async function joinAlbum(code: string, displayName: string, avatar: strin
   return f.id as string;
 }
 
-export async function updateAlbum(id: string, patch: { name?: string; babyName?: string; babyBirthday?: string | null; storage?: StorageKind }) {
+export async function updateAlbum(id: string, patch: { name?: string; babyName?: string; babyBirthday?: string | null; storage?: StorageKind; cover?: string }) {
   const row: Row = {};
   if (patch.name !== undefined) row.name = patch.name;
   if (patch.babyName !== undefined) row.baby_name = patch.babyName;
   if (patch.babyBirthday !== undefined) row.baby_birthday = patch.babyBirthday || null;
   if (patch.storage !== undefined) row.storage = patch.storage;
-  check(await sb.from('families').update(row).eq('id', id));
+  if (patch.cover !== undefined) row.cover = patch.cover;
+  const rows = check(await sb.from('families').update(row).eq('id', id).select('id')) as Row[];
+  if (!rows.length) throw new Error('앨범 관리자만 바꿀 수 있어요.');
+}
+
+// 앨범 사진 (관리자): 앨범의 사진 하나를 고르거나, 휴대폰 사진을 올려요. 예전에 올린 앨범 사진 파일은 지워요
+const isCoverFile = (albumId: string, path: string) => path.startsWith(`${albumId}/cover/`);
+export async function setCover(albumId: string, path: string, old: string) {
+  await updateAlbum(albumId, { cover: path });
+  if (old && old !== path && isCoverFile(albumId, old)) await sb.storage.from('photos').remove([old]).catch(() => {});
+}
+export async function uploadCover(albumId: string, blob: Blob, old: string) {
+  const path = `${albumId}/cover/${Date.now()}.jpg`;
+  const { error } = await sb.storage.from('photos').upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
+  if (error) throw new Error(friendly(error));
+  remember(path, blob);
+  try {
+    await setCover(albumId, path, old);
+  } catch (e) {
+    await sb.storage.from('photos').remove([path]).catch(() => {});
+    throw e;
+  }
+  return path;
 }
 
 export const resetInvite = async (id: string) => check(await sb.rpc('reset_invite_code', { p_family: id })) as string;
@@ -97,6 +133,15 @@ export async function deleteAlbum(id: string, uid: string) {
 // ---------- 가족 ----------
 export async function members(albumId: string): Promise<Member[]> {
   return (check(await sb.from('members').select('*').eq('family_id', albumId).order('joined_at')) as Row[]).map(member);
+}
+
+// 앨범마다 가족 수 (계정 삭제 안내에 써요)
+export async function memberCounts(albumIds: string[]): Promise<Record<string, number>> {
+  if (!albumIds.length) return {};
+  const rows = check(await sb.from('members').select('family_id').in('family_id', albumIds)) as Row[];
+  const out: Record<string, number> = {};
+  rows.forEach((r) => { out[r.family_id] = (out[r.family_id] || 0) + 1; });
+  return out;
 }
 
 export async function updateMe(albumId: string, uid: string, p: { displayName?: string; avatar?: string }) {
@@ -147,11 +192,26 @@ export async function allPhotos(albumId: string): Promise<GridItem[]> {
   const out: GridItem[] = [];
   for (let from = 0; ; from += 1000) {
     const rows = check(await sb.from('posts').select('id, author_id, photos, taken_at, created_at')
-      .eq('family_id', albumId).order('taken_at', { ascending: false }).range(from, from + 999)) as Row[];
+      .eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
     for (const r of rows) {
       (r.photos as PhotoMeta[]).forEach((ph, i) => out.push({
         ...ph, postId: r.id, authorId: r.author_id, takenAt: r.taken_at, createdAt: r.created_at, index: i, count: r.photos.length,
       }));
+    }
+    if (rows.length < 1000) return out;
+  }
+}
+
+// 가족 탭 그리드: 게시물마다 한 칸 (첫 사진 + 여러 장 표시 + 좋아요한 사람)
+export interface PostTile { id: string; authorId: string; createdAt: string; first: PhotoMeta; count: number; likedBy: string[] }
+
+export async function postTiles(albumId: string): Promise<PostTile[]> {
+  const out: PostTile[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = check(await sb.from('posts').select('id, author_id, photos, created_at, likes(user_id)')
+      .eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
+    for (const r of rows) {
+      out.push({ id: r.id, authorId: r.author_id, createdAt: r.created_at, first: r.photos[0], count: r.photos.length, likedBy: (r.likes || []).map((l: Row) => l.user_id) });
     }
     if (rows.length < 1000) return out;
   }

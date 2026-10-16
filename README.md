@@ -33,32 +33,53 @@ Supabase → **SQL Editor → New query** → [`supabase/schema.sql`](supabase/s
 
 ## 2. 주소 설정 (Supabase)
 
-**Authentication → URL Configuration**
-- **Site URL**: `https://makerskim.github.io/web1/album/`
-- **Redirect URLs**에 추가: `https://makerskim.github.io/web1/album/**`
+Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
+1. **Site URL**: `https://makerskim.github.io/web1/album/` → **Save changes**
+2. **Redirect URLs → Add URL**: `https://makerskim.github.io/web1/album/**` → **Save URLs**
 
 ## 3. 카카오 로그인
 
-1. [Kakao Developers](https://developers.kakao.com) → 로그인 → **내 애플리케이션 → 애플리케이션 추가하기** (앱 이름: Pastel Memories)
-2. **앱 설정 → 플랫폼 → Web 플랫폼 등록** → 사이트 도메인: `https://makerskim.github.io`
-3. **제품 설정 → 카카오 로그인** → **활성화 설정 ON**
-   - **Redirect URI**: `https://nontwyuhvjizyuconxej.supabase.co/auth/v1/callback`
-4. **카카오 로그인 → 동의항목**: `닉네임`, `프로필 사진`을 **필수 동의**로 설정
-   - `카카오계정(이메일)`은 비즈 앱에서만 받을 수 있어요. 받지 않으려면 Supabase의 Kakao 설정에서 **Allow users without an email**을 켜 주세요.
-5. **제품 설정 → 카카오 로그인 → 보안** → **Client Secret 코드 생성** → 활성화 상태 **사용함**
-6. Supabase → **Authentication → Sign In / Providers → Kakao** → 켜기
-   - **REST API Key** (Kakao 앱 키 화면) → *Client ID* 칸에
-   - **Client Secret 코드** → *Client Secret* 칸에 → **Save**
+카카오 개발자 사이트는 2025년 12월에 메뉴가 바뀌었어요. 아래는 바뀐 메뉴 기준이에요.
+앱이 카카오에 **닉네임·프로필 사진만** 요청하도록 만들어 두어서, 이메일 동의항목이나 비즈 앱 전환은 **필요 없어요**.
+
+1. [Kakao Developers](https://developers.kakao.com) → 오른쪽 위 **로그인** → 위쪽 메뉴 **앱** → **앱 생성**
+   - 앱 이름 `Pastel Memories`, 회사명은 내 이름, 카테고리 아무거나, 대표 도메인 `https://makerskim.github.io` → 운영정책 동의 → **저장**
+2. 만든 앱 → 왼쪽 **앱 → 플랫폼 키** → **REST API 키** 값을 복사해 두기 (JavaScript 키 아님)
+3. 같은 화면에서 그 **REST API 키를 눌러** 수정 화면 열기
+   - **카카오 로그인 리다이렉트 URI**: `https://nontwyuhvjizyuconxej.supabase.co/auth/v1/callback` → **저장**
+   - **카카오 로그인 클라이언트 시크릿** 코드 복사 (상태가 켜져 있는지 확인)
+4. 왼쪽 **제품 설정 → 카카오 로그인 → 일반** → **사용 설정 상태 ON**
+5. **제품 설정 → 카카오 로그인 → 동의항목**
+   - **닉네임** → 설정 → 필수 동의, 동의 목적 `가족 앨범에 이름 표시` → 저장
+   - **프로필 사진** → 설정 → 선택 동의(또는 필수), 동의 목적 `가족 앨범 프로필 사진` → 저장
+   - 카카오계정(이메일)은 **그대로 두세요** (권한 없음이어도 괜찮아요)
+6. Supabase → **Authentication → Sign In / Providers → Kakao**
+   - **Kakao enabled** 켜기
+   - **REST API Key** ← 2번의 REST API 키
+   - **Client Secret Code** ← 3번의 클라이언트 시크릿
+   - **Allow users without an email** 켜기 (꼭!)
+   - **Save**
 
 ## 4. 구글 로그인
 
-1. [Google Cloud Console](https://console.cloud.google.com) → 새 프로젝트 (이름: Pastel Memories)
-2. **API 및 서비스 → OAuth 동의 화면** → 외부(External) → 앱 이름·이메일 입력 → 저장
-3. **사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID** → 유형 **웹 애플리케이션**
-   - **승인된 JavaScript 원본**: `https://makerskim.github.io`
+구글 클라우드는 'OAuth 동의 화면'이 **Google 인증 플랫폼**으로 바뀌었어요.
+
+1. [Google Cloud Console](https://console.cloud.google.com) → 위쪽 프로젝트 선택 → **새 프로젝트** (이름 `Pastel Memories`) → 만들기 → 그 프로젝트가 선택됐는지 확인
+2. ☰ 메뉴 → **Google 인증 플랫폼** (바로가기: `console.cloud.google.com/auth/overview`) → **시작하기**
+   - 앱 이름 `Pastel Memories`, 사용자 지원 이메일 = 내 Gmail → 다음
+   - 대상 **외부** → 다음 → 연락처 이메일 → 다음 → 정책 동의 → **만들기**
+   - 앱 로고는 **올리지 마세요** (로고를 올리면 구글 심사가 필요해져요)
+3. 왼쪽 **클라이언트 → + 클라이언트 만들기**
+   - 애플리케이션 유형 **웹 애플리케이션**
+   - **승인된 JavaScript 원본**: `https://makerskim.github.io` (끝에 / 없이)
    - **승인된 리디렉션 URI**: `https://nontwyuhvjizyuconxej.supabase.co/auth/v1/callback`
-4. 만들어진 **클라이언트 ID / 클라이언트 보안 비밀번호**를 Supabase → **Providers → Google**에 붙여넣고 켜기 → Save
-5. OAuth 동의 화면에서 **앱 게시(프로덕션으로 푸시)** — 테스트 상태로 두면 등록한 테스트 사용자만 로그인할 수 있어요.
+   - **만들기** → 나오는 **클라이언트 ID**와 **클라이언트 보안 비밀번호**를 **바로 복사** (창을 닫으면 비밀번호는 다시 볼 수 없어요)
+4. 왼쪽 **대상 → 앱 게시 → 확인** (게시 상태가 '프로덕션 단계'가 되면 OK)
+   - 안 하면 등록한 테스트 사용자만 로그인할 수 있어요. 기본 정보만 쓰므로 심사는 필요 없어요.
+5. Supabase → **Authentication → Sign In / Providers → Google**
+   - **Enable Sign in with Google** 켜기
+   - **Client IDs** ← 클라이언트 ID, **Client Secret (for OAuth)** ← 보안 비밀번호 → **Save**
+6. 구글 로그인 화면에 `nontwyuhvjizyuconxej.supabase.co(으)로 이동`이라고 보이는 건 정상이에요.
 
 ## 5. 앱 올리기 (GitHub)
 
@@ -97,7 +118,14 @@ Supabase → **SQL Editor → New query** → [`supabase/schema.sql`](supabase/s
 
 | 증상 | 해결 |
 |---|---|
-| “이 로그인 방법이 아직 켜져 있지 않아요” | 3·4번 Providers 설정 확인 |
+| “이 로그인 방법이 아직 켜져 있지 않아요” | 3-6 · 4-5번 Providers 설정 확인 |
+| 카카오 **KOE006** | 3-3 리다이렉트 URI가 2번과 **같은 REST API 키**에 정확히 들어갔는지 |
+| 카카오 **KOE010** | 6번 Client Secret Code가 같은 키의 시크릿인지 |
+| 카카오 **KOE101** | 6번 REST API Key 칸에 JavaScript 키를 넣지 않았는지 |
+| 카카오 **KOE004** | 4번 사용 설정 ON |
+| 카카오 **KOE205** | 5번 닉네임·프로필 사진 동의항목이 '사용 안 함'이 아닌지 |
+| 카카오 로그인 후 “Error getting user email” | 6번 **Allow users without an email** 켜기 |
+| 구글 **redirect_uri_mismatch** | 4-3 승인된 리디렉션 URI 확인 (JavaScript 원본 칸이 아니에요) |
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
 | “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 |

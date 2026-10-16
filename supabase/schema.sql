@@ -15,6 +15,7 @@ create table if not exists public.families (
   storage         text not null default 'supabase' check (storage in ('supabase', 'drive')),
   drive_folder_id text,
   drive_email     text,
+  cover           text not null default '',
   created_by      uuid not null default auth.uid(),
   created_at      timestamptz not null default now()
 );
@@ -24,6 +25,13 @@ alter table public.families add column if not exists drive_folder_id text;
 alter table public.families add column if not exists drive_email text;
 alter table public.families drop constraint if exists families_storage_check;
 alter table public.families add constraint families_storage_check check (storage in ('supabase', 'drive'));
+-- 앨범 사진(가족 탭 맨 위): 비어 있음 / 이 앨범 게시물의 작은 사진 / 관리자가 올린 사진 '가족ID/cover/시각.jpg' / 드라이브 파일
+alter table public.families add column if not exists cover text not null default '';
+alter table public.families drop constraint if exists families_cover_check;
+alter table public.families add constraint families_cover_check check (
+  cover = ''
+  or cover ~ ('^' || id::text || '/(cover/[0-9]+|[0-9a-f-]{36}/[0-9]+_t)\.jpg$')
+  or cover ~ '^drive:[A-Za-z0-9_-]{10,200}$');
 
 create table if not exists public.members (
   family_id    uuid not null references public.families(id) on delete cascade,
@@ -306,6 +314,51 @@ begin
           where o.bucket_id = 'photos' and o.name like p_family::text || '/%');
 end $$;
 
+-- 게시물을 지우면, 그 사진을 앨범 사진으로 쓰고 있었을 때 비워요
+create or replace function public.clear_cover_on_post_delete()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update families f set cover = ''
+  where f.id = old.family_id and f.cover <> ''
+    and (f.cover like old.family_id::text || '/' || old.id::text || '/%'
+         or f.cover in (select x->>'thumb' from jsonb_array_elements(old.photos) x));
+  return null;
+end $$;
+drop trigger if exists posts_clear_cover on public.posts;
+create trigger posts_clear_cover after delete on public.posts
+  for each row execute function public.clear_cover_on_post_delete();
+
+-- 마지막 관리자가 나가면(계정 삭제 포함) 가장 먼저 들어온 가족이 관리자가 돼요
+create or replace function public.keep_an_owner()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.role = 'owner'
+     and exists (select 1 from families where id = old.family_id)
+     and not exists (select 1 from members where family_id = old.family_id and role = 'owner') then
+    update members set role = 'owner'
+    where (family_id, user_id) = (select family_id, user_id from members
+                                  where family_id = old.family_id order by joined_at limit 1);
+  end if;
+  return null;
+end $$;
+drop trigger if exists members_keep_owner on public.members;
+create trigger members_keep_owner after delete on public.members
+  for each row execute function public.keep_an_owner();
+
+-- 계정 삭제: 나 혼자 있는 앨범은 앱에서 먼저 지워야 해요 (사진 파일 정리)
+-- 올린 사진·댓글은 가족 앨범에 남아요
+create or replace function public.delete_account()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'not_signed_in'; end if;
+  if exists (select 1 from members m where m.user_id = auth.uid()
+             and not exists (select 1 from members o where o.family_id = m.family_id and o.user_id <> m.user_id)) then
+    raise exception 'sole_member';
+  end if;
+  delete from likes where user_id = auth.uid();
+  delete from auth.users where id = auth.uid();
+end $$;
+
 -- ---------- 접근 권한 ----------
 
 alter table public.families     enable row level security;
@@ -319,7 +372,7 @@ revoke all on public.families, public.members, public.posts, public.likes, publi
   from anon, authenticated;
 
 grant select, delete on public.families to authenticated;
-grant update (name, baby_name, baby_birthday, storage) on public.families to authenticated;
+grant update (name, baby_name, baby_birthday, storage, cover) on public.families to authenticated;
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
 grant select, delete on public.posts to authenticated;
@@ -334,14 +387,15 @@ revoke execute on function
   public.gen_invite_code(), public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
-  public.family_files(uuid), public.check_post_photos()
+  public.family_files(uuid), public.check_post_photos(), public.clear_cover_on_post_delete(), public.keep_an_owner(),
+  public.delete_account()
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
-  public.family_files(uuid)
+  public.family_files(uuid), public.delete_account()
   to authenticated;
 
 drop policy if exists families_select on public.families;
