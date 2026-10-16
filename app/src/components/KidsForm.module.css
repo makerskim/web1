@@ -1,0 +1,13 @@
+.wrap { display: flex; flex-direction: column; gap: var(--s-4); }
+.remove {
+  position: relative; width: 100%; min-height: 52px; display: flex; align-items: center; gap: var(--s-2);
+  padding: 0 var(--s-4); color: var(--c-danger); font-size: var(--t-callout); font-weight: 500;
+}
+.remove::before { content: ""; position: absolute; top: 0; left: var(--s-4); right: 0; height: 1px; background: var(--c-hairline); }
+.add {
+  display: flex; align-items: center; justify-content: center; gap: var(--s-2);
+  min-height: 52px; border-radius: var(--r-md); border: 1.5px dashed var(--c-hairline-strong);
+  color: var(--c-accent-strong); font-size: var(--t-callout); font-weight: 700;
+}
+.add small { font-size: var(--t-footnote); font-weight: 500; color: var(--c-label-3); }
+.add:active { background: var(--c-accent-soft); }

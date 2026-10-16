@@ -1,0 +1,17 @@
+/* 화면 한 장: 화면 전체를 덮고, 자기 스크롤을 가져요 */
+.frame {
+  position: fixed; top: 0; bottom: 0;
+  left: max(0px, calc(50% - var(--col) / 2)); right: max(0px, calc(50% - var(--col) / 2));
+  background: var(--c-canvas); will-change: transform;
+}
+.scroller {
+  position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto;
+  overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+}
+/* 뒤로 물러난 화면을 살짝 어둡게 */
+.dim { position: absolute; inset: 0; background: #140a10; opacity: 0; pointer-events: none; }
+/* 왼쪽 가장자리: 밀어서 뒤로 (위쪽 막대의 뒤로 버튼은 피해요) */
+.edge {
+  position: absolute; left: 0; width: 22px; top: calc(var(--bar-h) + var(--safe-t)); bottom: 0; z-index: 5;
+  touch-action: none;
+}
