@@ -19,7 +19,7 @@ const album = (r: Row, m?: Row): Album => {
   return {
   id: r.id, name: r.name, children, bio: r.bio || '',
   babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children[0]?.birthday ?? r.baby_birthday ?? null, inviteCode: r.invite_code,
-  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id, cover: r.cover || '',
+  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id && !!r.drive_email, cover: r.cover || '',
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
   };
 };
@@ -66,6 +66,12 @@ export async function signIn(provider: 'kakao' | 'google') {
 export async function signOut() { await sb.auth.signOut(); }
 
 // 계정 삭제: 나 혼자 있는 앨범은 사진 파일까지 먼저 지우고, 그다음 계정을 지워요
+/** 계정을 지우면 내 구글 드라이브 연결이 풀리는 앨범 이름들 */
+export async function driveLinksToRelease(): Promise<string[]> {
+  const rows = check(await sb.rpc('drive_links_to_release')) as unknown;
+  return Array.isArray(rows) ? rows.map((r) => (typeof r === 'string' ? r : String(Object.values(r as object)[0] ?? ''))).filter(Boolean) : [];
+}
+
 export async function deleteAccount(uid: string, mine: Album[]) {
   // 막히는 게 있으면 아무것도 지우기 전에 알려 줘요 (혼자 있는 앨범 사진이 먼저 지워지지 않게)
   const blocked = check(await sb.rpc('delete_account_check')) as string | null;

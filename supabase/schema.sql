@@ -380,6 +380,16 @@ returns text language sql stable security definer set search_path = public as $$
   ) then 'drive_connected' end
 $$;
 
+-- 계정을 지우면 내 구글 드라이브 연결이 풀리는 앨범들 (이제 관리자가 아니거나 나간 앨범)
+-- 그 앨범의 드라이브 사진은 가족이 더 이상 볼 수 없게 돼요 → 지우기 전에 알려 줘요
+create or replace function public.drive_links_to_release()
+returns setof text language sql stable security definer set search_path = public as $$
+  select f.name from drive_tokens t join families f on f.id = t.family_id
+  where t.connected_by = auth.uid()
+    and not exists (select 1 from members m where m.family_id = t.family_id and m.user_id = auth.uid() and m.role = 'owner')
+  order by f.name
+$$;
+
 -- 계정 삭제: 나 혼자 있는 앨범은 앱에서 먼저 지워야 해요 (사진 파일 정리)
 -- 올린 사진·댓글은 가족 앨범에 남아요
 create or replace function public.delete_account()
@@ -431,14 +441,14 @@ revoke execute on function
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
   public.family_files(uuid), public.check_post_photos(), public.clear_cover_on_post_delete(), public.keep_an_owner(),
-  public.delete_account_check(), public.delete_account()
+  public.delete_account_check(), public.drive_links_to_release(), public.delete_account()
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
-  public.family_files(uuid), public.delete_account_check(), public.delete_account()
+  public.family_files(uuid), public.delete_account_check(), public.drive_links_to_release(), public.delete_account()
   to authenticated;
 
 drop policy if exists families_select on public.families;

@@ -219,7 +219,9 @@ export function DeleteAccount() {
   const nav = useNavigate();
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
   const [ok, setOk] = useState(false);
+  const [released, setReleased] = useState<string[]>([]);
   useEffect(() => { api.memberCounts(albums.map((a) => a.id)).then(setCounts, () => setCounts({})); }, [albums]);
+  useEffect(() => { api.driveLinksToRelease().then(setReleased, () => setReleased([])); }, []);
   const alone = albums.filter((a) => counts && (counts[a.id] || 0) <= 1);
   const shared = albums.filter((a) => counts && (counts[a.id] || 0) > 1);
   const owned = shared.filter((a) => a.myRole === 'owner');
@@ -246,6 +248,7 @@ export function DeleteAccount() {
         <ul className={s.bullets}>
           {alone.length > 0 && <li>혼자 쓰는 앨범 {alone.length}개({alone.map((a) => a.name).join(', ')})는 사진과 함께 완전히 지워져요.</li>}
           {shared.length > 0 && <li>가족과 함께 쓰는 앨범 {shared.length}개에서 나가게 돼요. 내가 올린 사진과 댓글은 앨범에 남아요.</li>}
+          {released.length > 0 && <li data-f="drive-release">{released.map((n) => `‘${n}’`).join(', ')} 앨범이 쓰던 내 구글 드라이브 연결이 끊겨요. 드라이브에 저장된 사진은 가족이 앱에서 더 이상 볼 수 없어요. (사진은 내 드라이브에 그대로 남아요)</li>}
           <li>내가 누른 좋아요는 지워져요.</li>
           {owned.length > 0 && <li>내가 관리자인 앨범은 가장 먼저 들어온 가족이 관리자가 돼요.</li>}
           <li>{name} 계정은 지워지지 않아요. 이 앱과의 연결만 끊겨요.</li>
@@ -411,7 +414,7 @@ export function StorageSettings() {
     if (!(await confirm({ title: '드라이브 연결을 끊을까요?', message: '앞으로 올리는 사진은 기본 저장소에 저장돼요.\n이미 드라이브에 있는 사진은 앱에서 보이지 않게 돼요. (드라이브에는 그대로 남아요)', ok: '연결 끊기', danger: true }))) return;
     try {
       await disconnectDrive(album.id);
-      useSession.getState().patchAlbum({ storage: 'supabase', driveEmail: null });
+      useSession.getState().patchAlbum({ storage: 'supabase', driveEmail: null, driveReady: false });
       toast('연결을 끊었어요');
     } catch (e) { toast((e as Error).message); }
   };
