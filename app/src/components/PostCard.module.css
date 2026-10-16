@@ -26,7 +26,7 @@
 .dots i.dotOn { background: var(--c-accent); transform: scale(1.1); }
 
 .body { padding: 0 var(--s-4) var(--s-3); display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: var(--t-sub); }
-.likes { display: flex; align-items: center; gap: var(--s-2); min-height: 28px; text-align: left; font-size: var(--t-sub); color: var(--c-label); }
+.likes { display: flex; align-items: center; gap: var(--s-2); min-height: 2.75rem; text-align: left; font-size: var(--t-sub); color: var(--c-label); }
 .likes b { font-weight: 700; }
 .caption b, .comment b { font-weight: 700; margin-right: 2px; }
 .caption { white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }

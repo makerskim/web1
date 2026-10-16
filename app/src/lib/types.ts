@@ -1,10 +1,18 @@
+import type { Child } from './kids';
+
 export type StorageKind = 'supabase' | 'drive';
 export type Role = 'owner' | 'member';
 
 export interface Album {
   id: string;
   name: string;
+  /** 아이들 (한 명이 기본, 쌍둥이·다둥이는 여러 명) */
+  children: Child[];
+  /** 앨범 소개 (관리자가 써요) */
+  bio: string;
+  /** 보이는 아이 이름 '씩씩이 & 튼튼이' (children에서 만들어요) */
   babyName: string;
+  /** 나이·디데이 기준: 첫째 아이의 생일(예정일) */
   babyBirthday: string | null;
   inviteCode: string;
   storage: StorageKind;

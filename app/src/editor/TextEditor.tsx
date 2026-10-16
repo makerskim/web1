@@ -89,8 +89,11 @@ export function TextEditor({ initial, unit, onCancel, onDone }: {
   }, []);
 
   const f = fontById(d.font);
-  const fontPx = Math.max(16, Math.min(72, unit * 0.075 * d.scale * f.k));
-  const maxW = Math.max(160, Math.min(unit * 0.94, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32));
+  // 사진에 들어갈 크기 그대로 보여 줘요 (미리보기와 결과가 같도록)
+  const fontPx = unit * 0.075 * d.scale * f.k;
+  const maxW = Math.min(unit * 0.94, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32);
+  // 너무 작아 읽기 힘들면 더 줄이지 않아요
+  const minScale = Math.max(MIN_SCALE, 14 / Math.max(1, unit * 0.075 * f.k));
   const hasBox = d.box !== 'none';
   const ink = hasBox ? inkOn(d.color) : d.color;
   const lineBg = d.box === 'solid' ? d.color : d.box === 'soft' ? softBox(d.color) : 'transparent';
@@ -152,8 +155,8 @@ export function TextEditor({ initial, unit, onCancel, onDone }: {
               <button type="button" role="tab" aria-selected={tab === 'color'} className={tab === 'color' ? s.on : ''} onClick={() => setTab('color')} data-text-tab="color">색</button>
             </div>
             <div className={s.sizeBtns}>
-              <button type="button" className={s.roundBtn} aria-label="글씨 작게" disabled={d.scale <= MIN_SCALE}
-                onClick={() => set({ scale: Math.max(MIN_SCALE, d.scale / 1.15) })}><Icon name="minus" size={22} stroke={2.4} /></button>
+              <button type="button" className={s.roundBtn} aria-label="글씨 작게" disabled={d.scale <= minScale}
+                onClick={() => set({ scale: Math.max(minScale, d.scale / 1.15) })}><Icon name="minus" size={22} stroke={2.4} /></button>
               <button type="button" className={s.roundBtn} aria-label="글씨 크게" disabled={d.scale >= MAX_SCALE}
                 onClick={() => set({ scale: Math.min(MAX_SCALE, d.scale * 1.15) })}><Icon name="plus" size={22} stroke={2.4} /></button>
             </div>

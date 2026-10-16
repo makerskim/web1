@@ -11,6 +11,7 @@ import { Button } from '../components/Button';
 import { Avatar } from '../components/Avatar';
 import { progress, toast, useBackClose } from '../components/ui';
 import { useSession } from '../state/session';
+import { scrollPageTop } from '../components/Stack';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import s from './Compose.module.css';
@@ -58,10 +59,9 @@ export function ComposeHost() {
   const { stage, photos } = useCompose();
   const album = useSession((st) => st.album());
   const close = () => useCompose.setState({ stage: 'idle', photos: [] });
-  useBackClose(stage !== 'idle', () => {
-    if (useCompose.getState().stage === 'write') useCompose.setState({ stage: 'edit' });
-    else close();
-  });
+  // 편집·글쓰기 화면이 각자 '뒤로' 기록을 가져요 (글쓰기에서 뒤로 → 편집, 편집에서 뒤로 → 닫기)
+  useBackClose(stage === 'edit', close);
+  useBackClose(stage === 'write', () => useCompose.setState({ stage: 'edit' }));
   if (!album) return null;
   return createPortal(
     <AnimatePresence>
@@ -101,7 +101,6 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
   const share = async () => {
     if (busy) return;
     setBusy(true);
-    try { localStorage.setItem(ORIG_PREF, withOrig ? 'on' : 'off'); } catch { /* 무시 */ }
     let wake: { release: () => Promise<void> } | null = null;
     try { wake = await (navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen') ?? null; } catch { /* 지원 안 함 */ }
     const p = progress('사진을 만드는 중');
@@ -121,9 +120,10 @@ function Write({ photos, onBack, onDone }: { photos: EditPhoto[]; onBack: () => 
       const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: first.toISOString(), photos: out }, (f) => p.set(0.15 + f * 0.85));
       p.close();
       usePosts.getState().prepend(post);
+      // 글쓰기 기록을 홈으로 바꿔 끼워요 (뒤로 눌렀을 때 빈 화면이 남지 않게)
+      nav('/home', { replace: true });
       onDone();
-      window.scrollTo(0, 0);
-      nav('/home');
+      scrollPageTop();
       toast(skippedOriginals ? `올렸어요 · 원본 ${skippedOriginals}장은 올리지 못했어요` : '사진을 올렸어요');
     } catch (e) {
       p.close();

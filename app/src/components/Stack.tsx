@@ -170,7 +170,7 @@ function Page({ loc, dir, restore, swipe, children }: {
         <PageCtx.Provider value={el}>{children}</PageCtx.Provider>
       </div>
       <motion.i className={s.dim} style={{ opacity: dim }} aria-hidden="true" />
-      {swipe && <div className={s.edge} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} aria-hidden="true" />}
+      {swipe && <div className={s.edge} data-edge onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} aria-hidden="true" />}
     </motion.div>
   );
 }

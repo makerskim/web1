@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { photoURL } from '../lib/storage';
+import { usePageScroll } from '../components/Stack';
 
 // 사진 주소 (휴대폰 보관본 먼저). visible이 될 때만 받아요
 export function usePhotoURL(albumId: string | null | undefined, path: string | null | undefined, enabled = true) {
@@ -19,13 +20,15 @@ export function usePhotoURL(albumId: string | null | undefined, path: string | n
 export function useNearScreen<T extends Element>(margin = '600px') {
   const ref = useRef<T>(null);
   const [near, setNear] = useState(false);
+  // 화면마다 스크롤 영역이 따로라서, 그 영역을 기준으로 미리 받아요
+  const root = usePageScroll();
   useEffect(() => {
     const el = ref.current;
     if (!el || near) return;
     if (!('IntersectionObserver' in window)) { setNear(true); return; }
-    const io = new IntersectionObserver((en) => { if (en.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: `${margin} 0px` });
+    const io = new IntersectionObserver((en) => { if (en.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { root, rootMargin: `${margin} 0px` });
     io.observe(el);
     return () => io.disconnect();
-  }, [near, margin]);
+  }, [near, margin, root]);
   return [ref, near] as const;
 }

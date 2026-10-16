@@ -32,6 +32,29 @@ alter table public.families add constraint families_cover_check check (
   cover = ''
   or cover ~ ('^' || id::text || '/(cover/[0-9]+|[0-9a-f-]{36}/[0-9]+_t)\.jpg$')
   or cover ~ '^drive:[A-Za-z0-9_-]{10,200}$');
+-- 아이들(태명·이름·생일)과 앨범 소개 — 한 명이 기본, 쌍둥이·다둥이는 여러 명
+alter table public.families add column if not exists children jsonb not null default '[]';
+alter table public.families add column if not exists bio text not null default '';
+alter table public.families drop constraint if exists families_bio_check;
+alter table public.families add constraint families_bio_check check (char_length(bio) <= 150);
+create or replace function public.valid_children(c jsonb)
+returns boolean language sql immutable as $$
+  select jsonb_typeof(c) = 'array' and jsonb_array_length(c) <= 6 and pg_column_size(c) < 4000
+    and not exists (
+      select 1 from jsonb_array_elements(c) x
+      where jsonb_typeof(x) <> 'object'
+         or char_length(coalesce(x->>'id', '')) > 40
+         or char_length(coalesce(x->>'nickname', '')) > 20
+         or char_length(coalesce(x->>'name', '')) > 20
+         or (jsonb_typeof(x->'birthday') = 'string' and (x->>'birthday') !~ '^\d{4}-\d{2}-\d{2}$')
+         or (x ? 'birthday' and jsonb_typeof(x->'birthday') not in ('string', 'null')))
+$$;
+alter table public.families drop constraint if exists families_children_check;
+alter table public.families add constraint families_children_check check (public.valid_children(children));
+-- 예전 앨범은 baby_name·baby_birthday를 첫째 아이로 옮겨요
+update public.families
+set children = jsonb_build_array(jsonb_build_object('id', gen_random_uuid()::text, 'nickname', '', 'name', baby_name, 'birthday', baby_birthday))
+where children = '[]'::jsonb and (baby_name <> '' or baby_birthday is not null);
 
 create table if not exists public.members (
   family_id    uuid not null references public.families(id) on delete cascade,
@@ -355,6 +378,10 @@ begin
              and not exists (select 1 from members o where o.family_id = m.family_id and o.user_id <> m.user_id)) then
     raise exception 'sole_member';
   end if;
+  -- 내 구글 드라이브에 연결된 앨범이 있으면 먼저 연결을 끊어야 해요 (지운 사람의 드라이브를 계속 쓰지 않게)
+  if exists (select 1 from drive_tokens where connected_by = auth.uid()) then
+    raise exception 'drive_connected';
+  end if;
   delete from likes where user_id = auth.uid();
   delete from auth.users where id = auth.uid();
 end $$;
@@ -372,7 +399,7 @@ revoke all on public.families, public.members, public.posts, public.likes, publi
   from anon, authenticated;
 
 grant select, delete on public.families to authenticated;
-grant update (name, baby_name, baby_birthday, storage, cover) on public.families to authenticated;
+grant update (name, baby_name, baby_birthday, storage, cover, children, bio) on public.families to authenticated;
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
 grant select, delete on public.posts to authenticated;

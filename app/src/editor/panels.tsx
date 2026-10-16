@@ -124,18 +124,6 @@ export function FilterSheet({ p, photos, change, onCancel, onDone }: SheetProps)
     <>
       <SheetHead title="필터" onCancel={onCancel} onDone={onDone} />
       <div className={s.sheetBody}>
-        {(p.filter !== 'none' || photos.length > 1) && (
-          <div className={s.actions}>
-            {p.filter !== 'none' && (
-              <button type="button" className={s.action} onClick={() => setView('strength')} data-strength>
-                <Icon name="sliders" size={18} /><span>강도 {p.strength ?? 100}</span>
-              </button>
-            )}
-            {photos.length > 1 && (
-              <button type="button" className={s.action} onClick={applyAll}><Icon name="layers" size={18} /><span>모든 사진에 적용</span></button>
-            )}
-          </div>
-        )}
         <div className={`${s.grid} ${s.filterGrid}`}>
           {FILTERS.map((f) => {
             const on = p.filter === f.id;
@@ -151,6 +139,18 @@ export function FilterSheet({ p, photos, change, onCancel, onDone }: SheetProps)
             );
           })}
         </div>
+        {(p.filter !== 'none' || photos.length > 1) && (
+          <div className={`${s.actions} ${s.after}`}>
+            {p.filter !== 'none' && (
+              <button type="button" className={s.action} onClick={() => setView('strength')} data-strength>
+                <Icon name="sliders" size={18} /><span>강도 {p.strength ?? 100}</span>
+              </button>
+            )}
+            {photos.length > 1 && (
+              <button type="button" className={s.action} onClick={applyAll}><Icon name="layers" size={18} /><span>모든 사진에 적용</span></button>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
@@ -250,6 +250,7 @@ export function FrameSheet({ p, photos, baby, change, redraw, onCancel, onDone }
   const mini = useMiniPhoto(p);
   const ak = adjKey(p);
   const fr = frameById(p.frame);
+  const [typing, setTyping] = useState(false); // 폴라로이드 글씨를 쓰는 동안엔 칸만 보여요 (사진이 가려지지 않게)
   const pick = (id: string) => {
     p.frame = id;
     change('fit');
@@ -264,27 +265,7 @@ export function FrameSheet({ p, photos, baby, change, redraw, onCancel, onDone }
     <>
       <SheetHead title="테두리" onCancel={onCancel} onDone={onDone} />
       <div className={s.sheetBody}>
-        <div className={s.actions}>
-          <label className={`${s.action} ${s.toggle}`}>
-            <Icon name="calendar" size={18} />
-            <span>날짜 도장</span>
-            <input type="checkbox" role="switch" checked={p.stamp} onChange={(e) => { p.stamp = e.target.checked; change(); }} data-stamp />
-          </label>
-          {photos.length > 1 && (
-            <button type="button" className={s.action} onClick={applyAll}><Icon name="layers" size={18} /><span>모든 사진에 적용</span></button>
-          )}
-        </div>
-        {fr.caption && (
-          <label className={s.field}>
-            <span>폴라로이드 아래 글씨</span>
-            <input maxLength={40} value={captionText(p, baby)} placeholder="비워 두면 글씨 없이" onChange={(e) => {
-              p.frameText = e.target.value;
-              loadFont('700 40px "Gowun Batang"', p.frameText).then(redraw);
-              change();
-            }} />
-          </label>
-        )}
-        <div className={s.grid}>
+        {!typing && <div className={`${s.grid} ${s.filterGrid}`}>
           {FRAMES.map((f) => {
             const on = p.frame === f.id;
             return (
@@ -297,7 +278,29 @@ export function FrameSheet({ p, photos, baby, change, redraw, onCancel, onDone }
               </button>
             );
           })}
-        </div>
+        </div>}
+        {fr.caption && (
+          <label className={`${s.field} ${typing ? '' : s.after}`}>
+            <span>폴라로이드 아래 글씨</span>
+            <input maxLength={40} value={captionText(p, baby)} placeholder="비워 두면 글씨 없이" enterKeyHint="done"
+              onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              onChange={(e) => {
+              p.frameText = e.target.value;
+              loadFont('700 40px "Gowun Batang"', p.frameText).then(redraw);
+              change();
+            }} />
+          </label>
+        )}
+        {!typing && <div className={`${s.actions} ${s.after}`}>
+          <label className={`${s.action} ${s.toggle}`}>
+            <Icon name="calendar" size={18} />
+            <span>날짜 도장</span>
+            <input type="checkbox" role="switch" checked={p.stamp} onChange={(e) => { p.stamp = e.target.checked; change(); }} data-stamp />
+          </label>
+          {photos.length > 1 && (
+            <button type="button" className={s.action} onClick={applyAll}><Icon name="layers" size={18} /><span>모든 사진에 적용</span></button>
+          )}
+        </div>}
       </div>
     </>
   );
@@ -323,6 +326,9 @@ export function CropSheet({ p, change, onCancel, onDone }: SheetProps) {
   return (
     <>
       <SheetHead title="자르기" onCancel={onCancel} onDone={onDone} />
+      <p className={`${s.sheetFixed} ${s.hint}`}>
+        {crop ? <><Icon name="flip" size={16} /> 사진을 끌어서 위치를 맞춰요</> : '비율을 고르면 사진을 끌어서 위치를 맞출 수 있어요'}
+      </p>
       <div className={s.sheetBody}>
         <div className={`${s.grid} ${s.cropGridTiles}`}>
           {ASPECTS.map((a) => {
@@ -336,13 +342,12 @@ export function CropSheet({ p, change, onCancel, onDone }: SheetProps) {
               </button>
             );
           })}
+          <button type="button" className={s.cropTile} onClick={rotate} data-rotate>
+            <span className={s.cropShape}><Icon name="rotate" size={30} /></span>
+            <b>돌리기</b>
+            <small>90°씩</small>
+          </button>
         </div>
-        <button type="button" className={s.rotateBtn} onClick={rotate} data-rotate>
-          <Icon name="rotate" size={22} /><span>90° 돌리기</span>
-        </button>
-        <p className={s.hint}>
-          {crop ? <><Icon name="flip" size={16} /> 사진을 끌어서 위치를 맞춰요</> : '비율을 고르면 사진을 끌어서 위치를 맞출 수 있어요'}
-        </p>
       </div>
     </>
   );

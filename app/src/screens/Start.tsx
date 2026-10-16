@@ -9,7 +9,9 @@ import { Logo } from '../components/Logo';
 import { progress, toast } from '../components/ui';
 import { useSession } from '../state/session';
 import * as api from '../lib/api';
+import { childName, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
 import { callName } from '../lib/korean';
+import { KidsForm } from '../components/KidsForm';
 import s from './Start.module.css';
 
 const cleanCode = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
@@ -36,7 +38,10 @@ export function Start() {
           <span><b>초대 코드로 들어가기</b><small>가족에게 받은 코드 8자리를 넣어요</small></span>
         </motion.button>
       </div>
-      <button className={s.out} onClick={() => api.signOut()}>다른 계정으로 로그인</button>
+      <div className={s.outs}>
+        <button className={s.out} onClick={() => api.signOut()}>다른 계정으로 로그인</button>
+        <button className={s.out} onClick={() => nav('/settings/account/delete')}>계정 삭제</button>
+      </div>
     </div>
   );
 }
@@ -46,20 +51,21 @@ export function CreateAlbum() {
   const loadAlbums = useSession((st) => st.loadAlbums);
   const selectAlbum = useSession((st) => st.selectAlbum);
   const nav = useNavigate();
-  const [baby, setBaby] = useState('');
-  const [bday, setBday] = useState('');
+  const [kids, setKids] = useState<Child[]>(() => [newChild()]);
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [role, setRole] = useState('');
-  const albumName = nameTouched ? name : baby.trim() ? `${callName(baby.trim())}네 앨범` : '';
+  // 앨범 이름은 아이 이름을 따라가요: '씩씩이 & 튼튼이네 앨범'
+  const albumName = nameTouched ? name : suggestAlbumName(kids);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!baby.trim()) return toast('아이 이름을 적어 주세요.');
+    const filled = kids.filter((c) => childName(c));
+    if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요.');
     if (!role.trim()) return toast('아이와 어떤 사이인지 적어 주세요.');
     const p = progress('앨범을 만들고 있어요');
     try {
-      const id = await api.createAlbum({ name: albumName.trim() || `${callName(baby.trim())}네 앨범`, babyName: baby.trim(), babyBirthday: bday || null, displayName: role.trim(), avatar: me.avatarUrl });
+      const id = await api.createAlbum({ name: spaceAmp(albumName.trim()) || suggestAlbumName(filled), children: filled, displayName: role.trim(), avatar: me.avatarUrl });
       await loadAlbums();
       await selectAlbum(id);
       p.close();
@@ -74,12 +80,10 @@ export function CreateAlbum() {
     <div className={s.formPage}>
       <TopBar back title="새 앨범" />
       <form className={s.form} onSubmit={submit} noValidate>
-        <Group title="아이">
-          <Field label="이름" placeholder="하준 (태명도 좋아요)" value={baby} onChange={(e) => setBaby(e.target.value)} maxLength={20} autoComplete="off" name="baby" />
-          <Field label="생일" type="date" value={bday} onChange={(e) => setBday(e.target.value)} name="bday" />
-        </Group>
+        <KidsForm kids={kids} onChange={setKids} />
         <Group title="앨범">
-          <Field label="앨범 이름" placeholder="하준이네 앨범" value={albumName} onChange={(e) => { setNameTouched(true); setName(e.target.value); }} maxLength={40} autoComplete="off" name="album" />
+          <Field label="앨범 이름" placeholder="튼튼이네 앨범" value={albumName} onChange={(e) => { setNameTouched(true); setName(e.target.value); }}
+            onBlur={() => nameTouched && setName((v) => spaceAmp(v))} maxLength={40} autoComplete="off" name="album" />
         </Group>
         <Group title="나" footer="가족에게 이렇게 보여요. 나중에 바꿀 수 있어요.">
           <Field label="나는 아이의" placeholder="엄마" value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />

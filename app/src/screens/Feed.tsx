@@ -5,6 +5,8 @@ import { PostCard } from '../components/PostCard';
 import { Icon } from '../components/Icon';
 import { Button } from '../components/Button';
 import { usePostHandlers } from '../components/PostHub';
+import { usePageScroll } from '../components/Stack';
+import { AmpText } from '../components/AlbumBits';
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
 import { babyMilestone, ymd } from '../lib/dates';
@@ -26,15 +28,16 @@ export function Feed() {
   const welcome = params.get('welcome') === '1';
   const end = useRef<HTMLDivElement>(null);
   const handlers = usePostHandlers();
+  const root = usePageScroll();
 
   useEffect(() => { reset(album.id); if (!usePosts.getState().list.length) loadFirst(); }, [album.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = end.current;
     if (!el) return;
-    const io = new IntersectionObserver((en) => en[0].isIntersecting && loadMore(), { rootMargin: '900px 0px' });
+    const io = new IntersectionObserver((en) => en[0].isIntersecting && loadMore(), { root, rootMargin: '900px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [loadMore, posts.length]);
+  }, [loadMore, posts.length, root]);
 
   const milestone = album.babyBirthday ? babyMilestone(album.babyBirthday) : '';
   const msKey = `pm-ms-${album.id}-${ymd(new Date())}`;
@@ -44,7 +47,7 @@ export function Feed() {
     <Page>
       <TopBar large title={
         <button className={s.wordmark} onClick={() => setSwitcher(true)} aria-label="앨범 바꾸기" data-f="switcher">
-          <span>{album.name}</span><Icon name="down" size={18} stroke={2.2} />
+          <AmpText text={album.name} /><Icon name="down" size={18} stroke={2.2} />
         </button>
       } />
 

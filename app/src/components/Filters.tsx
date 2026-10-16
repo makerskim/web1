@@ -68,7 +68,9 @@ function WhoSheet({ open, onClose, items, value, onPick, unit }: {
     items.forEach((it) => m.set(it.authorId, (m.get(it.authorId) || 0) + 1));
     return m;
   }, [items]);
-  const people = members.filter((m) => counts.get(m.userId));
+  // 지금 가족 + 앨범을 떠난 가족(사진은 남아 있어요)
+  const member = useSession((st) => st.member);
+  const people = [...members.filter((m) => counts.get(m.userId)), ...[...counts.keys()].filter((id) => !members.some((m) => m.userId === id)).map((id) => ({ ...member(id), displayName: '예전 가족' }))];
   return (
     <Sheet open={open} onClose={onClose} title="올린 사람">
       <ul className={s.list}>

@@ -1,8 +1,9 @@
 import { useEffect, useMemo } from 'react';
-import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { OverlayHosts } from './components/ui';
 import { TabBar } from './components/Bars';
+import { Stack } from './components/Stack';
 import { PostHubOverlays } from './components/PostHub';
 import { Logo } from './components/Logo';
 import { useSession } from './state/session';
@@ -44,6 +45,8 @@ function Shell() {
     const check = async () => {
       if (document.hidden) return;
       await usePosts.getState().loadActivity().catch(() => {});
+      // 앨범 사진·이름이 바뀌었으면 가족 모두에게 반영돼요
+      useSession.getState().loadAlbums().catch(() => {});
       // 새로 들어온 가족이 있으면 가족 목록 다시 받기 (나간 가족은 한 번만 확인)
       const known = new Set(useSession.getState().members.map((m) => m.userId));
       const unknown = usePosts.getState().activity.map((e) => e.userId).filter((u) => !known.has(u) && !asked.has(u));
@@ -68,10 +71,11 @@ function Shell() {
     return activity.filter((e) => e.userId !== me.id && e.at > seen).length;
   }, [activity, album, me.id, loc.pathname]);
 
-  const hideTabs = /^\/(settings|p\/|create|join)/.test(loc.pathname);
-  return (
+  const tabs = (l: Location) => !/^\/(settings|p\/|create|join)/.test(l.pathname);
+  // 화면마다 아래 탭을 함께 그려요 → 깊은 화면으로 갈 때 탭도 화면과 같이 밀려나요 (아이폰처럼)
+  const render = (l: Location) => (
     <>
-      <Routes>
+      <Routes location={l}>
         <Route path="/home" element={<Feed />} />
         <Route path="/grid" element={<Grid />} />
         <Route path="/grid/:month" element={<Grid />} />
@@ -91,7 +95,12 @@ function Shell() {
         <Route path="/join/:code" element={<JoinAlbum />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
-      {!hideTabs && <TabBar onCompose={startCompose} badge={{ activity: loc.pathname === '/activity' ? 0 : badge }} />}
+      {tabs(l) && <TabBar onCompose={startCompose} badge={{ activity: l.pathname === '/activity' ? 0 : badge }} />}
+    </>
+  );
+  return (
+    <>
+      <Stack render={render} />
       <ComposeHost />
       <PostHubOverlays />
     </>
@@ -105,12 +114,15 @@ function Gate() {
   if (!albums.length) {
     if (!albumsLoaded) return <Splash />;
     return (
-      <Routes>
-        <Route path="/create" element={<CreateAlbum />} />
-        <Route path="/join" element={<JoinAlbum />} />
-        <Route path="/join/:code" element={<JoinAlbum />} />
-        <Route path="*" element={sessionStorage.getItem('pm-invite') ? <Navigate to={`/join/${sessionStorage.getItem('pm-invite')}`} replace /> : <Start />} />
-      </Routes>
+      <Stack render={(l) => (
+        <Routes location={l}>
+          <Route path="/create" element={<CreateAlbum />} />
+          <Route path="/join" element={<JoinAlbum />} />
+          <Route path="/join/:code" element={<JoinAlbum />} />
+          <Route path="/settings/account/delete" element={<DeleteAccount />} />
+          <Route path="*" element={sessionStorage.getItem('pm-invite') ? <Navigate to={`/join/${sessionStorage.getItem('pm-invite')}`} replace /> : <Start />} />
+        </Routes>
+      )} />
     );
   }
   return <Shell />;

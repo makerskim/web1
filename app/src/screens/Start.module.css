@@ -8,7 +8,8 @@
 .choice small { display: block; margin-top: 2px; font-size: var(--t-sub); color: var(--c-label-3); }
 .choiceArt { flex: none; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: var(--c-surface-2); }
 .code { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--c-accent-strong); background: var(--c-accent-soft); }
-.out { margin-top: auto; align-self: center; font-size: var(--t-sub); color: var(--c-label-3); min-height: 44px; }
+.outs { margin-top: auto; display: flex; justify-content: center; gap: var(--s-4); }
+.out { font-size: var(--t-sub); color: var(--c-label-3); min-height: 44px; padding: 0 var(--s-2); }
 
 .formPage { min-height: 100dvh; }
 .form { display: flex; flex-direction: column; gap: var(--s-6); padding: var(--s-2) var(--gutter) calc(var(--s-8) + var(--safe-b)); }

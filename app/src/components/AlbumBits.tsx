@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Sheet, confirm, menu, progress, toast } from './ui';
 import { PeopleList, PersonRow } from './People';
 import { Photo } from './Photo';
+import { usePhotoURL } from '../hooks/usePhoto';
 import { Icon } from './Icon';
 import { useAlbum, useSession } from '../state/session';
 import * as api from '../lib/api';
 import { squarePhoto } from '../lib/image';
 import { obj } from '../lib/korean';
+import { spaceAmp } from '../lib/kids';
 import s from './AlbumBits.module.css';
 
 // ---------- 가족 N명 ----------
@@ -56,12 +58,24 @@ export function MembersSheet({ open, onClose }: { open: boolean; onClose: () => 
   );
 }
 
+// ---------- '씩씩이 & 튼튼이' (가운데 &는 가볍게) ----------
+export function AmpText({ text, className = '' }: { text: string; className?: string }) {
+  const parts = spaceAmp(text).split(' & ');
+  return (
+    <span className={className}>
+      {parts.map((p, i) => <span key={i}>{i > 0 && <i className={s.amp}> &amp; </i>}{p}</span>)}
+    </span>
+  );
+}
+
 // ---------- 앨범 사진 ----------
 export function CoverFace({ size = 88 }: { size?: number }) {
   const album = useAlbum()!;
+  // 지워진 사진이면 첫 글자로 (사진이 없다는 글씨가 동그라미 안에 뜨지 않게)
+  const { failed } = usePhotoURL(album.id, album.cover || null);
   return (
     <span className={s.face} style={{ width: size, height: size }}>
-      {album.cover
+      {album.cover && !failed
         ? <Photo albumId={album.id} path={album.cover} className={s.faceImg} eager />
         : <span className={s.initial} style={{ fontSize: size * 0.36 }}>{(album.babyName || album.name).trim()[0]}</span>}
     </span>

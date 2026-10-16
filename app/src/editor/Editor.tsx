@@ -6,7 +6,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { confirm, useBackClose } from '../components/ui';
 import { STICKER_SETS, fontById, loadFont } from './decor';
 import { hasAdjust } from './filters';
-import { labelText, layout, render, type EditPhoto, type Item, type Layout, type TextItem } from './render';
+import { isDecorated, labelText, layout, render, type EditPhoto, type Item, type Layout, type TextItem } from './render';
 import { AdjustSheet, CropSheet, FilterSheet, FrameSheet, StickerSheet, type NewItem, type SheetProps } from './panels';
 import { TextEditor, type TextDraft } from './TextEditor';
 import s from './editor.module.css';
@@ -55,7 +55,7 @@ export function Editor({ photos, babyBirthday: baby, onNext, onCancel }: {
 }) {
   const [cur, setCur] = useState(0);
   const [sheet, setSheetState] = useState<SheetId | null>(null);
-  const [text, setText] = useState<{ id: string | null; draft: TextDraft; unit: number } | null>(null);
+  const [text, setText] = useState<{ id: string | null; draft: TextDraft; unit: number; seq: number } | null>(null);
   const [selected, setSelectedState] = useState<string | null>(null);
   const [stickerSet, setStickerSet] = useState(STICKER_SETS[0].id);
   const [, bump] = useReducer((n: number) => n + 1, 0); // 사진 객체를 직접 바꾼 뒤 화면 갱신
@@ -71,7 +71,7 @@ export function Editor({ photos, babyBirthday: baby, onNext, onCancel }: {
   // 그리기·손가락 처리에 쓰는 값 (다시 렌더링하지 않아도 되는 것들)
   const [v] = useState(() => ({
     p, baby, L: null as Layout | null, box: null as Box | null, maxSide: 1000, raf: 0,
-    sel: null as string | null, hidden: null as string | null, dirty: false,
+    sel: null as string | null, hidden: null as string | null, dirty: photos.some(isDecorated), openSeq: 0, textSeq: 0,
     sheet: null as SheetId | null, sheetH: 0, snap: [] as Snap[], snapDirty: false,
     style: { font: 'basic', color: '#FFFFFF', box: 'none', align: 'center' } as TextStyle,
     pts: new Map<number, { x: number; y: number }>(), drag: null as Drag | null, pinch: null as Pinch | null,
@@ -214,6 +214,7 @@ export function Editor({ photos, babyBirthday: baby, onNext, onCancel }: {
     setSelectedState(null);
     draw();
     v.sheet = id;
+    v.openSeq++; // 닫히는 중인 시트를 다시 쓰지 않고 새로 열어요
     setSheetState(id);
   };
   const closeSheet = () => {
@@ -254,7 +255,7 @@ export function Editor({ photos, babyBirthday: baby, onNext, onCancel }: {
     v.sel = null;
     setSelectedState(null);
     setText({
-      id: it?.id ?? null, unit,
+      id: it?.id ?? null, unit, seq: ++v.textSeq,
       draft: it
         ? { text: it.text, font: it.font, color: it.color, box: it.box, align: it.align || 'center', scale: it.scale }
         : { text: '', ...v.style, scale: 1 },
@@ -513,7 +514,7 @@ export function Editor({ photos, babyBirthday: baby, onNext, onCancel }: {
 
         <AnimatePresence>
           {sheet && (
-            <SheetFrame key={sheet} id={sheet} reduce={reduce} onHeight={onSheetHeight}>
+            <SheetFrame key={`${sheet}-${v.openSeq}`} id={sheet} reduce={reduce} onHeight={onSheetHeight}>
               {sheetBody(sheet)}
             </SheetFrame>
           )}
@@ -521,7 +522,7 @@ export function Editor({ photos, babyBirthday: baby, onNext, onCancel }: {
       </div>
 
       <AnimatePresence>
-        {text && <TextEditor key="text" initial={text.draft} unit={text.unit} onCancel={cancelText} onDone={doneText} />}
+        {text && <TextEditor key={`text-${text.seq}`} initial={text.draft} unit={text.unit} onCancel={cancelText} onDone={doneText} />}
       </AnimatePresence>
     </motion.div>
   );
@@ -561,10 +562,9 @@ function SheetFrame({ id, reduce, onHeight, children }: {
   }, []);
   useEffect(() => { report.current(); }, [kb]);
   return (
-    <motion.section ref={ref} className={`${s.sheet} ${id === 'sticker' ? s.tall : ''}`} role="dialog" aria-label={SHEET_NAME[id]}
+    <motion.section ref={ref} className={`${s.sheet} ${id === 'sticker' ? s.tall : ''} ${kb ? s.kbOpen : ''}`} role="dialog" aria-label={SHEET_NAME[id]}
       data-sheet={id} style={kb ? { bottom: kb } : undefined}
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}>
-      <span className={s.grab} aria-hidden="true" />
       {children}
     </motion.section>
   );

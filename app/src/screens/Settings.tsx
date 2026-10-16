@@ -16,7 +16,11 @@ import { clearCache } from '../lib/photoCache';
 import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
-import { fmtDate } from '../lib/dates';
+import { fmtShort } from '../lib/dates';
+import { childName, isBorn, kidsPatch, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
+import { KidsForm } from '../components/KidsForm';
+
+const KID_ORDER = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째'];
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import s from './Settings.module.css';
@@ -315,9 +319,12 @@ export function AlbumSettings() {
         </div>
 
         <Group title="앨범 정보" footer={isOwner ? '아이 나이(생후 N일)는 사진을 올린 날 기준으로 보여 줘요.' : '앨범 정보는 관리자만 바꿀 수 있어요.'}>
-          <Row label="앨범 이름" detail={album.name} onClick={edit} />
-          <Row label="아이 이름" detail={album.babyName || '없음'} onClick={edit} />
-          <Row label="생일" detail={album.babyBirthday ? fmtDate(album.babyBirthday) : '없음'} onClick={edit} />
+          <Row label="앨범 이름" detail={spaceAmp(album.name)} onClick={edit} data-row="album-name" />
+          <Row label="소개" detail={album.bio || '없음'} onClick={edit} />
+          {album.children.map((c, i) => (
+            <Row key={c.id} label={album.children.length > 1 ? `${KID_ORDER[i]} 아이` : '아이'} onClick={edit}
+              detail={`${childName(c) || '이름 없음'}${c.birthday ? ` · ${isBorn(c) ? '' : '예정 '}${fmtShort(c.birthday)}` : ''}`} />
+          ))}
         </Group>
 
         <Group title="가족" footer={isOwner ? '관리자는 앨범 정보와 가족을 관리할 수 있어요.' : undefined}>
@@ -326,11 +333,11 @@ export function AlbumSettings() {
           {isOwner && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
         </Group>
 
-        <Group title="사진" footer="켜 두면 사진을 올릴 때 원본도 저장해서 가족이 그대로 내려받을 수 있어요.">
+        <Group title="사진" footer="이 휴대폰에서 사진을 올릴 때 '원본 화질도 함께 저장'이 처음에 켜져 있어요. 원본은 가족이 그대로 내려받을 수 있어요.">
           <Row icon={<Icon name="cloud" size={22} />} label="사진 저장 위치" detail={album.storage === 'drive' ? (isOwner ? '구글 드라이브' : '관리자의 구글 드라이브') : '기본 저장소'}
             onClick={isOwner ? () => nav('/settings/storage') : undefined} />
-          <Row icon={<Icon name="image" size={22} />} label="원본도 함께 저장">
-            <Toggle checked={withOrig} onChange={setOrig} label="원본도 함께 저장" data-f="orig-default" />
+          <Row icon={<Icon name="image" size={22} />} label="원본도 함께 저장" onClick={() => setOrig(!withOrig)} chevron={false}>
+            <Toggle checked={withOrig} onChange={setOrig} label="원본도 함께 저장" data-f="orig-default" onClick={(e) => e.stopPropagation()} />
           </Row>
         </Group>
 
@@ -349,14 +356,20 @@ export function AlbumSettings() {
 export function AlbumInfo() {
   const album = useAlbum()!;
   const nav = useNavigate();
-  const [baby, setBaby] = useState(album.babyName);
-  const [bday, setBday] = useState(album.babyBirthday || '');
+  const [kids, setKids] = useState<Child[]>(() => (album.children.length ? album.children : [newChild()]));
+  // 앨범 이름을 직접 바꾼 적이 없으면 아이 이름을 따라가요 (태어나서 이름을 넣으면 '하준이네 앨범'으로)
+  const [touched, setTouched] = useState(() => spaceAmp(album.name) !== suggestAlbumName(album.children));
   const [name, setName] = useState(album.name);
+  const [bio, setBio] = useState(album.bio);
+  const albumName = touched ? name : suggestAlbumName(kids) || name;
   const save = async () => {
-    if (!name.trim()) return toast('앨범 이름을 적어 주세요');
+    const filled = kids.filter((c) => childName(c));
+    if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요');
+    const n = spaceAmp(albumName);
+    if (!n) return toast('앨범 이름을 적어 주세요');
     try {
-      await api.updateAlbum(album.id, { name: name.trim(), babyName: baby.trim(), babyBirthday: bday || null });
-      useSession.getState().patchAlbum({ name: name.trim(), babyName: baby.trim(), babyBirthday: bday || null });
+      await api.updateAlbum(album.id, { name: n, bio: bio.trim(), children: filled });
+      useSession.getState().patchAlbum({ name: n, bio: bio.trim(), ...kidsPatch(filled) });
       toast('저장했어요');
       nav(-1);
     } catch (e) { toast((e as Error).message); }
@@ -365,12 +378,13 @@ export function AlbumInfo() {
     <Page>
       <TopBar back title="앨범 정보" right={<button className={s.saveBtn} onClick={save} data-save>저장</button>} />
       <div className={s.page}>
-        <Group title="아이">
-          <Field label="이름" value={baby} onChange={(e) => setBaby(e.target.value)} maxLength={20} placeholder="하준" name="baby" />
-          <Field label="생일" type="date" value={bday} onChange={(e) => setBday(e.target.value)} name="bday" />
+        <KidsForm kids={kids} onChange={setKids} />
+        <Group title="앨범" footer={touched ? undefined : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요.'}>
+          <Field label="앨범 이름" value={albumName} onChange={(e) => { setTouched(true); setName(e.target.value); }} onBlur={() => setName((v) => spaceAmp(v))} maxLength={40} name="album" />
         </Group>
-        <Group title="앨범">
-          <Field label="앨범 이름" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} name="album" />
+        <Group title="소개" footer="가족 탭 맨 위에 보여요. 예정일 이야기, 아이 소개, 가족에게 하고 싶은 말을 적어 보세요.">
+          <textarea className={s.bioBox} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={150} rows={3}
+            placeholder="예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요" name="bio" />
         </Group>
       </div>
     </Page>

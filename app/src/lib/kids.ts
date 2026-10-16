@@ -57,3 +57,6 @@ export function kidsFrom(raw: unknown, babyName: string, babyBirthday: string | 
   if (babyName || babyBirthday) return [newChild({ name: babyName || '', birthday: babyBirthday })];
   return [];
 }
+
+/** 앨범에 바로 반영할 값 (보이는 이름·기준 생일 포함) */
+export const kidsPatch = (kids: Child[]) => ({ children: kids, babyName: kidsLabel(kids), babyBirthday: kids[0]?.birthday ?? null });

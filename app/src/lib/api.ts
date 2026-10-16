@@ -5,6 +5,7 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { remember } from './photoCache';
 import type { ActivityEvent, Album, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
+import { childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -13,10 +14,20 @@ function check<T>({ data, error }: { data: T; error: unknown }): T {
   return data;
 }
 
-const album = (r: Row, m?: Row): Album => ({
-  id: r.id, name: r.name, babyName: r.baby_name, babyBirthday: r.baby_birthday, inviteCode: r.invite_code,
+const album = (r: Row, m?: Row): Album => {
+  const children = kidsFrom(r.children, r.baby_name || '', r.baby_birthday || null);
+  return {
+  id: r.id, name: r.name, children, bio: r.bio || '',
+  babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children[0]?.birthday ?? r.baby_birthday ?? null, inviteCode: r.invite_code,
   storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id, cover: r.cover || '',
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
+  };
+};
+// 아이 목록을 저장할 모양으로 (예전 칸 baby_name·baby_birthday도 첫째 아이로 맞춰 둬요)
+const kidsRow = (kids: Child[]) => ({
+  children: kids.map((c) => ({ id: c.id, nickname: c.nickname.trim(), name: c.name.trim(), birthday: c.birthday })),
+  baby_name: kids[0] ? childName(kids[0]).slice(0, 20) : '',
+  baby_birthday: kids[0]?.birthday ?? null,
 });
 const member = (r: Row): Member => ({ userId: r.user_id, displayName: r.display_name, avatar: r.avatar || '', role: r.role, joinedAt: r.joined_at });
 const comment = (r: Row): Comment => ({ id: r.id, postId: r.post_id, authorId: r.author_id, body: r.body, createdAt: r.created_at });
@@ -70,10 +81,13 @@ export async function albums(uid: string): Promise<Album[]> {
   return (rows as Row[]).filter((r) => r.families).map((r) => album(r.families, r));
 }
 
-export async function createAlbum(p: { name: string; babyName: string; babyBirthday: string | null; displayName: string; avatar: string }) {
+export async function createAlbum(p: { name: string; children: Child[]; bio?: string; displayName: string; avatar: string }) {
+  const k = kidsRow(p.children);
   const f = check(await sb.rpc('create_family', {
-    p_name: p.name, p_baby_name: p.babyName, p_baby_birthday: p.babyBirthday, p_display_name: p.displayName, p_avatar: p.avatar,
+    p_name: p.name, p_baby_name: k.baby_name, p_baby_birthday: k.baby_birthday, p_display_name: p.displayName, p_avatar: p.avatar,
   })) as Row;
+  // 아이들(태명·이름)과 소개는 만든 뒤에 저장해요. 데이터베이스가 예전 설정이어도 앨범은 만들어져요
+  await sb.from('families').update({ children: k.children, ...(p.bio ? { bio: p.bio } : {}) }).eq('id', f.id).then(() => {}, () => {});
   return f.id as string;
 }
 
@@ -87,11 +101,11 @@ export async function joinAlbum(code: string, displayName: string, avatar: strin
   return f.id as string;
 }
 
-export async function updateAlbum(id: string, patch: { name?: string; babyName?: string; babyBirthday?: string | null; storage?: StorageKind; cover?: string }) {
+export async function updateAlbum(id: string, patch: { name?: string; children?: Child[]; bio?: string; storage?: StorageKind; cover?: string }) {
   const row: Row = {};
   if (patch.name !== undefined) row.name = patch.name;
-  if (patch.babyName !== undefined) row.baby_name = patch.babyName;
-  if (patch.babyBirthday !== undefined) row.baby_birthday = patch.babyBirthday || null;
+  if (patch.children !== undefined) Object.assign(row, kidsRow(patch.children));
+  if (patch.bio !== undefined) row.bio = patch.bio;
   if (patch.storage !== undefined) row.storage = patch.storage;
   if (patch.cover !== undefined) row.cover = patch.cover;
   const rows = check(await sb.from('families').update(row).eq('id', id).select('id')) as Row[];

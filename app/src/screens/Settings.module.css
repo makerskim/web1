@@ -36,4 +36,8 @@
 .agree { display: flex; align-items: center; gap: var(--s-3); min-height: 52px; margin-top: var(--s-4); font-size: var(--t-callout); font-weight: 600; }
 .agree input { width: 24px; height: 24px; accent-color: var(--c-danger); margin: 0; }
 .hero { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); padding: var(--s-4) 0 var(--s-2); }
-.heroLink { min-height: 40px; padding: 0 var(--s-3); color: var(--c-accent-strong); font-size: var(--t-sub); font-weight: 700; }
+.heroLink { min-height: 2.75rem; padding: 0 var(--s-3); color: var(--c-accent-strong); font-size: var(--t-sub); font-weight: 700; }
+.bioBox {
+  display: block; width: 100%; min-height: 96px; padding: var(--s-3) var(--s-4); border: 0; outline: none; resize: none;
+  background: transparent; font-size: var(--t-callout); line-height: 1.55; color: var(--c-label);
+}

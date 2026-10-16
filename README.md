@@ -124,11 +124,11 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 |---|---|
 | “이 로그인 방법이 아직 켜져 있지 않아요” | 3-6 · 4-5번 Providers 설정 확인 |
 | 카카오 **KOE006** | 3-3 리다이렉트 URI가 2번과 **같은 REST API 키**에 정확히 들어갔는지 |
-| 카카오 **KOE010** | 6번 Client Secret Code가 같은 키의 시크릿인지 |
-| 카카오 **KOE101** | 6번 REST API Key 칸에 JavaScript 키를 넣지 않았는지 |
-| 카카오 **KOE004** | 4번 사용 설정 ON |
-| 카카오 **KOE205** | 5번 닉네임·프로필 사진 동의항목이 '사용 안 함'이 아닌지 |
-| 카카오 로그인 후 “Error getting user email” | 6번 **Allow users without an email** 켜기 |
+| 카카오 **KOE010** | 3-3 · 3-6번: Client Secret Code가 같은 REST API 키의 시크릿인지 |
+| 카카오 **KOE101** | 3-6번: REST API Key 칸에 JavaScript 키를 넣지 않았는지 |
+| 카카오 **KOE004** | 3-4번: 사용 설정 ON |
+| 카카오 **KOE205** | 3-5번: 닉네임·프로필 사진 동의항목이 '사용 안 함'이 아닌지 |
+| 카카오 로그인 후 “Error getting user email” | 3-6번: **Allow users without an email** 켜기 |
 | 구글 **redirect_uri_mismatch** | 4-3 승인된 리디렉션 URI 확인 (JavaScript 원본 칸이 아니에요) |
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |

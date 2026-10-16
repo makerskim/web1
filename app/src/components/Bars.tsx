@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Icon, type IconName } from './Icon';
+import { markBack, scrollPageTop, usePageScroll } from './Stack';
 import s from './Bars.module.css';
 
 // 위쪽 막대: 스크롤하면 유리처럼 흐려지고 얇은 선이 생겨요
@@ -10,12 +11,15 @@ export function TopBar({ title, left, right, large = false, back = false }: {
 }) {
   const [scrolled, setScrolled] = useState(false);
   const nav = useNavigate();
+  // 화면마다 스크롤이 따로라서, 이 화면의 스크롤을 봐요
+  const sc = usePageScroll();
   useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 4);
+    const on = () => setScrolled((sc ? sc.scrollTop : window.scrollY) > 4);
     on();
-    window.addEventListener('scroll', on, { passive: true });
-    return () => window.removeEventListener('scroll', on);
-  }, []);
+    const target: HTMLElement | Window = sc || window;
+    target.addEventListener('scroll', on, { passive: true });
+    return () => target.removeEventListener('scroll', on);
+  }, [sc]);
   if (large) {
     return (
       <header className={`${s.top} ${s.large} ${scrolled ? s.scrolled : ''}`}>
@@ -27,7 +31,7 @@ export function TopBar({ title, left, right, large = false, back = false }: {
   return (
     <header className={`${s.top} ${scrolled ? s.scrolled : ''}`}>
       <div className={s.side}>
-        {back && <button className={s.iconBtn} onClick={() => (history.length > 1 ? nav(-1) : nav('/'))} aria-label="뒤로"><Icon name="back" size={26} /></button>}
+        {back && <button className={s.iconBtn} onClick={() => { if (history.length > 1) { markBack(); nav(-1); } else nav('/'); }} aria-label="뒤로" data-back><Icon name="back" size={26} /></button>}
         {left}
       </div>
       <div className={s.title}>{title}</div>
@@ -54,6 +58,7 @@ const TABS: Array<{ to: string; icon: IconName; label: string }> = [
 ];
 
 export function TabBar({ onCompose, badge }: { onCompose: () => void; badge?: { activity?: number; home?: boolean } }) {
+  const loc = useLocation();
   return (
     <nav className={s.tabs} aria-label="메뉴">
       {TABS.map((t) => (t.to === '/new' ? (
@@ -61,7 +66,8 @@ export function TabBar({ onCompose, badge }: { onCompose: () => void; badge?: { 
           <span className={s.plus}><Icon name="plus" size={22} stroke={2.4} /></span>
         </motion.button>
       ) : (
-        <NavLink key={t.to} to={t.to} className={({ isActive }) => `${s.tab} ${isActive ? s.on : ''}`} data-tab={t.to.slice(1)} aria-label={t.label}>
+        <NavLink key={t.to} to={t.to} className={({ isActive }) => `${s.tab} ${isActive ? s.on : ''}`} data-tab={t.to.slice(1)} aria-label={t.label}
+          onClick={(e) => { if (loc.pathname === t.to) { e.preventDefault(); scrollPageTop(true); } }}>
           {({ isActive }) => (
             <>
               <Icon name={t.icon} size={26} stroke={isActive ? 2.2 : 1.7} filled={isActive && t.icon !== 'grid'} />
@@ -76,12 +82,7 @@ export function TabBar({ onCompose, badge }: { onCompose: () => void; badge?: { 
   );
 }
 
-// 화면 전환: 살짝 올라오며 나타나기
+// 화면 한 장 (넘어가는 움직임은 Stack이 맡아요)
 export function Page({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <motion.main className={`${s.page} ${className}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}>
-      {children}
-    </motion.main>
-  );
+  return <main className={`${s.page} ${className}`}>{children}</main>;
 }
