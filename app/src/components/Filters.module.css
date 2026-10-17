@@ -1,4 +1,4 @@
-.chips { display: flex; gap: var(--s-2); padding: var(--s-3) var(--gutter); }
+.chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); padding: var(--s-3) var(--gutter); }
 .chip {
   display: inline-flex; align-items: center; height: 2.75rem; border-radius: var(--r-full);
   background: var(--c-surface); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); color: var(--c-label);
@@ -21,22 +21,45 @@
 .option small { font-size: var(--t-sub); color: var(--c-label-3); font-variant-numeric: tabular-nums; }
 .check { color: var(--c-accent-strong); flex: none; }
 
-.year { padding-top: var(--s-4); }
-.yearHead {
-  display: flex; align-items: baseline; gap: var(--s-2); min-height: 2.75rem; align-items: center; padding: 0 var(--s-2); margin: 0 calc(var(--s-2) * -1);
-  border-radius: var(--r-sm);
+/* 날짜: 아이폰 달력 앱처럼 달이 위아래로 이어져요 */
+.calBox { padding-bottom: var(--s-4); }
+.weekBar {
+  position: sticky; top: calc(var(--s-2) * -1); z-index: 2;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin: var(--s-2) calc(var(--gutter) * -1) 0; padding: var(--s-2) var(--gutter);
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-hairline);
 }
-.yearHead b { font-size: var(--t-headline); font-weight: 700; }
-.yearHead small { font-size: var(--t-sub); color: var(--c-label-3); }
-.months { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); margin-top: var(--s-2); }
-.month {
-  min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  border-radius: var(--r-md); background: var(--c-surface-2); color: var(--c-label);
-  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+.weekBar span { text-align: center; font-size: var(--t-footnote); font-weight: 600; color: var(--c-label-3); }
+
+.mon { padding-top: var(--s-5); }
+.monHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); padding-bottom: var(--s-2); }
+.monTitle { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; color: var(--c-accent-strong); font-variant-numeric: tabular-nums; }
+.pill {
+  min-height: 2.75rem; padding: 0 var(--s-4); border-radius: var(--r-full);
+  background: var(--c-surface-2); color: var(--c-label); font-size: var(--t-sub); font-weight: 600;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.month b { font-size: var(--t-callout); font-weight: 700; }
-.month small { font-size: var(--t-caption); color: var(--c-label-3); min-height: 1em; font-variant-numeric: tabular-nums; }
-.month:active:not(:disabled) { transform: scale(.96); }
-.month:disabled { background: transparent; color: var(--c-label-3); opacity: .5; }
-.picked { background: var(--c-label) !important; color: var(--c-surface) !important; }
-.picked small { color: inherit; opacity: .75; }
+.pill:active:not(:disabled) { transform: scale(.96); }
+.pill:disabled { background: transparent; color: var(--c-label-3); box-shadow: inset 0 0 0 1px var(--c-hairline); }
+.pillOn { background: var(--c-label); color: var(--c-surface); }
+
+.wk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.blank { min-height: 3.5rem; }
+.cell {
+  min-width: 0; min-height: 3.5rem; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 0 4px; border-top: 1px solid var(--c-hairline); color: var(--c-label-3);
+}
+.has { color: var(--c-label); }
+.has:active .num { background: var(--c-fill); }
+.num {
+  width: min(2.25rem, 100%); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center;
+  font-size: var(--t-headline); font-weight: 400; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.has .num { font-weight: 600; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-accent); }
+.isToday, .has:active .isToday { background: var(--c-accent-strong); color: #fff; font-weight: 700; }
+.isSel, .has:active .isSel { background: var(--c-label); color: #fff; font-weight: 700; }
+.isBoth { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 4px var(--c-label); }

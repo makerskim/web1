@@ -1,4 +1,4 @@
-// 모아보기: 모든 사진을 올린 달별로. 사진이 많아지면 '날짜'·'올린 사람'으로 걸러 봐요
+// 모아보기: 모든 사진을 올린 달별로. 사진이 많아지면 '날짜'(하루·한 달)·'올린 사람'으로 걸러 봐요
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
@@ -9,7 +9,7 @@ import { FilterChips, NO_FILTER, matches, monthOf, type Filter } from '../compon
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { babyMonths, fmtMonth, toDate } from '../lib/dates';
+import { babyMonths, fmtDay, fmtMonth, toDate } from '../lib/dates';
 import s from './Grid.module.css';
 
 let cache: { albumId: string; items: api.GridItem[] } | null = null;
@@ -20,8 +20,11 @@ export function Grid() {
   const postsVersion = usePosts((st) => st.list.length + st.list.join().length);
   const [items, setItems] = useState<api.GridItem[] | null>(cache?.albumId === album.id ? cache.items : null);
   const [error, setError] = useState('');
+  // /grid/2026-08 (한 달) 또는 /grid/2026-08-20 (하루)로 바로 열 수 있어요
   const { month } = useParams();
-  const [filter, setFilter] = useState<Filter>(() => (month && /^\d{4}-\d{2}$/.test(month) ? { who: null, period: month } : NO_FILTER));
+  const fromRoute = month && /^\d{4}-\d{2}(-\d{2})?$/.test(month) ? month : null;
+  const [filter, setFilter] = useState<Filter>(() => (fromRoute ? { who: null, period: fromRoute } : NO_FILTER));
+  useEffect(() => { if (fromRoute) setFilter((f) => (f.period === fromRoute ? f : { ...f, period: fromRoute })); }, [fromRoute]);
 
   useEffect(() => {
     let live = true;
@@ -46,6 +49,7 @@ export function Grid() {
     openViewer({ items: shown.map((x) => ({ ...x, albumId: album.id })), start: shown.indexOf(it), postLink: true });
   };
   const filtered = filter.who || filter.period;
+  const day = filter.period && filter.period.length === 10 ? filter.period : null; // 하루만 볼 때는 그날로 제목을 달아요
 
   return (
     <Page>
@@ -58,11 +62,11 @@ export function Grid() {
         <p className={s.msg}>조건에 맞는 사진이 없어요<br /><button className={s.reset} onClick={() => setFilter(NO_FILTER)}>거르기 풀기</button></p>
       )}
       {groups.map(([k, list]) => {
-        const m = album.babyBirthday ? babyMonths(album.babyBirthday, toDate(`${k}-15`)) : null;
+        const m = album.babyBirthday ? babyMonths(album.babyBirthday, toDate(day || `${k}-15`)) : null;
         return (
           <section key={k} id={`m-${k}`} className={s.month}>
             <h3 className={s.monthBar}>
-              {fmtMonth(`${k}-01`)}
+              {day ? fmtDay(day, true) : fmtMonth(`${k}-01`)}
               <small>{list.length}장{m !== null && m >= 0 ? ` · ${m === 0 ? '첫 달' : `${m}개월`}` : ''}</small>
             </h3>
             <div className={s.tiles}>

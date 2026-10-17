@@ -37,7 +37,17 @@
 .agree input { width: 24px; height: 24px; accent-color: var(--c-danger); margin: 0; }
 .hero { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); padding: var(--s-4) 0 var(--s-2); }
 .heroLink { min-height: 2.75rem; padding: 0 var(--s-3); color: var(--c-accent-strong); font-size: var(--t-sub); font-weight: 700; }
+/* 프로필 편집: 앨범 사진 + '사진 바꾸기' */
+.coverPick { align-self: center; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); padding: var(--s-4) var(--s-4) 0; }
+.coverPick span { min-height: 2.75rem; display: grid; place-items: center; font-size: var(--t-callout); font-weight: 700; color: var(--c-accent-strong); }
+.coverPick:active { opacity: .8; }
+/* 소개: '이름 | 입력칸'과 같은 폭, 아래 오른쪽에 글자 수 */
+.bioRow { position: relative; display: grid; grid-template-columns: 6.5em 1fr; column-gap: var(--s-3); padding: 0 var(--s-4); }
+.bioRow::before { content: ""; position: absolute; top: 0; left: var(--s-4); right: 0; height: 1px; background: var(--c-hairline); }
+.bioLabel { padding-top: 16px; font-size: var(--t-callout); font-weight: 500; color: var(--c-label); }
 .bioBox {
-  display: block; width: 100%; min-height: 96px; padding: var(--s-3) var(--s-4); border: 0; outline: none; resize: none;
+  grid-column: 2; display: block; width: 100%; min-height: 7rem; padding: 15px 0 var(--s-1); border: 0; outline: none; resize: none;
   background: transparent; font-size: var(--t-callout); line-height: 1.55; color: var(--c-label);
 }
+.count { grid-column: 2; justify-self: end; padding-bottom: var(--s-2); font-size: var(--t-footnote); color: var(--c-label-3); font-variant-numeric: tabular-nums; }
+.ownerOnly { padding: var(--s-10) 0; text-align: center; font-size: var(--t-callout); color: var(--c-label-2); }

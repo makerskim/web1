@@ -60,3 +60,25 @@ export function kidsFrom(raw: unknown, babyName: string, babyBirthday: string | 
 
 /** 앨범에 바로 반영할 값 (보이는 이름·기준 생일 포함) */
 export const kidsPatch = (kids: Child[]) => ({ children: kids, babyName: kidsLabel(kids), babyBirthday: kids[0]?.birthday ?? null });
+
+/** 출산 예정일까지: 예정일을 임신 40주 0일로 봐요 (태어났거나 날짜가 없으면 null) */
+export interface DueInfo {
+  /** 'D-68'의 68 (예정일 전날이 1) */
+  daysLeft: number;
+  /** 임신 주수 · 일수 (30주 2일) */
+  week: number;
+  day: number;
+  /** 0 ~ 1 (0주 → 40주) */
+  progress: number;
+}
+export const FULL_TERM = 280;
+export function dueInfo(c: Pick<Child, 'birthday'> | null | undefined, now: Date = new Date()): DueInfo | null {
+  const d = c?.birthday ? babyDay(c.birthday, now) : null;
+  if (d === null || d >= 1) return null;
+  const daysLeft = 1 - d;
+  const gest = Math.min(FULL_TERM, Math.max(0, FULL_TERM - daysLeft));
+  return { daysLeft, week: Math.floor(gest / 7), day: gest % 7, progress: gest / FULL_TERM };
+}
+
+/** '임신 30주 2일' (아직 너무 이르면 '') */
+export const weeksLabel = (i: DueInfo) => (i.week || i.day ? `임신 ${i.week}주${i.day ? ` ${i.day}일` : ''}` : '');

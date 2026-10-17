@@ -1,42 +1,82 @@
-/* 달력 */
-.head { display: flex; align-items: center; justify-content: space-between; margin: 0 calc(var(--s-1) * -1) var(--s-2); }
+/* 달력 — 아이폰 인라인 날짜 선택처럼 */
+.head { display: flex; align-items: center; justify-content: space-between; margin: 0 calc(var(--s-2) * -1) var(--s-1); }
 .monthBtn {
   display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 var(--s-2);
-  border-radius: var(--r-sm); font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; color: var(--c-label);
+  border-radius: var(--r-sm); font-size: var(--t-headline); font-weight: 600; letter-spacing: -0.01em; color: var(--c-label);
+  font-variant-numeric: tabular-nums;
 }
-.monthBtn svg { color: var(--c-accent-strong); transition: transform var(--dur-2) var(--ease); }
-.flip { transform: rotate(180deg); }
-.navs { display: flex; gap: var(--s-1); }
+.monthBtn:active { background: var(--c-surface-2); }
+.chev { color: var(--c-accent-strong); transition: transform var(--dur-2) var(--ease); }
+.monthBtn[aria-expanded='true'] .chev { transform: rotate(90deg); }
+.navs { display: flex; transition: opacity var(--dur-1) var(--ease), visibility var(--dur-1); }
+.navsOff { opacity: 0; visibility: hidden; pointer-events: none; }
 .nav { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--c-accent-strong); }
 .nav:active { background: var(--c-accent-soft); }
 
-.cal { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+/* 달력과 휠이 같은 자리에 겹쳐요 */
+.body { display: grid; }
+.body > * { grid-area: 1 / 1; min-width: 0; }
+
+.cal { user-select: none; -webkit-user-select: none; transition: opacity var(--dur-1) var(--ease); }
+.cal.off { visibility: hidden; opacity: 0; }
 .week, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.week span { text-align: center; padding: var(--s-1) 0 var(--s-2); font-size: var(--t-footnote); font-weight: 600; color: var(--c-label-3); }
-.viewport { position: relative; overflow: hidden; min-height: calc(6 * 48px); }
-.grid { row-gap: 2px; }
+.week span {
+  text-align: center; padding: var(--s-1) 0 var(--s-2);
+  font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; color: var(--c-label-3);
+}
+.viewport { position: relative; overflow: hidden; }
+.grid { row-gap: 2px; touch-action: pan-y; }
+.blank { aspect-ratio: 1; max-height: 44px; }
 .day {
   justify-self: center; width: 100%; max-width: 44px; aspect-ratio: 1; border-radius: 50%;
-  display: grid; place-items: center; font-size: var(--t-callout); font-weight: 500; color: var(--c-label);
-  font-variant-numeric: tabular-nums; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+  display: grid; place-items: center; font-size: 1.25rem; font-weight: 400; line-height: 1; color: var(--c-label);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.day:active:not(:disabled) { transform: scale(.92); background: var(--c-surface-2); }
-.day:disabled { color: var(--c-label-3); opacity: .35; }
-.sun { color: #e0566f; }
-.sat { color: #4d7fd6; }
-.today { color: var(--c-accent-strong); font-weight: 800; }
-.sel { background: var(--c-accent); color: #fff !important; font-weight: 800; box-shadow: 0 4px 12px rgba(226, 113, 143, .35); }
-
-.months { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); padding: var(--s-2) 0; }
-.monthCell {
-  min-height: 56px; border-radius: var(--r-md); background: var(--c-surface-2);
-  font-size: var(--t-callout); font-weight: 700; color: var(--c-label);
+.day:active:not(:disabled) { transform: scale(.9); }
+.day:disabled { color: var(--c-label-3); opacity: .4; }
+.today { color: var(--c-accent-strong); font-weight: 600; }
+.sel {
+  background: rgba(226, 113, 143, 0.15);
+  background: color-mix(in srgb, var(--c-accent) 15%, transparent);
+  color: var(--c-accent-strong); font-weight: 700;
 }
-.monthCell.on { background: var(--c-accent); color: #fff; }
+.sel.today { background: var(--c-accent-strong); color: #fff; }
 
-.foot { display: flex; gap: var(--s-2); justify-content: center; padding-top: var(--s-4); }
-.chip { min-height: 40px; padding: 0 var(--s-4); border-radius: var(--r-full); background: var(--c-surface-2); font-size: var(--t-sub); font-weight: 600; color: var(--c-label); }
-.clear { color: var(--c-danger); }
+/* 연·월 휠 */
+.wheel {
+  --row: 2.75rem;
+  position: relative; align-self: center; height: calc(var(--row) * 5);
+  display: grid; grid-template-columns: 1fr 1fr; user-select: none; -webkit-user-select: none;
+}
+.wheel::before {
+  content: ""; position: absolute; left: 0; right: 0; top: calc(var(--row) * 2); height: var(--row);
+  border-radius: 8px; background: rgba(118, 118, 128, 0.12); pointer-events: none;
+}
+.col {
+  position: relative; height: 100%; overflow-y: auto; overscroll-behavior: contain;
+  scroll-snap-type: y mandatory; padding: calc(var(--row) * 2) 0; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, .3) 18%, #000 40%, #000 60%, rgba(0, 0, 0, .3) 82%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, .3) 18%, #000 40%, #000 60%, rgba(0, 0, 0, .3) 82%, transparent 100%);
+}
+.col::-webkit-scrollbar { display: none; }
+.item {
+  width: 100%; height: var(--row); display: flex; align-items: center; scroll-snap-align: center;
+  font-size: 1.25rem; font-weight: 400; color: var(--c-label); font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.colYear .item { justify-content: flex-end; padding-right: 1.25rem; }
+.colMonth .item { justify-content: flex-start; padding-left: 1.25rem; }
+.itemOn { font-weight: 600; }
+.itemDim { color: var(--c-label-3); }
+
+/* 아래: 지우기 · 오늘 */
+.foot { display: flex; align-items: center; justify-content: space-between; margin: var(--s-2) calc(var(--s-2) * -1) 0; }
+.textBtn {
+  min-height: 44px; padding: 0 var(--s-2); border-radius: var(--r-sm);
+  font-size: var(--t-body); font-weight: 600; color: var(--c-accent-strong);
+}
+.textBtn:active { background: var(--c-surface-2); }
+.clear { color: var(--c-label-2); font-weight: 500; }
 
 /* 한 줄 입력 (그룹 안) */
 .field {
