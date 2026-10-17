@@ -1,19 +1,18 @@
 .sheet { }
-.wrap { display: flex; flex-direction: column; height: 100%; margin: calc(var(--s-2) * -1) calc(var(--gutter) * -1) calc(var(--s-6) * -1); }
+/* 시트 본문 여백까지 꽉 채워서 입력칸이 바닥에 붙게 */
+.wrap { display: flex; flex-direction: column; height: calc(100% + var(--s-2) + var(--s-6)); margin: calc(var(--s-2) * -1) calc(var(--gutter) * -1) calc(var(--s-6) * -1); }
 .list { flex: 1; overflow-y: auto; padding: var(--s-2) var(--gutter); overscroll-behavior: contain; }
 .row { display: flex; gap: var(--s-3); padding: var(--s-2) 0; font-size: var(--t-sub); }
 .row p { flex: 1; min-width: 0; white-space: pre-wrap; line-height: 1.45; }
 .row b { font-weight: 700; margin-right: 2px; }
 .row time { display: flex; gap: var(--s-3); margin-top: 2px; font-size: var(--t-caption); color: var(--c-label-3); }
 .cap { border-bottom: 1px solid var(--c-hairline); padding-bottom: var(--s-3); margin-bottom: var(--s-1); }
-.del { color: var(--c-label-3); font-weight: 600; font-size: var(--t-caption); }
+.del { color: var(--c-label-3); font-weight: 600; font-size: var(--t-caption); padding: 0.5rem 0.75rem; margin: -0.5rem -0.75rem; } /* 작은 글자라도 누르기 쉽게 */
 .empty { text-align: center; color: var(--c-label-3); padding: var(--s-10) 0; font-size: var(--t-sub); }
-.composer { flex: none; border-top: 1px solid var(--c-hairline); padding-bottom: var(--s-2); background: var(--c-surface); }
-.emojis { display: grid; grid-template-columns: repeat(8, 1fr); padding: var(--s-1) var(--s-2) 0; }
-.emojis button { height: 44px; font-size: 1.5rem; border-radius: 10px; }
-.emojis button:active { background: var(--c-surface-2); }
-.form { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-1) var(--gutter) var(--s-2); }
+.composer { flex: none; border-top: 1px solid var(--c-hairline); padding-bottom: max(var(--s-1), calc(var(--kb, 0px) - var(--safe-b))); background: var(--c-surface); }
+.form { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--gutter); }
 .pill { flex: 1; min-width: 0; display: flex; align-items: center; min-height: 44px; padding: 0 var(--s-1) 0 var(--s-4); border-radius: 22px; box-shadow: inset 0 0 0 1px var(--c-hairline-strong); }
-.pill input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: var(--t-callout); min-height: 42px; }
+/* 16px 미만이면 iOS가 화면을 확대해요 */
+.pill input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: max(16px, var(--t-callout)); min-height: 42px; }
 .post { color: var(--c-accent-strong); font-weight: 700; padding: 0 var(--s-3); min-height: 40px; }
 .post:disabled { opacity: .35; }
