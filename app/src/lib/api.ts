@@ -240,7 +240,7 @@ export async function postTiles(albumId: string): Promise<PostTile[]> {
   }
 }
 
-export interface NewPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string; dec: boolean; orig?: File }
+export interface NewPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string; orig?: File }
 export interface OrigInfo { type: string; ext: string }
 
 const ORIG_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
@@ -277,7 +277,7 @@ export async function createPost(
       metas.push({
         path: await put(`${i}.jpg`, ph.blob, 'image/jpeg', true),
         thumb: await put(`${i}_t.jpg`, ph.thumb, 'image/jpeg', true),
-        w: ph.w, h: ph.h, ph: ph.ph, dec: ph.dec,
+        w: ph.w, h: ph.h, ph: ph.ph,
       });
     }
     for (let i = 0; i < p.photos.length; i++) {

@@ -1,5 +1,5 @@
 // 휴대폰에 저장하기 · 다른 앱으로 보내기
-import { confirm, menu, progress, toast, copyText } from '../components/ui';
+import { confirm, progress, toast, copyText } from '../components/ui';
 import { fetchFile, photoBlob } from './storage';
 import { isIOS, isKakaoInApp } from './device';
 import { ymd } from './dates';
@@ -92,15 +92,9 @@ export async function savePhotos(albumId: string, photos: PhotoMeta[], takenAt: 
   }
 }
 
-// 원본이 있으면 원본으로, 꾸민 사진이면 둘 중 고르기
+// 내려받기는 언제나 원본으로 (원본이 없는 사진만 그 사진을 일반 화질로 받고 알려 줘요)
 export async function saveWithChoice(albumId: string, photos: PhotoMeta[], takenAt: string) {
-  if (!photos.some((p) => p.orig)) return savePhotos(albumId, photos, takenAt);
-  if (!photos.some((p) => p.orig && p.dec)) return savePhotos(albumId, photos, takenAt, true);
-  const v = await menu([
-    { label: '원본 사진', value: 'orig', icon: 'image' },
-    { label: '꾸민 사진', value: 'dec', icon: 'sparkles' },
-  ], '어떤 사진을 저장할까요?');
-  if (v) await savePhotos(albumId, photos, takenAt, v === 'orig');
+  return savePhotos(albumId, photos, takenAt, photos.some((p) => p.orig));
 }
 
 export async function sharePhotos(albumId: string, photos: PhotoMeta[], text: string) {

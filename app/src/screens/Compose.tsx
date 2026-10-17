@@ -33,7 +33,9 @@ const EMPTY = { stage: 'idle' as Stage, photos: [], caption: '', busy: false, ho
 const useCompose = create<ComposeState>(() => ({ ...EMPTY }));
 
 // 닫을 때 미리보기 주소도 비워요
+let confirmed = false; // 닫기(X)에서 이미 물어봤어요
 function closeCompose() {
+  confirmed = false;
   useCompose.getState().photos.forEach(releasePhoto);
   useCompose.setState({ ...EMPTY });
 }
@@ -88,22 +90,25 @@ async function onPicked() {
 export const startCompose = () => openPicker(false);
 const addPhotos = () => openPicker(true);
 
-const tick = () => new Promise((r) => setTimeout(r, 0));
+// 화면이 한 번 그려질 만큼 기다려요 (내려놓은 '뒤로' 기록이 정리된 다음 다시 쌓게)
+const settle = () => new Promise((r) => setTimeout(r, 120));
 
 // 휴대폰 '뒤로': 쓴 글이 있으면 물어보고, 없으면 바로 닫아요. 올리는 중에는 닫지 않아요
 async function onBack() {
   const st = useCompose.getState();
-  if (!st.busy && !st.caption.trim()) { closeCompose(); return; }
+  if (!st.busy && (confirmed || !st.caption.trim())) { closeCompose(); return; }
   // '뒤로'로 기록이 하나 빠졌어요 → 잠깐 내려놨다가 다시 쌓아요
   useCompose.setState({ hold: true });
   if (st.busy) toast('올리는 중이에요. 잠시만 기다려 주세요.');
   else if (await confirm(DISCARD)) { closeCompose(); return; }
-  await tick();
+  await settle();
   if (useCompose.getState().stage === 'write') useCompose.setState({ hold: false });
 }
 
 export function ComposeHost() {
-  const { stage, photos, hold } = useCompose();
+  const stage = useCompose((st) => st.stage);
+  const photos = useCompose((st) => st.photos);
+  const hold = useCompose((st) => st.hold);
   const album = useSession((st) => st.album());
   useBackClose(stage === 'write' && !hold, onBack);
   if (!album) return null;
@@ -130,7 +135,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
     const t = text.current;
     if (!t) return;
     t.style.height = 'auto';
-    t.style.height = `${Math.max(t.scrollHeight, 0)}px`;
+    t.style.height = `${t.scrollHeight}px`;
   }, [caption]);
 
   // 닫기(X): 고른 사진이 있으니 한 번 물어봐요
@@ -138,7 +143,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
     if (busy) return;
     if (!(await confirm(DISCARD))) return;
     // 확인 창 기록이 먼저 빠진 다음 글쓰기 기록을 빼요 ('뒤로'와 같은 길로 닫혀요)
-    useCompose.setState({ caption: '' });
+    confirmed = true;
     history.back();
   };
 
@@ -242,20 +247,16 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
     const t = track.current;
     const before = prevCount.current;
     prevCount.current = photos.length;
-    if (!t || photos.length <= before) return;
-    const el = t.children[before] as HTMLElement | undefined;
+    if (!t) return;
+    const el = photos.length > before ? t.children[before] as HTMLElement | undefined : undefined;
     if (el) t.scrollTo({ left: el.offsetLeft - (t.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
+    // 사진을 빼면 넘기지 않아도 자리가 바뀌어요 → 번호를 다시 맞춰요
+    else requestAnimationFrame(onScroll);
   }, [photos.length]);
-
-  const go = (i: number) => {
-    const t = track.current;
-    const el = t?.children[i] as HTMLElement | undefined;
-    if (t && el) t.scrollTo({ left: el.offsetLeft - (t.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
-  };
 
   return (
     <section className={s.media} aria-label="고른 사진">
-      <div className={`${s.track} ${many || photos.length < MAX_PHOTOS ? '' : s.single}`} ref={track} onScroll={onScroll} data-w="photos">
+      <div className={s.track} ref={track} onScroll={onScroll} data-w="photos">
         {photos.map((p, i) => (
           <figure className={s.slide} key={p.id} data-w="slide">
             <img src={p.url} alt={`${photos.length}장 중 ${i + 1}번째 사진`} draggable={false} />
@@ -278,7 +279,7 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
         <div className={s.pager}>
           <span className={s.counter} aria-live="polite">{at + 1}/{photos.length}</span>
           <span className={s.dots} aria-hidden="true">
-            {photos.map((p, i) => <i key={p.id} className={i === at ? s.on : ''} onClick={() => go(i)} />)}
+            {photos.map((p, i) => <i key={p.id} className={i === at ? s.on : ''} />)}
           </span>
         </div>
       )}
