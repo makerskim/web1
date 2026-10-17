@@ -29,9 +29,10 @@
 .remove {
   position: absolute; top: var(--s-2); right: var(--s-2); width: 2.75rem; height: 2.75rem; display: grid; place-items: center;
   border-radius: 50%; background: rgba(31, 26, 33, .58); color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: transform var(--dur-1) var(--ease);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: transform var(--dur-1) var(--ease), opacity var(--dur-2) var(--ease);
 }
 .remove:active { transform: scale(.92); }
+.remove.away { opacity: 0; pointer-events: none; }
 
 /* 사진 더 넣기 */
 .add {

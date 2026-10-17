@@ -317,7 +317,7 @@ export function AlbumSettings() {
           {isOwner && <button className={s.heroLink} onClick={cover.open} data-row="cover">앨범 사진 바꾸기</button>}
         </div>
 
-        <Group title="앨범 정보" footer={isOwner ? '앨범 이름 · 소개 · 아이 이름 · 출산 예정일은 프로필 편집에서 바꿔요. 아이 나이(생후 N일)는 사진을 올린 날 기준으로 보여 줘요.' : '앨범 정보는 관리자만 바꿀 수 있어요.'}>
+        <Group title="앨범 정보" footer={isOwner ? '누르면 프로필 편집에서 바꿀 수 있어요. 아이 나이(생후 N일)는 사진을 올린 날 기준으로 보여 줘요.' : '앨범 정보는 관리자만 바꿀 수 있어요.'}>
           {/* 관리자: 이름·소개·아이 줄을 누르면 모두 프로필 편집으로 */}
           {isOwner
             ? <Row icon={<Icon name="edit" size={22} />} label="프로필 편집" detail={spaceAmp(album.name)} onClick={edit} data-row="album-name" />
@@ -401,7 +401,7 @@ export function AlbumInfo() {
             <span className={s.bioLabel}>소개</span>
             <textarea className={s.bioBox} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={BIO_MAX} rows={4}
               placeholder="예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요" name="bio" />
-            <small className={s.count} aria-live="polite" data-f="bio-count">{bio.length}/{BIO_MAX}</small>
+            <small className={s.count} data-f="bio-count">{bio.length}/{BIO_MAX}</small>
           </label>
         </Group>
 

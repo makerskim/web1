@@ -59,11 +59,12 @@ export function MembersSheet({ open, onClose }: { open: boolean; onClose: () => 
 }
 
 // ---------- '씩씩이 & 튼튼이' (가운데 &는 가볍게) ----------
+// 줄이 넘치면 '씩씩이' / '& 튼튼이'로 나뉘어요 (& 뒤는 붙는 빈칸)
 export function AmpText({ text, className = '' }: { text: string; className?: string }) {
   const parts = spaceAmp(text).split(' & ');
   return (
     <span className={className}>
-      {parts.map((p, i) => <span key={i}>{i > 0 && <i className={s.amp}> &amp; </i>}{p}</span>)}
+      {parts.map((p, i) => <span key={i}>{i > 0 && <>{' '}<i className={s.amp}>&amp;</i>{'\u00a0'}</>}{p}</span>)}
     </span>
   );
 }

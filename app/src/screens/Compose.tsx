@@ -261,7 +261,8 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
           <figure className={s.slide} key={p.id} data-w="slide">
             <img src={p.url} alt={`${photos.length}장 중 ${i + 1}번째 사진`} draggable={false} />
             {many && (
-              <button type="button" className={s.remove} onClick={() => onRemove(p.id)} aria-label="이 사진 빼기" data-w="remove">
+              // 지금 보이는 사진의 ×만 보여요 (옆 사진의 ×가 가장자리에 걸리지 않게)
+              <button type="button" className={`${s.remove} ${i === at ? '' : s.away}`} onClick={() => onRemove(p.id)} aria-label="이 사진 빼기" data-w="remove" tabIndex={i === at ? 0 : -1}>
                 <Icon name="close" size={18} stroke={2.4} />
               </button>
             )}
