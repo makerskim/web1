@@ -114,7 +114,7 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 
 ## 무료로 얼마나?
 
-- Supabase 무료 저장공간 **1GB**: 원본까지 올리면 약 250~400장, 원본 없이 3,000장 이상
+- Supabase 무료 저장공간 **1GB**: 사진은 언제나 원본과 함께 저장돼서 약 250~400장 (휴대폰 사진 크기에 따라 달라요). 더 많이 올리려면 6번의 구글 드라이브를 연결하세요.
 - 구글 드라이브: 관리자의 드라이브 공간(무료 15GB)만큼
 - 7일 동안 아무도 앱을 쓰지 않으면 Supabase 프로젝트가 잠시 멈춰요. 대시보드에서 **Restore**를 누르면 다시 켜져요.
 
@@ -146,5 +146,5 @@ npm run dev      # http://localhost:5173
 npm run build    # 타입 검사 + app/dist 에 빌드
 ```
 
-- 화면: `app/src/screens` · 공통 부품: `app/src/components` · 데이터: `app/src/lib` · 사진 편집기: `app/src/editor`
+- 화면: `app/src/screens` · 공통 부품: `app/src/components` · 데이터: `app/src/lib` (사진 올리기 준비: `app/src/lib/photo.ts`)
 - 디자인 규칙(색·글자 크기·간격·모서리·움직임)은 모두 `app/src/styles/tokens.css` 에 있어요.
