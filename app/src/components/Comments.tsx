@@ -40,7 +40,9 @@ export function Comments({ post, open, onClose }: { post: Post | null; open: boo
   const kbOpen = kb > 0;
 
   // 새 댓글이 생기거나 자판이 올라오면 맨 아래 댓글이 보이게
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [count, kbOpen]);
+  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [count]);
+  // 자판이 올라올 때만 (닫힐 때나 확대할 때는 읽던 자리 그대로)
+  useEffect(() => { if (kbOpen) list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [kbOpen]);
   useEffect(() => { if (!open) setText(''); }, [open]);
 
   const send = async (body: string) => {

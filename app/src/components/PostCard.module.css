@@ -33,6 +33,6 @@
 .caption.open { display: block; -webkit-line-clamp: unset; cursor: auto; }
 .more { color: var(--c-label-3); font-size: var(--t-sub); padding: 1px 0; }
 /* 댓글 N개 보기: 조용한 글자 버튼, 누르는 영역은 넉넉하게 */
-.cmtLink { display: flex; align-items: center; min-height: 2.75rem; padding: 0 var(--s-4) 0 0; text-align: left; color: var(--c-label-3); font-size: var(--t-sub); }
+.cmtLink { display: flex; align-items: center; min-height: 2.75rem; padding: 0 var(--s-4) 0 0; text-align: left; color: var(--c-label-2); font-size: var(--t-callout); }
 .cmtLink:active { opacity: .6; }
 .time { font-size: var(--t-caption); color: var(--c-label-3); margin-top: 2px; }
