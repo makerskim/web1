@@ -3,7 +3,7 @@
 // - 옆으로 밀거나 ‹ › 로 달을 넘겨요.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, type PanInfo } from 'motion/react';
-import { Sheet } from './ui';
+import { Sheet, useLatest } from './ui';
 import { Icon } from './Icon';
 import { WEEKDAYS, fmtDate, monthCells, toDate, ymd } from '../lib/dates';
 import s from './DatePicker.module.css';
@@ -54,6 +54,19 @@ export function DatePickerSheet({ open, title, value, onChange, onClose, min, ma
     if (Math.abs(offset.x) > 56 || (Math.abs(velocity.x) > 420 && Math.abs(offset.x) > 16)) move(offset.x < 0 ? 1 : -1);
   };
 
+  // 휠로는 min~max 달 밖으로 못 가요. 밖을 고르면 가장 가까운 달로 붙어요.
+  const lo = min ? Number(min.slice(0, 4)) * 12 + Number(min.slice(5, 7)) - 1 : -Infinity;
+  const hi = max ? Number(max.slice(0, 4)) * 12 + Number(max.slice(5, 7)) - 1 : Infinity;
+  const pickYM = (next: (v: { y: number; m: number }) => { y: number; m: number }) => {
+    setDir(0);
+    setView((v) => {
+      const t = next(v);
+      const n = Math.min(hi, Math.max(lo, t.y * 12 + t.m));
+      const y = Math.floor(n / 12), m = n - y * 12;
+      return y === v.y && m === v.m ? v : { y, m };
+    });
+  };
+
   // 늘 6줄(42칸)이라 달마다 높이가 바뀌지 않아요
   const cells = useMemo(() => monthCells(view.y, view.m, 42), [view]);
 
@@ -61,7 +74,10 @@ export function DatePickerSheet({ open, title, value, onChange, onClose, min, ma
   const now = new Date().getFullYear();
   const y0 = Math.min(min ? Number(min.slice(0, 4)) : 1990, view.y);
   const y1 = Math.max(max ? Number(max.slice(0, 4)) : now + 2, view.y);
-  const years = useMemo(() => Array.from({ length: y1 - y0 + 1 }, (_, i) => ({ v: y0 + i, text: `${y0 + i}년` })), [y0, y1]);
+  const years = useMemo(() => Array.from({ length: y1 - y0 + 1 }, (_, i) => {
+    const y = y0 + i;
+    return { v: y, text: `${y}년`, dim: y * 12 + 11 < lo || y * 12 > hi };
+  }), [y0, y1, lo, hi]);
   const months = Array.from({ length: 12 }, (_, i) => {
     const k = `${view.y}-${pad(i + 1)}`;
     return { v: i + 1, text: `${i + 1}월`, dim: (!!min && k < min.slice(0, 7)) || (!!max && k > max.slice(0, 7)) };
@@ -94,28 +110,32 @@ export function DatePickerSheet({ open, title, value, onChange, onClose, min, ma
         <div className={`${s.cal} ${wheel ? s.off : ''}`} aria-hidden={wheel || undefined}>
           <div className={s.week}>{WEEKDAYS.map((w) => <span key={w}>{w}</span>)}</div>
           <div className={s.viewport} onPointerDownCapture={onDown} onPointerUpCapture={onUp}>
+            {/* 바깥은 달 넘김(미끄러짐)만, 안쪽은 손가락 끌기만 해요.
+                둘이 한 x를 같이 쓰면 넘어오는 중에 만졌을 때 달력이 어중간한 자리에 멈춰요. */}
             <AnimatePresence initial={false} custom={dir} mode="popLayout">
-              <motion.div key={`${view.y}-${view.m}`} className={s.grid} custom={dir}
+              <motion.div key={`${view.y}-${view.m}`} className={s.slide} custom={dir}
                 variants={{
                   enter: (d: number) => ({ x: d ? `${d * 100}%` : 0, opacity: d ? 1 : 0 }),
                   center: { x: 0, opacity: 1 },
                   exit: (d: number) => ({ x: d ? `${d * -100}%` : 0, opacity: d ? 1 : 0 }),
                 }}
-                initial="enter" animate="center" exit="exit" transition={{ x: slide, opacity: { duration: 0.18 } }}
-                drag={wheel ? false : 'x'} dragDirectionLock dragMomentum={false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.85}
-                onDragEnd={onDragEnd}>
-                {cells.map((d, i) => {
-                  if (!d) return <span key={`b${i}`} className={s.blank} />;
-                  const k = `${view.y}-${pad(view.m + 1)}-${pad(d)}`;
-                  const sel = k === value;
-                  return (
-                    <button key={k} type="button" disabled={!inRange(k)} onClick={() => pick(k)} data-day={k} tabIndex={wheel ? -1 : undefined}
-                      className={`${s.day} ${sel ? s.sel : ''} ${k === today ? s.today : ''}`}
-                      aria-pressed={sel} aria-label={`${fmtDate(k, true)}${k === today ? ' (오늘)' : ''}`}>
-                      {d}
-                    </button>
-                  );
-                })}
+                initial="enter" animate="center" exit="exit" transition={{ x: slide, opacity: { duration: 0.18 } }}>
+                <motion.div className={s.grid}
+                  drag={wheel ? false : 'x'} dragDirectionLock dragMomentum={false} dragSnapToOrigin
+                  dragConstraints={{ left: 0, right: 0 }} dragElastic={0.85} onDragEnd={onDragEnd}>
+                  {cells.map((d, i) => {
+                    if (!d) return <span key={`b${i}`} className={s.blank} />;
+                    const k = `${view.y}-${pad(view.m + 1)}-${pad(d)}`;
+                    const sel = k === value;
+                    return (
+                      <button key={k} type="button" disabled={!inRange(k)} onClick={() => pick(k)} data-day={k} tabIndex={wheel ? -1 : undefined}
+                        className={`${s.day} ${sel ? s.sel : ''} ${k === today ? s.today : ''}`}
+                        aria-pressed={sel} aria-label={`${fmtDate(k, true)}${k === today ? ' (오늘)' : ''}`}>
+                        {d}
+                      </button>
+                    );
+                  })}
+                </motion.div>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -125,8 +145,8 @@ export function DatePickerSheet({ open, title, value, onChange, onClose, min, ma
           {wheel && (
             <motion.div key="wheel" className={s.wheel} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.2 }}>
-              <Wheel kind="year" label="연도" items={years} value={view.y} onPick={(y) => { setDir(0); setView((v) => ({ ...v, y })); }} />
-              <Wheel kind="month" label="달" items={months} value={view.m + 1} onPick={(m) => { setDir(0); setView((v) => ({ ...v, m: m - 1 })); }} />
+              <Wheel kind="year" label="연도" items={years} value={view.y} onPick={(y) => pickYM((v) => ({ y, m: v.m }))} />
+              <Wheel kind="month" label="달" items={months} value={view.m + 1} onPick={(m) => pickYM((v) => ({ y: v.y, m: m - 1 }))} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -149,7 +169,17 @@ function Wheel({ kind, label, items, value, onPick }: {
   const ref = useRef<HTMLDivElement>(null);
   const target = useRef<number | null>(null); // 코드로 굴리는 중이면 그 목적지
   const idx = Math.max(0, items.findIndex((it) => it.v === value));
+  const cur = useLatest(idx);
+  const hold = useRef(false); // 손가락이 휠 위에 있어요
+  const settle = useRef(0);
   const rowH = () => ref.current?.querySelector<HTMLElement>('button')?.offsetHeight || 44;
+  const calm = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const roll = (i: number) => {
+    const el = ref.current;
+    if (!el) return;
+    target.current = i;
+    el.scrollTo({ top: i * rowH(), behavior: calm() ? 'auto' : 'smooth' });
+  };
 
   // 처음 열 때: 고른 값을 바로 가운데에
   useLayoutEffect(() => {
@@ -162,10 +192,19 @@ function Wheel({ kind, label, items, value, onPick }: {
     if (!el) return;
     const h = rowH();
     if (Math.round(el.scrollTop / h) === idx) return;
-    target.current = idx;
-    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollTo({ top: idx * h, behavior: calm ? 'auto' : 'smooth' });
-  }, [idx]);
+    roll(idx);
+  }, [idx]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => window.clearTimeout(settle.current), []);
+
+  // 다 굴렀는데 가운데 값이 고른 값과 다르면(흐린 달처럼 못 고르는 값) 고른 값으로 돌아가요
+  const snapBack = () => {
+    window.clearTimeout(settle.current);
+    settle.current = window.setTimeout(() => {
+      const el = ref.current;
+      if (!el || hold.current || target.current !== null) return;
+      if (Math.round(el.scrollTop / rowH()) !== cur.current) roll(cur.current);
+    }, 180);
+  };
 
   const onScroll = () => {
     const el = ref.current;
@@ -176,12 +215,15 @@ function Wheel({ kind, label, items, value, onPick }: {
       target.current = null;
     }
     if (items[i].v !== value) onPick(items[i].v);
+    snapBack();
   };
   const grab = () => { target.current = null; };
+  const touchOn = () => { grab(); hold.current = true; };
+  const touchOff = () => { hold.current = false; snapBack(); };
 
   return (
     <div ref={ref} className={`${s.col} ${kind === 'year' ? s.colYear : s.colMonth}`} onScroll={onScroll}
-      onPointerDown={grab} onTouchStart={grab} onWheel={grab} role="group" aria-label={label}>
+      onPointerDown={grab} onTouchStart={touchOn} onTouchEnd={touchOff} onTouchCancel={touchOff} onWheel={grab} role="group" aria-label={label}>
       {items.map((it) => {
         const attr = kind === 'year' ? { 'data-wheel-year': it.v } : { 'data-wheel-month': it.v };
         return (

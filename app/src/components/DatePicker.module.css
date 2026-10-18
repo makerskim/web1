@@ -25,6 +25,8 @@
   font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; color: var(--c-label-3);
 }
 .viewport { position: relative; overflow: hidden; }
+/* 바깥(.slide)은 달 넘김만, 안쪽(.grid)은 손가락 끌기만 */
+.slide { width: 100%; }
 .grid { row-gap: 2px; touch-action: pan-y; }
 .blank { aspect-ratio: 1; max-height: 44px; }
 .day {

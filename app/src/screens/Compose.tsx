@@ -8,7 +8,7 @@ import { exportPhoto, loadPhoto, releasePhoto, type PickedPhoto } from '../lib/p
 import { Icon } from '../components/Icon';
 import { Button } from '../components/Button';
 import { Avatar } from '../components/Avatar';
-import { confirm, progress, toast, useBackClose } from '../components/ui';
+import { afterBack, confirm, progress, toast, useBackClose } from '../components/ui';
 import { useSession } from '../state/session';
 import { forgetScroll, scrollPageTop } from '../components/Stack';
 import { usePosts } from '../state/posts';
@@ -90,8 +90,8 @@ async function onPicked() {
 export const startCompose = () => openPicker(false);
 const addPhotos = () => openPicker(true);
 
-// 화면이 한 번 그려질 만큼 기다려요 (내려놓은 '뒤로' 기록이 정리된 다음 다시 쌓게)
-const settle = () => new Promise((r) => setTimeout(r, 120));
+// 한 장면만 기다려요 (내려놓은 게 그려진 다음 바로 다시 쌓게). 화면이 숨겨져 멈춰도 넘어가요
+const nextFrame = () => new Promise<void>((r) => { requestAnimationFrame(() => r()); setTimeout(r, 100); });
 
 // 휴대폰 '뒤로': 쓴 글이 있으면 물어보고, 없으면 바로 닫아요. 올리는 중에는 닫지 않아요
 async function onBack() {
@@ -99,9 +99,15 @@ async function onBack() {
   if (!st.busy && (confirmed || !st.caption.trim())) { closeCompose(); return; }
   // '뒤로'로 기록이 하나 빠졌어요 → 잠깐 내려놨다가 다시 쌓아요
   useCompose.setState({ hold: true });
-  if (st.busy) toast('올리는 중이에요. 잠시만 기다려 주세요.');
-  else if (await confirm(DISCARD)) { closeCompose(); return; }
-  await settle();
+  if (st.busy) {
+    toast('올리는 중이에요. 잠시만 기다려 주세요.');
+    // 바로 다시 쌓아요 (한 번 더 눌러도 앱을 벗어나지 않게)
+    await nextFrame();
+  } else {
+    if (await confirm(DISCARD)) { closeCompose(); return; }
+    // 확인 창 기록이 다 빠진 다음 다시 쌓아요
+    await afterBack();
+  }
   if (useCompose.getState().stage === 'write') useCompose.setState({ hold: false });
 }
 
@@ -142,8 +148,13 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
   const askClose = async () => {
     if (busy) return;
     if (!(await confirm(DISCARD))) return;
-    // 확인 창 기록이 먼저 빠진 다음 글쓰기 기록을 빼요 ('뒤로'와 같은 길로 닫혀요)
-    confirmed = true;
+    // 확인 창 기록이 다 빠진 다음 글쓰기 기록을 빼요 (사파리는 back을 겹쳐 하면 하나만 해요)
+    await afterBack();
+    const st = useCompose.getState();
+    if (st.stage !== 'write') return;
+    // 기록을 잠깐 내려놓은 사이면 뺄 기록이 없으니 바로 닫아요
+    if (st.hold) { closeCompose(); return; }
+    confirmed = true; // '뒤로'와 같은 길로 닫혀요
     history.back();
   };
 
@@ -261,8 +272,9 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
           <figure className={s.slide} key={p.id} data-w="slide">
             <img src={p.url} alt={`${photos.length}장 중 ${i + 1}번째 사진`} draggable={false} />
             {many && (
-              // 지금 보이는 사진의 ×만 보여요 (옆 사진의 ×가 가장자리에 걸리지 않게)
-              <button type="button" className={`${s.remove} ${i === at ? '' : s.away}`} onClick={() => onRemove(p.id)} aria-label="이 사진 빼기" data-w="remove" tabIndex={i === at ? 0 : -1}>
+              // 지금 보이는 사진의 ×만 보여요 (옆 사진의 ×가 가장자리에 걸리지 않게). 옆 사진의 ×는 읽어 주지도 않아요
+              <button type="button" className={`${s.remove} ${i === at ? '' : s.away}`} onClick={() => onRemove(p.id)}
+                aria-label={`${i + 1}번째 사진 빼기`} data-w="remove" disabled={i !== at} aria-hidden={i === at ? undefined : true} tabIndex={i === at ? 0 : -1}>
                 <Icon name="close" size={18} stroke={2.4} />
               </button>
             )}

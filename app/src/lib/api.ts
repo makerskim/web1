@@ -5,7 +5,7 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { remember } from './photoCache';
 import type { ActivityEvent, Album, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
-import { childName, kidsFrom, kidsLabel, type Child } from './kids';
+import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -18,14 +18,14 @@ const album = (r: Row, m?: Row): Album => {
   const children = kidsFrom(r.children, r.baby_name || '', r.baby_birthday || null);
   return {
   id: r.id, name: r.name, children, bio: r.bio || '',
-  babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children[0]?.birthday ?? r.baby_birthday ?? null, inviteCode: r.invite_code,
+  babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children.length ? ageBirthday(children) : r.baby_birthday ?? null, inviteCode: r.invite_code,
   storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id && !!r.drive_email, cover: r.cover || '',
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
   };
 };
 // 아이 목록을 저장할 모양으로 (예전 칸 baby_name·baby_birthday도 첫째 아이로 맞춰 둬요)
 const kidsRow = (kids: Child[]) => ({
-  children: kids.map((c) => ({ id: c.id, nickname: c.nickname.trim(), name: c.name.trim(), birthday: c.birthday })),
+  children: kids.map((c) => ({ id: c.id, nickname: c.nickname.trim(), name: c.name.trim(), birthday: c.birthday, ...(typeof c.born === 'boolean' ? { born: c.born } : {}) })),
   baby_name: kids[0] ? childName(kids[0]).slice(0, 20) : '',
   baby_birthday: kids[0]?.birthday ?? null,
 });

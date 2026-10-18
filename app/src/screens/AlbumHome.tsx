@@ -10,7 +10,7 @@ import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { babyAge, babyDay, babyMilestone, babyMonths, fmtDate } from '../lib/dates';
-import { childName, dueInfo, isBorn, needsName, weeksLabel, type Child, type DueInfo } from '../lib/kids';
+import { childName, ddayText, dueInfo, dueStatus, isBorn, needsName, weeksLabel, type Child, type DueInfo } from '../lib/kids';
 import { subj } from '../lib/korean';
 import { InviteSheet } from './Invite';
 import { ProfileSheet } from './Settings';
@@ -55,15 +55,20 @@ export function AlbumHome() {
 
   // 나이·디데이는 첫째 아이 기준
   const kids = album.children || [];
-  const bday = kids[0]?.birthday ?? album.babyBirthday ?? null;
+  const first: Pick<Child, 'birthday' | 'born'> = kids[0] || { birthday: album.babyBirthday ?? null };
+  const bday = first.birthday ?? null;
   const day = bday ? babyDay(bday) : null;
-  const born = day !== null && day >= 1;
+  // 태어났는지는 '태어났어요'를 눌렀는지로 (예정일이 지나도 아직 뱃속일 수 있어요)
+  const born = !!bday && isBorn(first);
   const months = bday ? babyMonths(bday) : null;
-  const due = dueInfo({ birthday: bday });
-  const status = due ? `만나기까지 ${due.daysLeft.toLocaleString()}일`
-    : !born || months === null ? '' : months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`;
+  const due = dueInfo(first);
+  const status = due ? dueStatus(due)
+    : !born || months === null || day === null ? '' : months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`;
   const unbornKids = kids.filter((c) => c.birthday && !isBorn(c));
   const bornKids = kids.filter((c) => c.birthday && isBorn(c));
+  // '함께한 날'은 태어난 아이 중 맏이 기준 (첫째가 아직 뱃속이어도 형·누나가 있으면 보여요)
+  const eldest = [...bornKids].sort((a, b) => a.birthday!.localeCompare(b.birthday!))[0];
+  const together = eldest ? babyDay(eldest.birthday) : null;
   const unnamed = isOwner ? kids.find(needsName) : undefined;
   const photoCount = tiles?.reduce((n, t) => n + t.count, 0);
   const base = useMemo(() => (tiles || []).filter((t) => tab === 'all' || t.likedBy.includes(me.id)), [tiles, tab, me.id]);
@@ -101,15 +106,15 @@ export function AlbumHome() {
           </button>
         )}
 
-        {unbornKids.length > 0 && <DueCard kids={unbornKids} label={label} />}
-        {born && bornKids.length > 0 && <BirthdayCard kids={bornKids} label={label} />}
+        {unbornKids.length > 0 && <DueCard kids={unbornKids} label={label} onBorn={isOwner ? editProfile : undefined} />}
+        {bornKids.length > 0 && <BirthdayCard kids={bornKids} label={label} />}
 
         <div className={s.stats}>
           <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="photos">
             <b>{photoCount?.toLocaleString() ?? '–'}</b><span>사진</span>
           </button>
           <button onClick={() => setSheet('members')} data-stat="members"><b>{members.length}</b><span>가족</span></button>
-          {born && <div data-stat="days"><b>{day.toLocaleString()}</b><span>함께한 날</span></div>}
+          {together !== null && together >= 1 && <div data-stat="days"><b>{together.toLocaleString()}</b><span>함께한 날</span></div>}
         </div>
 
         <div className={s.btns}>
@@ -160,7 +165,7 @@ export function AlbumHome() {
 
 // ---------- 출산 예정일: 날짜는 크게, D-day, 0주 → 40주 막대 ----------
 // 쌍둥이처럼 예정일이 같으면 날짜 하나, 아이마다 다르면 한 줄씩
-function DueCard({ kids, label }: { kids: Child[]; label: (c: Child) => string }) {
+function DueCard({ kids, label, onBorn }: { kids: Child[]; label: (c: Child) => string; onBorn?: () => void }) {
   const rows = kids.map((c) => ({ c, info: dueInfo(c)! })).filter((r) => r.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft);
   if (!rows.length) return null;
   const same = rows.every((r) => r.c.birthday === rows[0].c.birthday);
@@ -174,7 +179,7 @@ function DueCard({ kids, label }: { kids: Child[]; label: (c: Child) => string }
             <span className={s.dueLabel}>출산 예정일 <em>{one.year}</em></span>
             <b className={s.dueDate}>{one.date}</b>
           </div>
-          <b className={s.dday} data-f="dday">D-{first.info.daysLeft}</b>
+          <b className={s.dday} data-f="dday">{ddayText(first.info)}</b>
         </div>
       ) : (
         <>
@@ -186,7 +191,7 @@ function DueCard({ kids, label }: { kids: Child[]; label: (c: Child) => string }
                 <li key={c.id} data-due-kid={c.id}>
                   <b>{label(c)}</b>
                   <span>{d.date}<small>{d.year}</small></span>
-                  <em>D-{info.daysLeft}</em>
+                  <em>{ddayText(info)}</em>
                 </li>
               );
             })}
@@ -194,6 +199,12 @@ function DueCard({ kids, label }: { kids: Child[]; label: (c: Child) => string }
         </>
       )}
       <Weeks info={first.info} who={same ? '' : label(first.c)} />
+      {/* 예정일이 됐거나 지났으면: 관리자가 바로 '태어났어요'로 바꿀 수 있게 */}
+      {onBorn && first.info.daysLeft <= 0 && (
+        <button type="button" className={s.bornSet} onClick={onBorn} data-f="born-set">
+          👶 태어났어요! 생일 넣기 <Icon name="right" size={16} stroke={2.4} />
+        </button>
+      )}
     </section>
   );
 }

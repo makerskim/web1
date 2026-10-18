@@ -47,14 +47,26 @@ returns boolean language sql immutable as $$
          or char_length(coalesce(x->>'nickname', '')) > 20
          or char_length(coalesce(x->>'name', '')) > 20
          or (jsonb_typeof(x->'birthday') = 'string' and (x->>'birthday') !~ '^\d{4}-\d{2}-\d{2}$')
-         or (x ? 'birthday' and jsonb_typeof(x->'birthday') not in ('string', 'null')))
+         or (x ? 'birthday' and jsonb_typeof(x->'birthday') not in ('string', 'null'))
+         or (x ? 'born' and jsonb_typeof(x->'born') <> 'boolean'))
 $$;
 alter table public.families drop constraint if exists families_children_check;
 alter table public.families add constraint families_children_check check (public.valid_children(children));
 -- 예전 앨범은 baby_name·baby_birthday를 첫째 아이로 옮겨요
 update public.families
-set children = jsonb_build_array(jsonb_build_object('id', gen_random_uuid()::text, 'nickname', '', 'name', baby_name, 'birthday', baby_birthday))
+set children = jsonb_build_array(jsonb_build_object('id', gen_random_uuid()::text, 'nickname', '', 'name', baby_name, 'birthday', baby_birthday,
+                                                    'born', baby_birthday is not null and baby_birthday <= current_date))
 where children = '[]'::jsonb and (baby_name <> '' or baby_birthday is not null);
+-- 아이마다 '태어났는지'를 적어 둬요 (지난 날짜는 생일, 앞으로의 날짜는 출산 예정일)
+-- 이렇게 해 두면 예정일이 지나도 '태어났어요'를 누르기 전까지는 태어났다고 하지 않아요
+update public.families f
+set children = (
+  select jsonb_agg(case when x ? 'born' or jsonb_typeof(x->'birthday') <> 'string' then x
+                        else x || jsonb_build_object('born', (x->>'birthday') <= to_char(current_date, 'YYYY-MM-DD')) end
+                   order by i)
+  from jsonb_array_elements(f.children) with ordinality as t(x, i))
+where jsonb_typeof(f.children) = 'array' and jsonb_array_length(f.children) > 0
+  and exists (select 1 from jsonb_array_elements(f.children) x where not x ? 'born' and jsonb_typeof(x->'birthday') = 'string');
 
 create table if not exists public.members (
   family_id    uuid not null references public.families(id) on delete cascade,

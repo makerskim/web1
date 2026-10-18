@@ -11,6 +11,7 @@ import { useSession } from '../state/session';
 import * as api from '../lib/api';
 import { childName, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
 import { callName } from '../lib/korean';
+import { ymd } from '../lib/dates';
 import { KidsForm } from '../components/KidsForm';
 import s from './Start.module.css';
 
@@ -62,6 +63,7 @@ export function CreateAlbum() {
     e.preventDefault();
     const filled = kids.filter((c) => childName(c));
     if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요.');
+    if (filled.some((c) => c.born && c.birthday && c.birthday > ymd(new Date()))) return toast('태어난 날은 오늘이나 그 전 날짜로 골라 주세요.');
     if (!role.trim()) return toast('아이와 어떤 사이인지 적어 주세요.');
     const p = progress('앨범을 만들고 있어요');
     try {

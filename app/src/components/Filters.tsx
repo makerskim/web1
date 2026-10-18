@@ -135,21 +135,23 @@ function DateSheet({ open, onClose, items, value, onPick, unit }: {
     let sc = el.parentElement;
     while (sc && !/(auto|scroll)/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
     if (!sec || !sc) return;
-    const bar = el.querySelector<HTMLElement>('[data-cal-week]')?.offsetHeight || 0;
+    const bar = el.querySelector<HTMLElement>('[data-cal-top]')?.offsetHeight || 0; // 위에 붙은 '모든 날짜'+요일 줄만큼 덜 내려요
     sc.scrollTop += sec.getBoundingClientRect().top - sc.getBoundingClientRect().top - bar;
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Sheet open={open} onClose={onClose} title="날짜" tall>
       <div ref={box} className={s.calBox}>
-        <button type="button" className={s.option} onClick={() => onPick(null)} aria-pressed={!value} data-day-all>
-          <span className={s.allIcon}><Icon name="calendar" size={22} /></span>
-          <span className={s.optLabel}>모든 날짜</span>
-          <small>{items.length}{unit}</small>
-          {!value && <Icon name="check" size={20} className={s.check} />}
-        </button>
-
-        <div className={s.weekBar} data-cal-week aria-hidden="true">{WEEKDAYS.map((w) => <span key={w}>{w}</span>)}</div>
+        {/* '모든 날짜'와 요일 줄은 위에 붙어 있어서, 아무리 내려가도 한 번에 풀 수 있어요 */}
+        <div className={s.calTop} data-cal-top>
+          <button type="button" className={`${s.option} ${s.allRow}`} onClick={() => onPick(null)} aria-pressed={!value} data-day-all>
+            <span className={s.allIcon}><Icon name="calendar" size={22} /></span>
+            <span className={s.optLabel}>모든 날짜</span>
+            <small>{items.length}{unit}</small>
+            {!value && <Icon name="check" size={20} className={s.check} />}
+          </button>
+          <div className={s.weekBar} data-cal-week aria-hidden="true">{WEEKDAYS.map((w) => <span key={w}>{w}</span>)}</div>
+        </div>
 
         {cal.months.map(({ k, y, m }) => {
           const n = cal.byMonth.get(k) || 0;

@@ -16,7 +16,7 @@ import { clearCache } from '../lib/photoCache';
 import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
-import { fmtShort } from '../lib/dates';
+import { fmtShort, ymd } from '../lib/dates';
 import { childName, isBorn, kidsPatch, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
 import { KidsForm } from '../components/KidsForm';
 
@@ -367,6 +367,7 @@ export function AlbumInfo() {
   const save = async () => {
     const filled = kids.filter((c) => childName(c));
     if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요');
+    if (filled.some((c) => c.born && c.birthday && c.birthday > ymd(new Date()))) return toast('태어난 날은 오늘이나 그 전 날짜로 골라 주세요');
     const n = spaceAmp(albumName);
     if (!n) return toast('앨범 이름을 적어 주세요');
     try {

@@ -11,16 +11,20 @@ export interface Child {
   name: string;
   /** 생일 또는 출산 예정일 'YYYY-MM-DD' */
   birthday: string | null;
+  /** 태어났는지 (false: 날짜는 출산 예정일 · true: 날짜는 생일 · 없음: 예전 앨범이라 날짜로 짐작) */
+  born?: boolean;
 }
 
 export const MAX_KIDS = 6;
-export const newChild = (p: Partial<Child> = {}): Child => ({ id: uuid(), nickname: '', name: '', birthday: null, ...p });
+export const newChild = (p: Partial<Child> = {}): Child => ({ id: uuid(), nickname: '', name: '', birthday: null, born: false, ...p });
 
 /** 보이는 이름: 이름이 있으면 이름, 없으면 태명 */
 export const childName = (c: Child) => (c.name.trim() || c.nickname.trim());
 
-/** 태어났는지 (생일이 오늘이거나 지났으면) */
-export const isBorn = (c: Child, at: Date = new Date()) => {
+/** 태어났는지: '태어났어요'를 눌렀으면 그대로, 예전 앨범은 날짜로 짐작 (오늘이거나 지났으면)
+ *  예정일이 지나도 '뱃속에 있어요'면 아직 안 태어난 거예요 (늦게 태어나는 아기가 많아요) */
+export const isBorn = (c: Pick<Child, 'birthday' | 'born'>, at: Date = new Date()) => {
+  if (typeof c.born === 'boolean') return c.born;
   const d = babyDay(c.birthday, at);
   return d !== null && d >= 1;
 };
@@ -52,14 +56,25 @@ export function kidsFrom(raw: unknown, babyName: string, babyBirthday: string | 
       nickname: typeof x.nickname === 'string' ? x.nickname : '',
       name: typeof x.name === 'string' ? x.name : '',
       birthday: typeof x.birthday === 'string' && toDate(x.birthday) ? x.birthday : null,
+      ...(typeof x.born === 'boolean' ? { born: x.born } : {}),
     }));
   }
-  if (babyName || babyBirthday) return [newChild({ name: babyName || '', birthday: babyBirthday })];
+  if (babyName || babyBirthday) return [newChild({ name: babyName || '', birthday: babyBirthday, born: undefined })];
   return [];
 }
 
+/** 사진의 나이('생후 N일')·기념일의 기준 날짜: 첫째 아이의 생일
+ *  아직 뱃속이면 예정일까지는 예정일('출산 D-30'), 예정일이 지났으면 없음 (태어난 것처럼 보이지 않게) */
+export function ageBirthday(kids: Child[], at: Date = new Date()): string | null {
+  const c = kids[0];
+  if (!c?.birthday) return null;
+  if (isBorn(c, at)) return c.birthday;
+  const d = babyDay(c.birthday, at);
+  return d !== null && d < 1 ? c.birthday : null;
+}
+
 /** 앨범에 바로 반영할 값 (보이는 이름·기준 생일 포함) */
-export const kidsPatch = (kids: Child[]) => ({ children: kids, babyName: kidsLabel(kids), babyBirthday: kids[0]?.birthday ?? null });
+export const kidsPatch = (kids: Child[]) => ({ children: kids, babyName: kidsLabel(kids), babyBirthday: ageBirthday(kids) });
 
 /** 출산 예정일까지: 예정일을 임신 40주 0일로 봐요 (태어났거나 날짜가 없으면 null) */
 export interface DueInfo {
@@ -72,13 +87,19 @@ export interface DueInfo {
   progress: number;
 }
 export const FULL_TERM = 280;
-export function dueInfo(c: Pick<Child, 'birthday'> | null | undefined, now: Date = new Date()): DueInfo | null {
+export function dueInfo(c: Pick<Child, 'birthday' | 'born'> | null | undefined, now: Date = new Date()): DueInfo | null {
   const d = c?.birthday ? babyDay(c.birthday, now) : null;
-  if (d === null || d >= 1) return null;
+  if (d === null || !c || isBorn(c, now)) return null;
+  // 예정일이 지났는데 아직 뱃속이면 0이나 음수 (D-day, D+3)
   const daysLeft = 1 - d;
   const gest = Math.min(FULL_TERM, Math.max(0, FULL_TERM - daysLeft));
   return { daysLeft, week: Math.floor(gest / 7), day: gest % 7, progress: gest / FULL_TERM };
 }
+
+/** 'D-68' · 'D-day' · 'D+3' */
+export const ddayText = (i: DueInfo) => (i.daysLeft > 0 ? `D-${i.daysLeft.toLocaleString()}` : i.daysLeft === 0 ? 'D-day' : `D+${(-i.daysLeft).toLocaleString()}`);
+/** 이름 아래 한 줄: '만나기까지 68일' · '오늘이 예정일이에요' · '예정일이 3일 지났어요' */
+export const dueStatus = (i: DueInfo) => (i.daysLeft > 0 ? `만나기까지 ${i.daysLeft.toLocaleString()}일` : i.daysLeft === 0 ? '오늘이 예정일이에요' : `예정일이 ${(-i.daysLeft).toLocaleString()}일 지났어요`);
 
 /** '임신 30주 2일' (아직 너무 이르면 '') */
 export const weeksLabel = (i: DueInfo) => (i.week || i.day ? `임신 ${i.week}주${i.day ? ` ${i.day}일` : ''}` : '');

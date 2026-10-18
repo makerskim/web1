@@ -23,12 +23,17 @@
 
 /* 날짜: 아이폰 달력 앱처럼 달이 위아래로 이어져요 */
 .calBox { padding-bottom: var(--s-4); }
-.weekBar {
+/* 위에 붙는 띠: '모든 날짜' + 요일 줄 */
+.calTop {
   position: sticky; top: calc(var(--s-2) * -1); z-index: 2;
-  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-  margin: var(--s-2) calc(var(--gutter) * -1) 0; padding: var(--s-2) var(--gutter);
+  margin: 0 calc(var(--gutter) * -1); padding: 0 var(--gutter);
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-hairline);
+}
+.allRow { min-height: 3.25rem; padding: var(--s-1) 0; }
+.weekBar {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: var(--s-2) 0;
 }
 .weekBar span { text-align: center; font-size: var(--t-footnote); font-weight: 600; color: var(--c-label-3); }
 
