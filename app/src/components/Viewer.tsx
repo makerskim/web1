@@ -116,7 +116,7 @@ export function Viewer({ items, start, onClose, onOpenPost }: {
           <motion.header className={s.top} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className={s.head}>
               <span className={s.count}>{items.length > 1 ? `${index + 1} / ${items.length}` : ''}</span>
-              <button className={s.btn} onClick={() => saveWithChoice(it.albumId, [it], it.createdAt)} aria-label="휴대폰에 저장"><Icon name="download" size={22} /></button>
+              <button className={s.btn} onClick={() => saveWithChoice(it.albumId, [it], { who: author.displayName, album: useSession.getState().albums.find((a) => a.id === it.albumId)?.name || album?.name || '' })} aria-label="휴대폰에 저장"><Icon name="download" size={22} /></button>
               <button className={s.btn} onClick={onClose} aria-label="닫기" data-v="close"><Icon name="close" size={24} /></button>
             </div>
           </motion.header>

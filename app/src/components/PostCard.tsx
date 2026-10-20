@@ -71,7 +71,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
     <article className={s.card} data-id={post.id}>
       <header className={s.head}>
         <span className={s.who}>
-          <Avatar src={author.avatar} name={author.displayName} size={34} />
+          <Avatar src={author.avatar} name={author.displayName} size={36} />
           <span className={s.whoText}><b>{author.displayName}</b>{age && <small>{age}</small>}</span>
         </span>
         <button className={s.iconBtn} onClick={() => h.onMore(post)} aria-label="더보기" data-act="more"><Icon name="more" size={22} /></button>

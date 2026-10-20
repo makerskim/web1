@@ -7,11 +7,17 @@ import type { PhotoMeta } from './types';
 
 const MIME_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif' };
 
-// 원본 이름은 살리되 확장자는 항상 사진 형식으로
-function originalName(p: PhotoMeta, blob: Blob, fallback: string) {
+/** 내려받는 파일 이름에 쓸 것: 올린 사람 · 앨범 이름 */
+export interface SaveName { who: string; album: string }
+
+// 파일 이름: '아빠_씩씩이&튼튼이네앨범_20261020' (내려받은 날, 여러 장이면 _1, _2 …)
+// 글자 단위로 잘라요 (이모지가 반으로 잘리지 않게), 보이지 않는 글자도 빼요
+const clean = (v: string) => Array.from(v.replace(/[\\/:*?"<>|\u0000-\u001f\uFFFD]/g, '').replace(/\p{Cf}/gu, '').replace(/\s+/g, '')).slice(0, 30).join('');
+function fileName(n: SaveName | undefined, i: number, count: number, blob: Blob) {
+  const day = ymd(new Date()).replace(/-/g, '');
+  const stem = [clean(n?.who || ''), clean(n?.album || ''), day].filter(Boolean).join('_') + (count > 1 ? `_${i + 1}` : '');
   const ext = MIME_EXT[blob.type] || 'jpg';
-  const stem = String(p.origName || '').replace(/\.[^.]*$/, '').replace(/[^\p{L}\p{N} _()-]/gu, '').trim().slice(0, 60);
-  return { name: `${stem || fallback}.${ext}`, type: MIME_EXT[blob.type] ? blob.type : 'image/jpeg' };
+  return { name: `${stem}.${ext}`, type: MIME_EXT[blob.type] ? blob.type : 'image/jpeg' };
 }
 
 function download(file: File) {
@@ -41,9 +47,8 @@ function kakaoBlocked() {
   return true;
 }
 
-export async function savePhotos(albumId: string, photos: PhotoMeta[], takenAt: string, original = false) {
+export async function savePhotos(albumId: string, photos: PhotoMeta[], naming?: SaveName, original = false) {
   if (kakaoBlocked()) return;
-  const day = ymd(takenAt).replace(/-/g, '');
   const prog = photos.length > 1 || original ? progress(original ? '원본을 받는 중' : '사진을 받는 중') : null;
   let cleaned = 0;
   let noOrig = 0;
@@ -52,18 +57,16 @@ export async function savePhotos(albumId: string, photos: PhotoMeta[], takenAt: 
     for (let i = 0; i < photos.length; i++) {
       const p = photos[i];
       let blob: Blob | null = null;
-      let name = `pastel_${day}_${i + 1}.jpg`;
-      let type = 'image/jpeg';
       if (original && p.orig) {
         try {
           blob = await fetchFile(albumId, p.orig);
-          ({ name, type } = originalName(p, blob, `pastel_${day}_${i + 1}_original`));
         } catch (e) {
           if (!(e as { notFound?: boolean }).notFound) throw e;
           cleaned++;
         }
       } else if (original) noOrig++;
       if (!blob) blob = await photoBlob(albumId, p.path);
+      const { name, type } = fileName(naming, i, photos.length, blob);
       files.push(new File([blob], name, { type }));
       prog?.set((i + 1) / photos.length);
     }
@@ -93,16 +96,16 @@ export async function savePhotos(albumId: string, photos: PhotoMeta[], takenAt: 
 }
 
 // 내려받기는 언제나 원본으로 (원본이 없는 사진만 그 사진을 일반 화질로 받고 알려 줘요)
-export async function saveWithChoice(albumId: string, photos: PhotoMeta[], takenAt: string) {
-  return savePhotos(albumId, photos, takenAt, photos.some((p) => p.orig));
+export async function saveWithChoice(albumId: string, photos: PhotoMeta[], naming?: SaveName) {
+  return savePhotos(albumId, photos, naming, photos.some((p) => p.orig));
 }
 
-export async function sharePhotos(albumId: string, photos: PhotoMeta[], text: string) {
+export async function sharePhotos(albumId: string, photos: PhotoMeta[], text: string, naming?: SaveName) {
   if (kakaoBlocked()) return;
   let files: File[] | null = null;
   try {
     const blobs = await Promise.all(photos.map((p) => photoBlob(albumId, p.path)));
-    files = blobs.map((b, i) => new File([b], `pastel_${i + 1}.jpg`, { type: 'image/jpeg' }));
+    files = blobs.map((b, i) => { const f = fileName(naming, i, blobs.length, b); return new File([b], f.name, { type: f.type }); });
     if (navigator.canShare?.({ files })) { await navigator.share({ files, text }); return; }
     if (navigator.share) { await navigator.share({ text }); return; }
   } catch (e) {
