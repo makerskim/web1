@@ -32,7 +32,8 @@ export const viewItems = (posts: Post[]): ViewItem[] => posts.flatMap((p) => p.p
 // 내려받는 파일 이름: 올린 사람 · 앨범 이름
 const naming = (p: Post): SaveName => {
   const st = useSession.getState();
-  return { who: st.member(p.authorId).displayName, album: st.album()?.name || '' };
+  // 사진이 있는 앨범의 이름 (다른 앨범 링크로 들어와도 맞게)
+  return { who: st.member(p.authorId).displayName, album: st.albums.find((a) => a.id === p.albumId)?.name || '' };
 };
 
 // 피드·게시물 화면에서 쓰는 카드 동작

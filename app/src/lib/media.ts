@@ -11,7 +11,8 @@ const MIME_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'pn
 export interface SaveName { who: string; album: string }
 
 // 파일 이름: '아빠_씩씩이&튼튼이네앨범_20261020' (내려받은 날, 여러 장이면 _1, _2 …)
-const clean = (v: string) => v.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '').slice(0, 30);
+// 글자 단위로 잘라요 (이모지가 반으로 잘리지 않게), 보이지 않는 글자도 빼요
+const clean = (v: string) => Array.from(v.replace(/[\\/:*?"<>|\u0000-\u001f\uFFFD]/g, '').replace(/\p{Cf}/gu, '').replace(/\s+/g, '')).slice(0, 30).join('');
 function fileName(n: SaveName | undefined, i: number, count: number, blob: Blob) {
   const day = ymd(new Date()).replace(/-/g, '');
   const stem = [clean(n?.who || ''), clean(n?.album || ''), day].filter(Boolean).join('_') + (count > 1 ? `_${i + 1}` : '');
