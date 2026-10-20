@@ -1,5 +1,5 @@
 .wordmark { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.03em; max-width: 70vw; }
-.wordmark span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wordmark > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .milestone { display: flex; align-items: center; gap: var(--s-2); margin: 0 var(--gutter) var(--s-4); padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #ffeef3, #f1ecff); }
 .milestone p { flex: 1; font-size: var(--t-sub); }
 .milestone button { width: 36px; height: 36px; display: grid; place-items: center; color: var(--c-label-3); }

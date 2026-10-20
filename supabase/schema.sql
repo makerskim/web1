@@ -32,6 +32,41 @@ alter table public.families add constraint families_cover_check check (
   cover = ''
   or cover ~ ('^' || id::text || '/(cover/[0-9]+|[0-9a-f-]{36}/[0-9]+_t)\.jpg$')
   or cover ~ '^drive:[A-Za-z0-9_-]{10,200}$');
+-- 아이들(태명·이름·생일)과 앨범 소개 — 한 명이 기본, 쌍둥이·다둥이는 여러 명
+alter table public.families add column if not exists children jsonb not null default '[]';
+alter table public.families add column if not exists bio text not null default '';
+alter table public.families drop constraint if exists families_bio_check;
+alter table public.families add constraint families_bio_check check (char_length(bio) <= 150);
+create or replace function public.valid_children(c jsonb)
+returns boolean language sql immutable as $$
+  select jsonb_typeof(c) = 'array' and jsonb_array_length(c) <= 6 and pg_column_size(c) < 4000
+    and not exists (
+      select 1 from jsonb_array_elements(c) x
+      where jsonb_typeof(x) <> 'object'
+         or char_length(coalesce(x->>'id', '')) > 40
+         or char_length(coalesce(x->>'nickname', '')) > 20
+         or char_length(coalesce(x->>'name', '')) > 20
+         or (jsonb_typeof(x->'birthday') = 'string' and (x->>'birthday') !~ '^\d{4}-\d{2}-\d{2}$')
+         or (x ? 'birthday' and jsonb_typeof(x->'birthday') not in ('string', 'null'))
+         or (x ? 'born' and jsonb_typeof(x->'born') <> 'boolean'))
+$$;
+alter table public.families drop constraint if exists families_children_check;
+alter table public.families add constraint families_children_check check (public.valid_children(children));
+-- 예전 앨범은 baby_name·baby_birthday를 첫째 아이로 옮겨요
+update public.families
+set children = jsonb_build_array(jsonb_build_object('id', gen_random_uuid()::text, 'nickname', '', 'name', baby_name, 'birthday', baby_birthday,
+                                                    'born', baby_birthday is not null and baby_birthday <= current_date))
+where children = '[]'::jsonb and (baby_name <> '' or baby_birthday is not null);
+-- 아이마다 '태어났는지'를 적어 둬요 (지난 날짜는 생일, 앞으로의 날짜는 출산 예정일)
+-- 이렇게 해 두면 예정일이 지나도 '태어났어요'를 누르기 전까지는 태어났다고 하지 않아요
+update public.families f
+set children = (
+  select jsonb_agg(case when x ? 'born' or jsonb_typeof(x->'birthday') <> 'string' then x
+                        else x || jsonb_build_object('born', (x->>'birthday') <= to_char(current_date, 'YYYY-MM-DD')) end
+                   order by i)
+  from jsonb_array_elements(f.children) with ordinality as t(x, i))
+where jsonb_typeof(f.children) = 'array' and jsonb_array_length(f.children) > 0
+  and exists (select 1 from jsonb_array_elements(f.children) x where not x ? 'born' and jsonb_typeof(x->'birthday') = 'string');
 
 create table if not exists public.members (
   family_id    uuid not null references public.families(id) on delete cascade,
@@ -345,6 +380,28 @@ drop trigger if exists members_keep_owner on public.members;
 create trigger members_keep_owner after delete on public.members
   for each row execute function public.keep_an_owner();
 
+-- 계정을 지우기 전에 (나 혼자 있는 앨범을 지우기 전에) 막히는 게 있는지: 없으면 null
+-- 다른 가족이 있고 내가 관리자인 앨범이 내 구글 드라이브를 쓰고 있으면 'drive_connected'
+create or replace function public.delete_account_check()
+returns text language sql stable security definer set search_path = public as $$
+  select case when exists (
+    select 1 from drive_tokens t
+    join members m on m.family_id = t.family_id and m.user_id = t.connected_by and m.role = 'owner'
+    where t.connected_by = auth.uid()
+      and exists (select 1 from members o where o.family_id = t.family_id and o.user_id <> t.connected_by)
+  ) then 'drive_connected' end
+$$;
+
+-- 계정을 지우면 내 구글 드라이브 연결이 풀리는 앨범들 (이제 관리자가 아니거나 나간 앨범)
+-- 그 앨범의 드라이브 사진은 가족이 더 이상 볼 수 없게 돼요 → 지우기 전에 알려 줘요
+create or replace function public.drive_links_to_release()
+returns setof text language sql stable security definer set search_path = public as $$
+  select f.name from drive_tokens t join families f on f.id = t.family_id
+  where t.connected_by = auth.uid()
+    and not exists (select 1 from members m where m.family_id = t.family_id and m.user_id = auth.uid() and m.role = 'owner')
+  order by f.name
+$$;
+
 -- 계정 삭제: 나 혼자 있는 앨범은 앱에서 먼저 지워야 해요 (사진 파일 정리)
 -- 올린 사진·댓글은 가족 앨범에 남아요
 create or replace function public.delete_account()
@@ -355,6 +412,14 @@ begin
              and not exists (select 1 from members o where o.family_id = m.family_id and o.user_id <> m.user_id)) then
     raise exception 'sole_member';
   end if;
+  -- 내가 관리자로 있는 앨범이 내 구글 드라이브를 쓰고 있으면 먼저 연결을 끊어야 해요
+  if public.delete_account_check() is not null then
+    raise exception 'drive_connected';
+  end if;
+  -- 이미 나갔거나 관리자가 아닌 앨범에 남은 내 드라이브 연결은 여기서 끊어요 (지운 사람의 드라이브를 계속 쓰지 않게)
+  update families set storage = 'supabase', drive_email = null
+    where id in (select family_id from drive_tokens where connected_by = auth.uid());
+  delete from drive_tokens where connected_by = auth.uid();
   delete from likes where user_id = auth.uid();
   delete from auth.users where id = auth.uid();
 end $$;
@@ -372,7 +437,7 @@ revoke all on public.families, public.members, public.posts, public.likes, publi
   from anon, authenticated;
 
 grant select, delete on public.families to authenticated;
-grant update (name, baby_name, baby_birthday, storage, cover) on public.families to authenticated;
+grant update (name, baby_name, baby_birthday, storage, cover, children, bio) on public.families to authenticated;
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
 grant select, delete on public.posts to authenticated;
@@ -388,14 +453,14 @@ revoke execute on function
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
   public.family_files(uuid), public.check_post_photos(), public.clear_cover_on_post_delete(), public.keep_an_owner(),
-  public.delete_account()
+  public.delete_account_check(), public.drive_links_to_release(), public.delete_account()
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
-  public.family_files(uuid), public.delete_account()
+  public.family_files(uuid), public.delete_account_check(), public.drive_links_to_release(), public.delete_account()
   to authenticated;
 
 drop policy if exists families_select on public.families;

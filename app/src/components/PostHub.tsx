@@ -69,6 +69,9 @@ async function postMenu(p: Post) {
     try {
       await api.deletePost(p);
       usePosts.getState().remove(p.id);
+      // 앨범 사진으로 쓰던 사진이면 (서버에서도 비워져요) 화면에서도 비워요
+      const cover = st.album()?.cover;
+      if (cover && (cover.startsWith(`${p.albumId}/${p.id}/`) || p.photos.some((ph) => ph.thumb === cover))) st.patchAlbum({ cover: '' });
       pr.close();
       toast('게시물을 지웠어요');
       if (location.hash.startsWith(`#/p/${p.id}`)) history.back();

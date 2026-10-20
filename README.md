@@ -114,7 +114,7 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 
 ## 무료로 얼마나?
 
-- Supabase 무료 저장공간 **1GB**: 원본까지 올리면 약 250~400장, 원본 없이 3,000장 이상
+- Supabase 무료 저장공간 **1GB**: 사진은 언제나 원본과 함께 저장돼서 약 250~400장 (휴대폰 사진 크기에 따라 달라요). 더 많이 올리려면 6번의 구글 드라이브를 연결하세요.
 - 구글 드라이브: 관리자의 드라이브 공간(무료 15GB)만큼
 - 7일 동안 아무도 앱을 쓰지 않으면 Supabase 프로젝트가 잠시 멈춰요. 대시보드에서 **Restore**를 누르면 다시 켜져요.
 
@@ -124,11 +124,11 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 |---|---|
 | “이 로그인 방법이 아직 켜져 있지 않아요” | 3-6 · 4-5번 Providers 설정 확인 |
 | 카카오 **KOE006** | 3-3 리다이렉트 URI가 2번과 **같은 REST API 키**에 정확히 들어갔는지 |
-| 카카오 **KOE010** | 6번 Client Secret Code가 같은 키의 시크릿인지 |
-| 카카오 **KOE101** | 6번 REST API Key 칸에 JavaScript 키를 넣지 않았는지 |
-| 카카오 **KOE004** | 4번 사용 설정 ON |
-| 카카오 **KOE205** | 5번 닉네임·프로필 사진 동의항목이 '사용 안 함'이 아닌지 |
-| 카카오 로그인 후 “Error getting user email” | 6번 **Allow users without an email** 켜기 |
+| 카카오 **KOE010** | 3-3 · 3-6번: Client Secret Code가 같은 REST API 키의 시크릿인지 |
+| 카카오 **KOE101** | 3-6번: REST API Key 칸에 JavaScript 키를 넣지 않았는지 |
+| 카카오 **KOE004** | 3-4번: 사용 설정 ON |
+| 카카오 **KOE205** | 3-5번: 닉네임·프로필 사진 동의항목이 '사용 안 함'이 아닌지 |
+| 카카오 로그인 후 “Error getting user email” | 3-6번: **Allow users without an email** 켜기 |
 | 구글 **redirect_uri_mismatch** | 4-3 승인된 리디렉션 URI 확인 (JavaScript 원본 칸이 아니에요) |
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
@@ -146,5 +146,5 @@ npm run dev      # http://localhost:5173
 npm run build    # 타입 검사 + app/dist 에 빌드
 ```
 
-- 화면: `app/src/screens` · 공통 부품: `app/src/components` · 데이터: `app/src/lib` · 사진 편집기: `app/src/editor`
+- 화면: `app/src/screens` · 공통 부품: `app/src/components` · 데이터: `app/src/lib` (사진 올리기 준비: `app/src/lib/photo.ts`)
 - 디자인 규칙(색·글자 크기·간격·모서리·움직임)은 모두 `app/src/styles/tokens.css` 에 있어요.

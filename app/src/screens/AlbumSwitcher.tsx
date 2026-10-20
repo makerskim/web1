@@ -5,6 +5,7 @@ import { Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
 import { useSession } from '../state/session';
 import { usePosts } from '../state/posts';
+import { spaceAmp } from '../lib/kids';
 
 export function AlbumSwitcher({ open, onClose }: { open: boolean; onClose: () => void }) {
   const albums = useSession((st) => st.albums);
@@ -26,7 +27,7 @@ export function AlbumSwitcher({ open, onClose }: { open: boolean; onClose: () =>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-6)' }}>
         <Group>
           {albums.map((a) => (
-            <Row key={a.id} icon={<Logo size={30} />} label={a.name} detail={a.myRole === 'owner' ? '관리자' : undefined} onClick={() => pick(a.id)} chevron={false}>
+            <Row key={a.id} icon={<Logo size={30} />} label={spaceAmp(a.name)} detail={a.myRole === 'owner' ? '관리자' : undefined} onClick={() => pick(a.id)} chevron={false}>
               {a.id === albumId && <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />}
             </Row>
           ))}

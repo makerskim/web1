@@ -46,6 +46,26 @@ export function fmtMonth(v: D) {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 }
 
+// '8월 20일 (목)' — 올해가 아니면(또는 withYear) 앞에 '2025년 '
+export function fmtDay(v: D, withYear?: boolean) {
+  const d = toDate(v);
+  if (!d) return '';
+  const y = withYear ?? d.getFullYear() !== new Date().getFullYear();
+  return `${y ? `${d.getFullYear()}년 ` : ''}${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEK[d.getDay()]})`;
+}
+
+// 달력 머리줄: 일 월 화 수 목 금 토
+export const WEEKDAYS: readonly string[] = WEEK;
+
+// 달력 한 달 칸 (m은 0부터): 앞쪽 빈칸(null) + 1…말일. fill을 주면 그 칸 수까지 뒤를 빈칸으로 채워요
+export function monthCells(y: number, m: number, fill = 0): (number | null)[] {
+  const first = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const out: (number | null)[] = [...Array<null>(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  while (out.length < fill) out.push(null);
+  return out;
+}
+
 export function timeAgo(v: D) {
   const d = toDate(v);
   if (!d) return '';

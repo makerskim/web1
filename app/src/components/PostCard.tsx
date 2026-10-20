@@ -65,7 +65,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
     const el = capRef.current;
     setLong(!!el && !open && el.scrollHeight > el.clientHeight + 1);
   }, [post.caption, open]);
-  const shownComments = full ? [] : post.comments.slice(-2);
+  const nComments = post.comments.length;
 
   return (
     <article className={s.card} data-id={post.id}>
@@ -126,10 +126,10 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
             {long && <button className={s.more} onClick={() => setOpen(true)}>더 보기</button>}
           </>
         )}
-        {!full && post.comments.length > 2 && <button className={s.more} onClick={() => h.onComments(post)}>댓글 {post.comments.length}개 모두 보기</button>}
-        {shownComments.map((c) => (
-          <p key={c.id} className={s.comment}><b>{member(c.authorId).displayName}</b> {c.body}</p>
-        ))}
+        {/* 댓글 내용은 눌러야 보여요 (피드·게시물 화면 모두) */}
+        {nComments > 0 && (
+          <button className={s.cmtLink} onClick={() => h.onComments(post)} data-act="comments-link">댓글 {nComments}개 보기</button>
+        )}
         <time className={s.time} dateTime={post.createdAt}>{timeAgo(post.createdAt)}</time>
       </div>
     </article>

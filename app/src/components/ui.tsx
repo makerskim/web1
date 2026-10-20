@@ -14,26 +14,48 @@ export const softSpring = { type: 'spring' as const, stiffness: 260, damping: 30
 // ---------- 뒤로 가기로 닫기 ----------
 // 창을 열 때 기록을 하나 쌓고, 휴대폰 '뒤로'를 누르면 맨 위 창만 닫아요.
 // 코드로 닫을 때는 쌓은 기록을 되돌리는데, 그게 끝날 때까지 다음 창은 기다렸다 열려요.
+// 사파리는 back()을 한꺼번에 두 번 하면 하나만 해요 → 되돌리기는 언제나 하나씩 차례로 해요.
 let seq = 0;
 const stack: Array<{ id: number; close: () => void }> = [];
+const undo = new Set<number>(); // 닫혀서 빼야 할 기록
 let ignorePops = 0;
 let backDone: Promise<void> = Promise.resolve();
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', () => {
     if (ignorePops > 0) { ignorePops--; return; }
     stack.pop()?.close();
+    // 드러난 기록이 이미 닫힌 창의 것이면 그것도 빼요
+    if (undo.has(history.state?.pmOverlay)) popLater();
   });
 }
+// 맨 위 기록이 뺄 것이면 하나 빼고, 끝날 때까지 기다렸다 그다음을 봐요 (닫힌 순서와 상관없이 다 빠져요)
+async function popUndone() {
+  while (undo.delete(history.state?.pmOverlay)) {
+    ignorePops++;
+    await new Promise<void>((resolve) => {
+      // popstate 처리가 다 끝난 다음 순간에 끝나요 (그 안에서 바로 back 하지 않게)
+      const done = () => { window.removeEventListener('popstate', done); clearTimeout(t); setTimeout(resolve, 0); };
+      window.addEventListener('popstate', done);
+      const t = setTimeout(done, 600);
+      history.back();
+    });
+  }
+}
+const popLater = () => { backDone = backDone.then(popUndone).catch(() => {}); };
 function undoEntry(id: number) {
-  if (history.state?.pmOverlay !== id) return;
-  ignorePops++;
-  backDone = new Promise((resolve) => {
-    const done = () => { window.removeEventListener('popstate', done); resolve(); };
-    window.addEventListener('popstate', done);
-    setTimeout(done, 600);
-    history.back();
-  });
+  undo.add(id);
+  popLater();
 }
+// 되돌리기가 모두 끝날 때까지 기다려요 (기다리는 사이 새로 생긴 것까지)
+async function backIdle() {
+  for (let p = backDone; ; p = backDone) {
+    await p;
+    if (p === backDone) return;
+  }
+}
+// 확인 창·메뉴가 닫힌 뒤 직접 history.back() 하기 전에 기다려요.
+// 창이 기록을 되돌리는 건 React가 그린 직후라, 한 순간 쉬고 나서 끝나기를 기다려요.
+export const afterBack = () => new Promise<void>((r) => setTimeout(r, 0)).then(backIdle);
 
 export function useBackClose(open: boolean, onClose: () => void) {
   const cb = useRef(onClose);
@@ -43,14 +65,16 @@ export function useBackClose(open: boolean, onClose: () => void) {
     const id = ++seq;
     const entry = { id, close: () => { entry.closed = true; cb.current(); } } as { id: number; close: () => void; closed?: boolean };
     let cancelled = false;
-    backDone.then(() => {
+    let pushed = false;
+    backIdle().then(() => {
       if (cancelled) return;
+      pushed = true;
       stack.push(entry);
       history.pushState({ ...(history.state || {}), pmOverlay: id }, '');
     });
     return () => {
       cancelled = true;
-      if (entry.closed) return;
+      if (entry.closed || !pushed) return;
       const i = stack.indexOf(entry);
       if (i >= 0) stack.splice(i, 1);
       undoEntry(id);

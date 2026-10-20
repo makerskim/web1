@@ -5,6 +5,7 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { remember } from './photoCache';
 import type { ActivityEvent, Album, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
+import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -13,10 +14,20 @@ function check<T>({ data, error }: { data: T; error: unknown }): T {
   return data;
 }
 
-const album = (r: Row, m?: Row): Album => ({
-  id: r.id, name: r.name, babyName: r.baby_name, babyBirthday: r.baby_birthday, inviteCode: r.invite_code,
-  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id, cover: r.cover || '',
+const album = (r: Row, m?: Row): Album => {
+  const children = kidsFrom(r.children, r.baby_name || '', r.baby_birthday || null);
+  return {
+  id: r.id, name: r.name, children, bio: r.bio || '',
+  babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children.length ? ageBirthday(children) : r.baby_birthday ?? null, inviteCode: r.invite_code,
+  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id && !!r.drive_email, cover: r.cover || '',
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
+  };
+};
+// 아이 목록을 저장할 모양으로 (예전 칸 baby_name·baby_birthday도 첫째 아이로 맞춰 둬요)
+const kidsRow = (kids: Child[]) => ({
+  children: kids.map((c) => ({ id: c.id, nickname: c.nickname.trim(), name: c.name.trim(), birthday: c.birthday, ...(typeof c.born === 'boolean' ? { born: c.born } : {}) })),
+  baby_name: kids[0] ? childName(kids[0]).slice(0, 20) : '',
+  baby_birthday: kids[0]?.birthday ?? null,
 });
 const member = (r: Row): Member => ({ userId: r.user_id, displayName: r.display_name, avatar: r.avatar || '', role: r.role, joinedAt: r.joined_at });
 const comment = (r: Row): Comment => ({ id: r.id, postId: r.post_id, authorId: r.author_id, body: r.body, createdAt: r.created_at });
@@ -55,7 +66,16 @@ export async function signIn(provider: 'kakao' | 'google') {
 export async function signOut() { await sb.auth.signOut(); }
 
 // 계정 삭제: 나 혼자 있는 앨범은 사진 파일까지 먼저 지우고, 그다음 계정을 지워요
+/** 계정을 지우면 내 구글 드라이브 연결이 풀리는 앨범 이름들 */
+export async function driveLinksToRelease(): Promise<string[]> {
+  const rows = check(await sb.rpc('drive_links_to_release')) as unknown;
+  return Array.isArray(rows) ? rows.map((r) => (typeof r === 'string' ? r : String(Object.values(r as object)[0] ?? ''))).filter(Boolean) : [];
+}
+
 export async function deleteAccount(uid: string, mine: Album[]) {
+  // 막히는 게 있으면 아무것도 지우기 전에 알려 줘요 (혼자 있는 앨범 사진이 먼저 지워지지 않게)
+  const blocked = check(await sb.rpc('delete_account_check')) as string | null;
+  if (blocked) throw new Error(friendly(blocked));
   for (const a of mine) {
     const others = (check(await sb.from('members').select('user_id').eq('family_id', a.id).neq('user_id', uid).limit(1)) as Row[]).length;
     if (!others) await deleteAlbum(a.id, uid);
@@ -70,10 +90,13 @@ export async function albums(uid: string): Promise<Album[]> {
   return (rows as Row[]).filter((r) => r.families).map((r) => album(r.families, r));
 }
 
-export async function createAlbum(p: { name: string; babyName: string; babyBirthday: string | null; displayName: string; avatar: string }) {
+export async function createAlbum(p: { name: string; children: Child[]; bio?: string; displayName: string; avatar: string }) {
+  const k = kidsRow(p.children);
   const f = check(await sb.rpc('create_family', {
-    p_name: p.name, p_baby_name: p.babyName, p_baby_birthday: p.babyBirthday, p_display_name: p.displayName, p_avatar: p.avatar,
+    p_name: p.name, p_baby_name: k.baby_name, p_baby_birthday: k.baby_birthday, p_display_name: p.displayName, p_avatar: p.avatar,
   })) as Row;
+  // 아이들(태명·이름)과 소개는 만든 뒤에 저장해요. 데이터베이스가 예전 설정이어도 앨범은 만들어져요
+  await sb.from('families').update({ children: k.children, ...(p.bio ? { bio: p.bio } : {}) }).eq('id', f.id).then(() => {}, () => {});
   return f.id as string;
 }
 
@@ -87,11 +110,11 @@ export async function joinAlbum(code: string, displayName: string, avatar: strin
   return f.id as string;
 }
 
-export async function updateAlbum(id: string, patch: { name?: string; babyName?: string; babyBirthday?: string | null; storage?: StorageKind; cover?: string }) {
+export async function updateAlbum(id: string, patch: { name?: string; children?: Child[]; bio?: string; storage?: StorageKind; cover?: string }) {
   const row: Row = {};
   if (patch.name !== undefined) row.name = patch.name;
-  if (patch.babyName !== undefined) row.baby_name = patch.babyName;
-  if (patch.babyBirthday !== undefined) row.baby_birthday = patch.babyBirthday || null;
+  if (patch.children !== undefined) Object.assign(row, kidsRow(patch.children));
+  if (patch.bio !== undefined) row.bio = patch.bio;
   if (patch.storage !== undefined) row.storage = patch.storage;
   if (patch.cover !== undefined) row.cover = patch.cover;
   const rows = check(await sb.from('families').update(row).eq('id', id).select('id')) as Row[];
@@ -217,7 +240,7 @@ export async function postTiles(albumId: string): Promise<PostTile[]> {
   }
 }
 
-export interface NewPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string; dec: boolean; orig?: File }
+export interface NewPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string; orig?: File }
 export interface OrigInfo { type: string; ext: string }
 
 const ORIG_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
@@ -254,7 +277,7 @@ export async function createPost(
       metas.push({
         path: await put(`${i}.jpg`, ph.blob, 'image/jpeg', true),
         thumb: await put(`${i}_t.jpg`, ph.thumb, 'image/jpeg', true),
-        w: ph.w, h: ph.h, ph: ph.ph, dec: ph.dec,
+        w: ph.w, h: ph.h, ph: ph.ph,
       });
     }
     for (let i = 0; i < p.photos.length; i++) {

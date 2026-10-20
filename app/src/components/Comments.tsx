@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sheet, confirm, toast } from './ui';
 import { Avatar } from './Avatar';
@@ -9,7 +9,23 @@ import { timeAgo } from '../lib/dates';
 import type { Post } from '../lib/types';
 import s from './Comments.module.css';
 
-const EMOJIS = ['❤️', '🥰', '😍', '👏', '😂', '🥹', '👍', '🎉'];
+// 자판이 가리는 높이 (iOS·안드로이드 모두 보이는 영역 기준으로 재요)
+function useKeyboardInset(on: boolean) {
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!on || !vv) return;
+    const measure = () => {
+      const k = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+      setKb(k > 80 ? k : 0);
+    };
+    measure();
+    vv.addEventListener('resize', measure);
+    vv.addEventListener('scroll', measure);
+    return () => { vv.removeEventListener('resize', measure); vv.removeEventListener('scroll', measure); };
+  }, [on]);
+  return on ? kb : 0;
+}
 
 export function Comments({ post, open, onClose }: { post: Post | null; open: boolean; onClose: () => void }) {
   const live = usePosts((st) => (post ? st.byId[post.id] : undefined)) || post;
@@ -19,10 +35,14 @@ export function Comments({ post, open, onClose }: { post: Post | null; open: boo
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const list = useRef<HTMLDivElement>(null);
-  const input = useRef<HTMLInputElement>(null);
   const count = live?.comments.length ?? 0;
+  const kb = useKeyboardInset(open);
+  const kbOpen = kb > 0;
 
+  // 새 댓글이 생기거나 자판이 올라오면 맨 아래 댓글이 보이게
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [count]);
+  // 자판이 올라올 때만 (닫힐 때나 확대할 때는 읽던 자리 그대로)
+  useEffect(() => { if (kbOpen) list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [kbOpen]);
   useEffect(() => { if (!open) setText(''); }, [open]);
 
   const send = async (body: string) => {
@@ -72,17 +92,12 @@ export function Comments({ post, open, onClose }: { post: Post | null; open: boo
               })}
             </AnimatePresence>
           </div>
-          <div className={s.composer}>
-            <div className={s.emojis}>
-              {EMOJIS.map((e) => (
-                <button key={e} type="button" onPointerDown={(ev) => { if (document.activeElement === input.current) ev.preventDefault(); }}
-                  onClick={() => setText((t) => t + e)} aria-label={`${e} 넣기`} data-emoji={e}>{e}</button>
-              ))}
-            </div>
+          {/* 이모티콘은 휴대폰 자판으로 넣어요. 자판이 올라오면 입력칸이 그 바로 위에 와요 */}
+          <div className={s.composer} style={{ '--kb': `${kb}px` } as CSSProperties} data-kb={kbOpen ? '' : undefined}>
             <form className={s.form} onSubmit={(e) => { e.preventDefault(); send(text); }}>
               <Avatar src={me ? member(me.id).avatar : ''} name={me ? member(me.id).displayName : ''} size={32} />
               <div className={s.pill}>
-                <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="댓글 달기…" maxLength={1000} enterKeyHint="send" aria-label="댓글" />
+                <input value={text} onChange={(e) => setText(e.target.value)} placeholder="댓글 달기…" maxLength={1000} enterKeyHint="send" aria-label="댓글" />
                 <button type="submit" disabled={!text.trim() || busy} className={s.post}>게시</button>
               </div>
             </form>
