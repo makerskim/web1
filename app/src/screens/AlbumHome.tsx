@@ -1,7 +1,7 @@
 // 가족 탭: 인스타그램 프로필처럼 — 앨범 사진 · 아이 이름 · 소개 · 출산 예정일 · 큰 숫자 · 버튼 · 사진 그리드
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Page, TopBar, IconButton } from '../components/Bars';
+import { Page } from '../components/Bars';
 import { Photo } from '../components/Photo';
 import { Icon, type IconName } from '../components/Icon';
 import { FilterChips, NO_FILTER, matches, type Filter } from '../components/Filters';
@@ -10,9 +10,9 @@ import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { babyAge, babyDay, babyMonths, fmtDate, ymd } from '../lib/dates';
-import { childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, type Child } from '../lib/kids';
+import { childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, type Child } from '../lib/kids';
 import { DatePickerSheet } from '../components/DatePicker';
-import { menu, toast } from '../components/ui';
+import { toast } from '../components/ui';
 import { subj } from '../lib/korean';
 import { InviteSheet } from './Invite';
 import { ProfileSheet } from './Settings';
@@ -52,7 +52,6 @@ export function AlbumHome() {
 
   const kids = album.children || [];
   const today = ymd(new Date());
-  const dueMax = ymd(new Date(Date.now() + 300 * 86400000));
   const label = (c: Child) => childName(c) || ORDER[kids.indexOf(c)] || '아이';
   // 아이 정보가 없는 예전 앨범은 앨범 날짜로 한 아이를 만들어 보여요
   const all: Child[] = kids.length ? kids : album.babyBirthday ? [newChild({ id: 'legacy', birthday: album.babyBirthday, born: undefined })] : [];
@@ -96,26 +95,16 @@ export function AlbumHome() {
   const names = album.babyName || album.name;
   const editProfile = () => nav('/settings/album/info');
 
-  // 관리자: '만나기까지'를 누르면 예정일 바꾸기 / 태어났어요 / 생일 바꾸기 (그 아이와 쌍둥이만)
-  type DateMode = 'due' | 'born' | 'bday';
+  // 예정일이 지났을 때 '태어났나요?' → 태어난 날만 고르면 돼요 (그 아이와 쌍둥이만). 다른 건 모두 '프로필 편집'에서
+  type DateMode = 'born';
   const [dp, setDp] = useState<{ mode: DateMode; ids: string[] } | null>(null);
   const openDp = (mode: DateMode) => setDp({ mode, ids: group.map((c) => c.id) });
-  const editDates = async () => {
-    const items: Array<{ label: string; value: DateMode | 'edit'; icon: IconName }> = born
-      ? [{ label: '생일 바꾸기', value: 'bday', icon: 'calendar' }]
-      : [{ label: '출산 예정일 바꾸기', value: 'due', icon: 'calendar' }, { label: '태어났어요! 생일 넣기', value: 'born', icon: 'sparkles' }];
-    items.push({ label: '프로필 편집 (이름·소개)', value: 'edit', icon: 'edit' });
-    const weeks = due && due.daysLeft > 0 ? weeksLabel(due) : '';
-    const v = await menu(items, `${who}${born ? '생일' : '출산 예정일'} · ${fmtDate(bday)}${weeks ? ` (${weeks})` : ''}`);
-    if (v === 'edit') editProfile();
-    else if (v) openDp(v);
-  };
   const saving = useRef(false);
   const saveDate = async (mode: DateMode, v: string, ids: string[]) => {
     if (saving.current) return; // 두 번 눌러도 한 번만
     saving.current = true;
     const albumId = album.id;
-    const nowBorn = mode !== 'due';
+    const nowBorn = mode === 'born';
     const next = kids.length
       ? kids.map((c) => (ids.includes(c.id) ? { ...c, birthday: v, born: nowBorn } : c))
       : [newChild({ birthday: v, born: nowBorn })];
@@ -123,13 +112,12 @@ export function AlbumHome() {
       await api.updateAlbum(albumId, { children: next });
       // 그사이 다른 앨범으로 옮겼으면 화면은 건드리지 않아요 (다음에 불러올 때 반영돼요)
       if (useSession.getState().albumId === albumId) useSession.getState().patchAlbum(kidsPatch(next));
-      toast(mode === 'born' ? '축하해요! 🎉 이름도 넣어 주세요' : mode === 'due' ? '출산 예정일을 바꿨어요' : '생일을 바꿨어요');
+      toast('축하해요! 🎉 이름도 넣어 주세요');
     } catch (e) { toast((e as Error).message); } finally { saving.current = false; }
   };
 
   return (
     <Page>
-      <TopBar large title={<AmpText className={s.title} text={album.name} />} right={<IconButton icon="settings" label="설정" onClick={() => nav('/settings')} />} />
 
       <section className={s.profile}>
         <div className={s.head}>
@@ -137,17 +125,14 @@ export function AlbumHome() {
             ? <button className={s.cover} onClick={cover.open} aria-label="앨범 사진 바꾸기" data-f="cover"><CoverFace size={88} /><span className={s.coverEdit}><Icon name="camera" size={13} stroke={2.2} /></span></button>
             : <div className={s.cover}><CoverFace size={88} /></div>}
           <div className={s.who}>
-            <h2 className={`${s.names} ${all.length > 2 ? s.namesMany : ''}`} data-f="names"><AmpText text={names} /></h2>
-            {/* 만나기까지 · 생후: 크게. 관리자는 눌러서 예정일·생일을 바로 바꿔요 */}
-            {status && (isOwner
-              ? <button className={s.status} onClick={editDates} data-f="status" aria-haspopup="dialog"><span>{who}{status}</span><Icon name="edit" size={15} stroke={2.2} className={s.statusEdit} /></button>
-              : <p className={s.status} data-f="status">{who}{status}</p>)}
+            {/* 인스타그램처럼: 이름 옆에 설정 */}
+            <div className={s.nameRow}>
+              <h2 className={`${s.names} ${all.length > 2 ? s.namesMany : ''}`} data-f="names"><AmpText text={names} /></h2>
+              <button className={s.gear} onClick={() => nav('/settings')} aria-label="설정" data-f="settings"><Icon name="settings" size={24} /></button>
+            </div>
+            {/* 만나기까지 · 생후: 크게 */}
+            {status && <p className={s.status} data-f="status">{who}{status}</p>}
             {statusNote && <p className={s.note} data-f={due ? 'due' : 'birthday'}>{statusNote}</p>}
-            {!bday && isOwner && (
-              <button className={s.link} onClick={() => openDp(focus?.born === true ? 'bday' : 'due')} data-f="due-add">
-                {focus?.born === true ? '+ 생일 넣기' : '+ 출산 예정일 넣기'}
-              </button>
-            )}
             {/* 인스타그램처럼 숫자는 작게 한 줄로 */}
             <div className={s.stats}>
               <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="photos">사진 <b>{photoCount?.toLocaleString() ?? '–'}</b>장</button>
@@ -184,12 +169,10 @@ export function AlbumHome() {
         </div>
       </section>
 
-      {/* 예정일 바꾸기 · 태어난 날 넣기 · 생일 바꾸기 */}
+      {/* 태어난 날 고르기 */}
       {isOwner && (
-        <DatePickerSheet open={!!dp} onClose={() => setDp(null)}
-          title={`${who}${dp?.mode === 'born' ? '언제 태어났나요?' : dp?.mode === 'bday' ? '생일' : '출산 예정일'}`}
-          value={dp?.mode === 'born' ? today : dp?.mode === 'due' ? (due ? bday : null) : bday}
-          min={dp?.mode === 'due' ? today : '2000-01-01'} max={dp?.mode === 'due' ? dueMax : today}
+        <DatePickerSheet open={!!dp} onClose={() => setDp(null)} title={`${who}언제 태어났나요?`}
+          value={today} min="2000-01-01" max={today}
           onChange={(v) => { if (v && dp) saveDate(dp.mode, v, dp.ids); }} />
       )}
 

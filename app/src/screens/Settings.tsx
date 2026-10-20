@@ -16,15 +16,13 @@ import { clearCache } from '../lib/photoCache';
 import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
-import { fmtShort, ymd } from '../lib/dates';
-import { childName, isBorn, kidsPatch, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
+import { ymd } from '../lib/dates';
+import { childName, kidsPatch, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
 import { KidsForm } from '../components/KidsForm';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import s from './Settings.module.css';
-
-const KID_ORDER = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째'];
 
 // ---------- 내 프로필 (이름·사진) ----------
 export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -272,10 +270,8 @@ export function AlbumSettings() {
   const members = useSession((st) => st.members);
   const isOwner = album.myRole === 'owner';
   const nav = useNavigate();
-  const cover = useCoverChanger();
   const [sheet, setSheet] = useState<'members' | null>(null);
   const code = `${album.inviteCode.slice(0, 4)}-${album.inviteCode.slice(4)}`;
-  const edit = isOwner ? () => nav('/settings/album/info') : undefined;
   const alone = members.length <= 1;
 
   const newCode = async () => {
@@ -312,24 +308,8 @@ export function AlbumSettings() {
     <Page>
       <TopBar back title="앨범 설정" />
       <div className={s.page}>
-        <div className={s.hero}>
-          <CoverFace size={88} />
-          {isOwner && <button className={s.heroLink} onClick={cover.open} data-row="cover">앨범 사진 바꾸기</button>}
-        </div>
-
-        <Group title="앨범 정보" footer={isOwner ? '누르면 프로필 편집에서 바꿀 수 있어요. 아이 나이(생후 N일)는 사진을 올린 날 기준으로 보여 줘요.' : '앨범 정보는 관리자만 바꿀 수 있어요.'}>
-          {/* 관리자: 이름·소개·아이 줄을 누르면 모두 프로필 편집으로 */}
-          {isOwner
-            ? <Row icon={<Icon name="edit" size={22} />} label="프로필 편집" detail={spaceAmp(album.name)} onClick={edit} data-row="album-name" />
-            : <Row label="앨범 이름" detail={spaceAmp(album.name)} data-row="album-name" />}
-          <Row label="소개" detail={album.bio || '없음'} onClick={edit} data-row="bio" />
-          {album.children.map((c, i) => (
-            <Row key={c.id} label={album.children.length > 1 ? `${KID_ORDER[i]} 아이` : '아이'} onClick={edit} data-row={`kid${i}`}
-              detail={`${childName(c) || '이름 없음'}${c.birthday ? ` · ${isBorn(c) ? '' : '예정 '}${fmtShort(c.birthday)}` : ''}`} />
-          ))}
-        </Group>
-
-        <Group title="가족" footer={isOwner ? '관리자는 앨범 정보와 가족을 관리할 수 있어요.' : undefined}>
+        {/* 이름·소개·출산 예정일·앨범 사진은 가족 탭의 '프로필 편집'에서 바꿔요 */}
+        <Group title="가족" footer={isOwner ? '관리자는 가족과 초대 코드를 관리할 수 있어요.' : undefined}>
           <Row icon={<Icon name="users" size={22} />} label="가족 구성원" detail={`${members.length}명`} onClick={() => setSheet('members')} data-row="members" />
           <Row icon={<Icon name="key" size={22} />} label="초대 코드" detail={code} onClick={async () => { if (await copyText(album.inviteCode)) toast('초대 코드를 복사했어요'); }} chevron={false} />
           {isOwner && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
@@ -345,7 +325,6 @@ export function AlbumSettings() {
           {isOwner && <Row label="앨범 지우기" onClick={remove} danger chevron={false} data-row="delete-album" />}
         </Group>
       </div>
-      {cover.ui}
       <MembersSheet open={sheet === 'members'} onClose={() => setSheet(null)} />
     </Page>
   );

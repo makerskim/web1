@@ -11,7 +11,7 @@ import { Button } from './Button';
 import { useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { saveWithChoice, sharePhotos } from '../lib/media';
+import { saveWithChoice, sharePhotos, type SaveName } from '../lib/media';
 import { callName, subj } from '../lib/korean';
 import type { PostHandlers } from './PostCard';
 import type { Post } from '../lib/types';
@@ -29,14 +29,20 @@ export const viewItems = (posts: Post[]): ViewItem[] => posts.flatMap((p) => p.p
   ...ph, albumId: p.albumId, postId: p.id, authorId: p.authorId, takenAt: p.takenAt, createdAt: p.createdAt,
 })));
 
+// 내려받는 파일 이름: 올린 사람 · 앨범 이름
+const naming = (p: Post): SaveName => {
+  const st = useSession.getState();
+  return { who: st.member(p.authorId).displayName, album: st.album()?.name || '' };
+};
+
 // 피드·게시물 화면에서 쓰는 카드 동작
 export function usePostHandlers(extra: Partial<PostHandlers> = {}): PostHandlers {
   return {
     onComments: (p) => openComments(p.id),
     onView: (p, i) => openViewer({ items: viewItems([p]), start: i }),
-    onSave: (p) => saveWithChoice(p.albumId, p.photos, p.createdAt),
+    onSave: (p) => saveWithChoice(p.albumId, p.photos, naming(p)),
     onLikes: (p) => openLikes(p.id),
-    onShare: (p) => shareText(p).then((t) => sharePhotos(p.albumId, p.photos, t)),
+    onShare: (p) => shareText(p).then((t) => sharePhotos(p.albumId, p.photos, t, naming(p))),
     onMore: (p) => postMenu(p),
     ...extra,
   };
@@ -60,8 +66,8 @@ async function postMenu(p: Post) {
   if (mine) items.push({ label: '글 고치기', value: 'edit', icon: 'edit' });
   if (mine || st.isOwner()) items.push({ label: '게시물 지우기', value: 'delete', icon: 'trash', danger: true });
   const v = await menu(items);
-  if (v === 'save') saveWithChoice(p.albumId, p.photos, p.createdAt);
-  if (v === 'share') sharePhotos(p.albumId, p.photos, await shareText(p));
+  if (v === 'save') saveWithChoice(p.albumId, p.photos, naming(p));
+  if (v === 'share') sharePhotos(p.albumId, p.photos, await shareText(p), naming(p));
   if (v === 'link' && await copyText(`${location.origin}${location.pathname}#/p/${p.id}`)) toast('링크를 복사했어요');
   if (v === 'edit') useHub.setState({ edit: p.id });
   if (v === 'delete' && await confirm({ title: '게시물을 지울까요?', message: '사진과 댓글이 모두 사라져요.', ok: '지우기', danger: true })) {
