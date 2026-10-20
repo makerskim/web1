@@ -1,12 +1,12 @@
-.chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); padding: var(--s-3) var(--gutter); }
+.chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); padding: var(--s-2) var(--gutter); }
 .chip {
-  display: inline-flex; align-items: center; height: 2.75rem; border-radius: var(--r-full);
+  display: inline-flex; align-items: center; height: 2.5rem; border-radius: var(--r-full);
   background: var(--c-surface); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); color: var(--c-label);
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 .chipMain { display: inline-flex; align-items: center; gap: 4px; height: 100%; padding: 0 var(--s-3) 0 var(--s-4); font-size: var(--t-sub); font-weight: 600; color: inherit; white-space: nowrap; }
 .chip:not(.on) .chipMain { padding-right: var(--s-3); }
-.chipX { display: grid; place-items: center; width: 44px; height: 100%; margin-left: -8px; color: inherit; }
+.chipX { display: grid; place-items: center; width: 40px; height: 100%; margin-left: -8px; color: inherit; }
 .chip.on { background: var(--c-label); color: var(--c-surface); box-shadow: none; }
 
 .list { display: flex; flex-direction: column; }
