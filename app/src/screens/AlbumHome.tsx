@@ -9,8 +9,10 @@ import { AmpText, CoverFace, MembersSheet, useCoverChanger } from '../components
 import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { babyAge, babyDay, babyMilestone, babyMonths, fmtDate } from '../lib/dates';
-import { childName, ddayText, dueInfo, dueStatus, isBorn, needsName, weeksLabel, type Child, type DueInfo } from '../lib/kids';
+import { babyAge, babyDay, babyMonths, fmtDate, ymd } from '../lib/dates';
+import { childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, type Child } from '../lib/kids';
+import { DatePickerSheet } from '../components/DatePicker';
+import { menu, toast } from '../components/ui';
 import { subj } from '../lib/korean';
 import { InviteSheet } from './Invite';
 import { ProfileSheet } from './Settings';
@@ -23,11 +25,6 @@ const TABS: Array<{ id: Tab; icon: IconName; label: string }> = [
 ];
 const ORDER = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째'];
 
-// '2026년 12월 24일 목요일' → { year: '2026년', date: '12월 24일 목요일' }
-const splitDate = (v: string) => {
-  const [year, ...rest] = fmtDate(v, true).split(' ');
-  return { year, date: rest.join(' ') };
-};
 
 export function AlbumHome() {
   const album = useAlbum()!;
@@ -64,7 +61,6 @@ export function AlbumHome() {
   const due = dueInfo(first);
   const status = due ? dueStatus(due)
     : !born || months === null || day === null ? '' : months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`;
-  const unbornKids = kids.filter((c) => c.birthday && !isBorn(c));
   const bornKids = kids.filter((c) => c.birthday && isBorn(c));
   // '함께한 날'은 태어난 아이 중 맏이 기준 (첫째가 아직 뱃속이어도 형·누나가 있으면 보여요)
   const eldest = [...bornKids].sort((a, b) => a.birthday!.localeCompare(b.birthday!))[0];
@@ -77,6 +73,51 @@ export function AlbumHome() {
   const editProfile = () => nav('/settings/album/info');
   const label = (c: Child) => childName(c) || ORDER[kids.indexOf(c)] || '아이';
 
+  // 날짜 한 줄씩: 첫째(쌍둥이면 함께) + 예정일이 다른 아이
+  const today = ymd(new Date());
+  const dueMax = ymd(new Date(Date.now() + 300 * 86400000));
+  const dateLines: Array<{ key: string; kind: 'due' | 'birthday'; text: string }> = [];
+  const seen = new Set<string>();
+  for (const c of kids) {
+    if (!c.birthday) continue;
+    const b = isBorn(c);
+    const k = `${b}|${c.birthday}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const who = kids.length > 1 && dateLines.length > 0 ? `${label(c)} ` : '';
+    if (b) {
+      dateLines.push({ key: k, kind: 'birthday', text: `🎂 ${who}${fmtDate(c.birthday)} 태어났어요` });
+    } else {
+      const i = dueInfo(c);
+      const w = i && i.daysLeft > 0 ? weeksLabel(i) : '';
+      const when = fmtDate(c.birthday).replace(/^\d{4}년 /, (y) => (c.birthday!.slice(0, 4) === today.slice(0, 4) ? '' : y));
+      dateLines.push({ key: k, kind: 'due', text: `🗓️ ${who}${when} 출산 예정${w ? ` · ${w}` : ''}${who && i ? ` · ${dueStatus(i)}` : ''}` });
+    }
+  }
+
+  // 관리자: '만나기까지'를 누르면 예정일 바꾸기 / 태어났어요 / 생일 바꾸기
+  const [dp, setDp] = useState<'due' | 'born' | 'bday' | null>(null);
+  const editDates = async () => {
+    const items: Array<{ label: string; value: 'due' | 'born' | 'bday' | 'edit'; icon: IconName }> = born
+      ? [{ label: '생일 바꾸기', value: 'bday', icon: 'calendar' }]
+      : [{ label: '출산 예정일 바꾸기', value: 'due', icon: 'calendar' }, { label: '태어났어요! 생일 넣기', value: 'born', icon: 'sparkles' }];
+    items.push({ label: '프로필 편집 (이름·소개)', value: 'edit', icon: 'edit' });
+    const v = await menu(items, born ? '생일' : '출산 예정일');
+    if (v === 'edit') editProfile();
+    else if (v) setDp(v);
+  };
+  // 첫째(그리고 같은 날인 쌍둥이)의 날짜를 바꿔요. 아이 정보가 없으면 새로 만들어요
+  const saveDate = async (mode: 'due' | 'born' | 'bday', v: string) => {
+    const t = kids[0];
+    const same = (c: Child) => !!t && c.birthday === t.birthday && isBorn(c) === isBorn(t);
+    const next = t ? kids.map((c) => (same(c) ? { ...c, birthday: v, born: mode !== 'due' } : c)) : [newChild({ birthday: v, born: mode !== 'due' })];
+    try {
+      await api.updateAlbum(album.id, { children: next });
+      useSession.getState().patchAlbum(kidsPatch(next));
+      toast(mode === 'born' ? '축하해요! 🎉 이름도 넣어 주세요' : mode === 'due' ? '출산 예정일을 바꿨어요' : '생일을 바꿨어요');
+    } catch (e) { toast((e as Error).message); }
+  };
+
   return (
     <Page>
       <TopBar large title={<AmpText className={s.title} text={album.name} />} right={<IconButton icon="settings" label="설정" onClick={() => nav('/settings')} />} />
@@ -84,38 +125,46 @@ export function AlbumHome() {
       <section className={s.profile}>
         <div className={s.head}>
           {isOwner
-            ? <button className={s.cover} onClick={cover.open} aria-label="앨범 사진 바꾸기" data-f="cover"><CoverFace size={104} /><span className={s.coverEdit}><Icon name="camera" size={15} stroke={2.2} /></span></button>
-            : <div className={s.cover}><CoverFace size={104} /></div>}
+            ? <button className={s.cover} onClick={cover.open} aria-label="앨범 사진 바꾸기" data-f="cover"><CoverFace size={88} /><span className={s.coverEdit}><Icon name="camera" size={13} stroke={2.2} /></span></button>
+            : <div className={s.cover}><CoverFace size={88} /></div>}
           <div className={s.who}>
             <h2 className={s.names} data-f="names"><AmpText text={names} /></h2>
-            {status
-              ? <p className={s.status} data-f="status">{status}</p>
-              : isOwner && !kids.some((c) => c.birthday) && <button className={s.link} onClick={editProfile} data-f="due-add">+ 예정일·생일 넣기</button>}
+            {/* 만나기까지 · 생후: 크게. 관리자는 눌러서 예정일·생일을 바로 바꿔요 */}
+            {status && (isOwner
+              ? <button className={s.status} onClick={editDates} data-f="status" aria-haspopup="dialog">{status}<Icon name="edit" size={15} stroke={2.2} className={s.statusEdit} /></button>
+              : <p className={s.status} data-f="status">{status}</p>)}
+            {!status && isOwner && <button className={s.link} onClick={() => setDp('due')} data-f="due-add">+ 출산 예정일 넣기</button>}
+            {/* 인스타그램처럼 숫자는 작게 한 줄로 */}
+            <div className={s.stats}>
+              <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="photos">사진 <b>{photoCount?.toLocaleString() ?? '–'}</b>장</button>
+              <button onClick={() => setSheet('members')} data-stat="members">가족 <b>{members.length}</b>명</button>
+              {together !== null && together >= 1 && <span data-stat="days">함께한 지 <b>{together.toLocaleString()}</b>일</span>}
+            </div>
           </div>
         </div>
+
+        {/* 날짜 한 줄: '12월 24일 출산 예정 · 임신 30주 5일' / '2026년 6월 1일 태어났어요' */}
+        {dateLines.length > 0 && (
+          <ul className={s.dates}>
+            {dateLines.map((l) => <li key={l.key} data-f={l.kind}>{l.text}</li>)}
+          </ul>
+        )}
 
         {album.bio
           ? <p className={s.bio} data-f="bio">{album.bio}</p>
           : isOwner && <button className={s.link} onClick={editProfile} data-f="bio-add">+ 소개 쓰기</button>}
 
-        {unnamed && (
-          <button className={s.born} onClick={editProfile} data-f="born">
-            <span className={s.bornIcon}>🎉</span>
-            <span><b>{subj(childName(unnamed))} 태어났어요!</b><small>이름을 넣으면 앨범에 이름으로 보여요</small></span>
-            <Icon name="right" size={18} stroke={2.2} />
+        {/* 예정일이 됐거나 지났으면: 태어났는지 물어봐요 */}
+        {isOwner && due && due.daysLeft <= 0 && (
+          <button className={s.banner} onClick={() => setDp('born')} data-f="born-set">
+            <span aria-hidden="true">👶</span><b>아기가 태어났나요? 생일 넣기</b><Icon name="right" size={16} stroke={2.4} />
           </button>
         )}
-
-        {unbornKids.length > 0 && <DueCard kids={unbornKids} label={label} onBorn={isOwner ? editProfile : undefined} />}
-        {bornKids.length > 0 && <BirthdayCard kids={bornKids} label={label} />}
-
-        <div className={s.stats}>
-          <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="photos">
-            <b>{photoCount?.toLocaleString() ?? '–'}</b><span>사진</span>
+        {unnamed && (
+          <button className={s.banner} onClick={editProfile} data-f="born">
+            <span aria-hidden="true">🎉</span><b>{subj(childName(unnamed))} 태어났어요! 이름 넣기</b><Icon name="right" size={16} stroke={2.4} />
           </button>
-          <button onClick={() => setSheet('members')} data-stat="members"><b>{members.length}</b><span>가족</span></button>
-          {together !== null && together >= 1 && <div data-stat="days"><b>{together.toLocaleString()}</b><span>함께한 날</span></div>}
-        </div>
+        )}
 
         <div className={s.btns}>
           {isOwner
@@ -125,11 +174,20 @@ export function AlbumHome() {
         </div>
       </section>
 
+      {/* 예정일 바꾸기 · 태어난 날 넣기 · 생일 바꾸기 */}
+      {isOwner && (
+        <DatePickerSheet open={!!dp} onClose={() => setDp(null)}
+          title={dp === 'born' ? '언제 태어났나요?' : dp === 'bday' ? '생일' : '출산 예정일'}
+          value={dp === 'born' ? today : dp === 'due' ? (due ? bday : null) : bday}
+          min={dp === 'due' ? today : '2000-01-01'} max={dp === 'due' ? dueMax : today}
+          onChange={(v) => { if (v && dp) saveDate(dp, v); }} />
+      )}
+
       <div ref={gridTop} className={s.gridTop} />
       <nav className={s.tabs} role="tablist" aria-label="사진 보기">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? s.tabOn : ''} onClick={() => setTab(t.id)} data-tab-grid={t.id}>
-            <Icon name={t.icon} size={22} stroke={tab === t.id ? 2.2 : 1.8} filled={t.id === 'liked' && tab === t.id} />
+            <Icon name={t.icon} size={20} stroke={tab === t.id ? 2.2 : 1.8} filled={t.id === 'liked' && tab === t.id} />
             <span>{t.label}</span>
           </button>
         ))}
@@ -160,91 +218,5 @@ export function AlbumHome() {
       <InviteSheet open={sheet === 'invite'} onClose={() => setSheet(null)} />
       <ProfileSheet open={sheet === 'profile'} onClose={() => setSheet(null)} />
     </Page>
-  );
-}
-
-// ---------- 출산 예정일: 날짜는 크게, D-day, 0주 → 40주 막대 ----------
-// 쌍둥이처럼 예정일이 같으면 날짜 하나, 아이마다 다르면 한 줄씩
-function DueCard({ kids, label, onBorn }: { kids: Child[]; label: (c: Child) => string; onBorn?: () => void }) {
-  const rows = kids.map((c) => ({ c, info: dueInfo(c)! })).filter((r) => r.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft);
-  if (!rows.length) return null;
-  const same = rows.every((r) => r.c.birthday === rows[0].c.birthday);
-  const first = rows[0];
-  const one = splitDate(first.c.birthday!);
-  return (
-    <section className={s.due} data-f="due" aria-label="출산 예정일">
-      {same ? (
-        <div className={s.dueTop}>
-          <div className={s.dueWhen}>
-            <span className={s.dueLabel}>출산 예정일 <em>{one.year}</em></span>
-            <b className={s.dueDate}>{one.date}</b>
-          </div>
-          <b className={s.dday} data-f="dday">{ddayText(first.info)}</b>
-        </div>
-      ) : (
-        <>
-          <span className={s.dueLabel}>출산 예정일</span>
-          <ul className={s.dueList}>
-            {rows.map(({ c, info }) => {
-              const d = splitDate(c.birthday!);
-              return (
-                <li key={c.id} data-due-kid={c.id}>
-                  <b>{label(c)}</b>
-                  <span>{d.date}<small>{d.year}</small></span>
-                  <em>{ddayText(info)}</em>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-      <Weeks info={first.info} who={same ? '' : label(first.c)} />
-      {/* 예정일이 됐거나 지났으면: 관리자가 바로 '태어났어요'로 바꿀 수 있게 */}
-      {onBorn && first.info.daysLeft <= 0 && (
-        <button type="button" className={s.bornSet} onClick={onBorn} data-f="born-set">
-          👶 태어났어요! 생일 넣기 <Icon name="right" size={16} stroke={2.4} />
-        </button>
-      )}
-    </section>
-  );
-}
-
-function Weeks({ info, who }: { info: DueInfo; who: string }) {
-  const pct = `${(info.progress * 100).toFixed(1)}%`;
-  const now = weeksLabel(info) || '두근두근 기다리는 중';
-  return (
-    <div className={s.weeks}>
-      <div className={s.track} role="progressbar" aria-label={`${who ? `${who} ` : ''}${now}`} aria-valuemin={0} aria-valuemax={40} aria-valuenow={info.week}>
-        <i className={s.fill} style={{ width: pct }} />
-        <i className={s.knob} style={{ left: pct }} />
-      </div>
-      <div className={s.weekText}>
-        <b>{who && <span>{who} · </span>}{now}</b>
-        <span>40주</span>
-      </div>
-    </div>
-  );
-}
-
-// ---------- 태어난 뒤: 생일 카드 (가볍게) ----------
-function BirthdayCard({ kids, label }: { kids: Child[]; label: (c: Child) => string }) {
-  const same = kids.every((c) => c.birthday === kids[0].birthday);
-  const b = kids[0].birthday!;
-  const day = babyDay(b) || 1;
-  const m = babyMilestone(b);
-  const note = day === 1 ? '오늘 태어났어요! 축하해요 🎉' : m ? `오늘은 ${m}이에요! 🎉` : `오늘로 ${day.toLocaleString()}일째예요`;
-  return (
-    <section className={s.bday} data-f="birthday" aria-label="생일">
-      <span className={s.bdayIcon} aria-hidden="true">🎂</span>
-      {same ? (
-        <span className={s.bdayText}><b>{fmtDate(b)} 태어났어요</b><small>{note}</small></span>
-      ) : (
-        <ul className={s.bdayList}>
-          {kids.map((c) => (
-            <li key={c.id}><b>{label(c)}</b> {fmtDate(c.birthday)} · {(babyDay(c.birthday) || 1).toLocaleString()}일째</li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
