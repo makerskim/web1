@@ -15,23 +15,30 @@
 .names {
   font-size: clamp(1.5rem, 1.1rem + 1.6vw, 1.875rem); font-weight: 800; letter-spacing: -0.035em; line-height: 1.2;
   word-break: keep-all; overflow-wrap: anywhere;
+  /* 이름이 길어도 두 줄까지 (사진이 밀려나지 않게) */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.namesMany { font-size: clamp(1.25rem, 1rem + 1vw, 1.5rem); }
 .status {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; text-align: left;
-  font-size: clamp(1.125rem, 1rem + .6vw, 1.3125rem); font-weight: 800; letter-spacing: -0.025em; line-height: 1.25; color: var(--c-accent-strong);
+  position: relative; display: inline-block; text-align: left; text-wrap: balance;
+  font-size: clamp(1.1875rem, 1.05rem + .6vw, 1.375rem); font-weight: 800; letter-spacing: -0.025em; line-height: 1.3;
+  color: #b04262; /* 진한 분홍: 작은 화면에서도 글자 대비 4.5 이상 */
 }
 button.status:active { opacity: .6; }
-.statusEdit { flex: none; opacity: .55; }
+.statusEdit { display: inline-block; vertical-align: -0.1em; margin-left: 5px; color: var(--c-label-3); }
+/* 보이는 크기는 그대로, 누르는 자리는 넉넉하게 (손가락이 큰 어르신도) */
+button.status::after, .stats button::after { content: ""; position: absolute; inset: -6px -6px; }
+.note { font-size: var(--t-sub); font-weight: 600; color: var(--c-label-2); line-height: 1.4; }
 /* 숫자는 작게 한 줄 (사진 1 · 가족 1) */
 .stats { display: flex; flex-wrap: wrap; gap: 0 var(--s-4); margin-top: 2px; }
-.stats > * { display: inline-block; min-height: 2rem; line-height: 2rem; font-size: var(--t-sub); color: var(--c-label-2); white-space: nowrap; }
+.stats > * { position: relative; display: inline-block; min-height: 2rem; line-height: 2rem; font-size: var(--t-sub); color: var(--c-label-2); white-space: nowrap; }
 .stats b { font-size: var(--t-callout); font-weight: 800; color: var(--c-label); font-variant-numeric: tabular-nums; }
 .stats button:active { opacity: .6; }
 /* 날짜 한 줄 */
 .dates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .dates li { font-size: var(--t-sub); font-weight: 600; color: var(--c-label-2); line-height: 1.45; }
 .bio { font-size: var(--t-callout); line-height: 1.5; color: var(--c-label); white-space: pre-wrap; margin-top: calc(var(--s-1) * -1); }
-.link { align-self: flex-start; min-height: 2.25rem; color: var(--c-accent-strong); font-size: var(--t-sub); font-weight: 700; text-align: left; }
+.link { align-self: flex-start; min-height: 2.75rem; color: #b04262; font-size: var(--t-sub); font-weight: 700; text-align: left; }
 /* 태어났나요? · 이름 넣기: 한 줄짜리 알림 */
 .banner {
   display: flex; align-items: center; gap: var(--s-2); min-height: 2.75rem; padding: 0 var(--s-3);
@@ -56,7 +63,7 @@ button.status:active { opacity: .6; }
 }
 .tabs button {
   position: relative; min-height: 2.75rem; display: flex; align-items: center; justify-content: center; gap: 6px;
-  color: var(--c-label-3); font-size: var(--t-sub); font-weight: 600;
+  color: var(--c-label-2); font-size: var(--t-sub); font-weight: 600;
   transition: color var(--dur-1) var(--ease);
 }
 .tabs button.tabOn { color: var(--c-label); }
