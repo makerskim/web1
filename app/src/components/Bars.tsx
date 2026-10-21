@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Icon, type IconName } from './Icon';
 import { markBack, scrollPageTop, usePageScroll } from './Stack';
+import { useSession } from '../state/session';
 import s from './Bars.module.css';
 
 // 위쪽 막대: 스크롤하면 유리처럼 흐려지고 얇은 선이 생겨요
@@ -59,6 +60,8 @@ const TABS: Array<{ to: string; icon: IconName; label: string }> = [
 
 export function TabBar({ onCompose, badge }: { onCompose: () => void; badge?: { activity?: number; home?: boolean } }) {
   const loc = useLocation();
+  // 친구·모임 앨범이면 '가족' 대신 '모임'
+  const group = useSession((st) => st.album()?.kind === 'group');
   return (
     <nav className={s.tabs} aria-label="메뉴">
       {TABS.map((t) => (t.to === '/new' ? (
@@ -66,12 +69,12 @@ export function TabBar({ onCompose, badge }: { onCompose: () => void; badge?: { 
           <span className={s.plus}><Icon name="plus" size={22} stroke={2.4} /></span>
         </motion.button>
       ) : (
-        <NavLink key={t.to} to={t.to} className={({ isActive }) => `${s.tab} ${isActive ? s.on : ''}`} data-tab={t.to.slice(1)} aria-label={t.label}
+        <NavLink key={t.to} to={t.to} className={({ isActive }) => `${s.tab} ${isActive ? s.on : ''}`} data-tab={t.to.slice(1)} aria-label={t.to === '/album' && group ? '모임' : t.label}
           onClick={(e) => { if (loc.pathname === t.to) { e.preventDefault(); scrollPageTop(true); } }}>
           {({ isActive }) => (
             <>
               <Icon name={t.icon} size={26} stroke={isActive ? 2.2 : 1.7} filled={isActive && t.icon !== 'grid'} />
-              <span>{t.label}</span>
+              <span>{t.to === '/album' && group ? '모임' : t.label}</span>
               {t.to === '/activity' && !!badge?.activity && <i className={s.badge}>{badge.activity > 9 ? '9+' : badge.activity}</i>}
               {t.to === '/home' && badge?.home && <i className={s.dot} />}
             </>

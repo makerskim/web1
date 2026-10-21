@@ -78,7 +78,7 @@ export function CoverFace({ size = 88 }: { size?: number }) {
     <span className={s.face} style={{ width: size, height: size }}>
       {album.cover && !failed
         ? <Photo albumId={album.id} path={album.cover} className={s.faceImg} eager />
-        : <span className={s.initial} style={{ fontSize: size * 0.36 }}>{(album.babyName || album.name).trim()[0]}</span>}
+        : <span className={s.initial} style={{ fontSize: size * 0.36 }}>{((album.kind === 'group' ? '' : album.babyName) || album.name).trim()[0]}</span>}
     </span>
   );
 }

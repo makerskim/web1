@@ -14,6 +14,8 @@ const normAlbum = (a: Album): Album => ({
   children: Array.isArray(a.children) ? a.children : kidsFrom(null, a.babyName || '', a.babyBirthday ?? null),
   bio: a.bio ?? '',
   cover: a.cover ?? '',
+  kind: a.kind === 'group' ? 'group' : 'baby',
+  since: a.since ?? null,
 });
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 
@@ -38,7 +40,7 @@ interface Session {
   patchAlbum: (patch: Partial<Album>) => void;
 }
 
-const unknownMember = (uid: string): Member => ({ userId: uid, displayName: '가족', avatar: '', role: 'member', joinedAt: '' });
+const unknownMember = (uid: string): Member => ({ userId: uid, displayName: '멤버', avatar: '', role: 'member', joinedAt: '' });
 
 export const useSession = create<Session>((set, get) => ({
   ready: false,

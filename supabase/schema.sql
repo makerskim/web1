@@ -37,6 +37,11 @@ alter table public.families add column if not exists children jsonb not null def
 alter table public.families add column if not exists bio text not null default '';
 alter table public.families drop constraint if exists families_bio_check;
 alter table public.families add constraint families_bio_check check (char_length(bio) <= 150);
+-- 앨범 종류: 아기·가족 앨범(baby) / 친구·모임 앨범(group). 모임은 시작일(since, 없으면 만든 날)부터 함께한 날을 세요
+alter table public.families add column if not exists kind text not null default 'baby';
+alter table public.families drop constraint if exists families_kind_check;
+alter table public.families add constraint families_kind_check check (kind in ('baby', 'group'));
+alter table public.families add column if not exists since date;
 create or replace function public.valid_children(c jsonb)
 returns boolean language sql immutable as $$
   select jsonb_typeof(c) = 'array' and jsonb_array_length(c) <= 6 and pg_column_size(c) < 4000
@@ -48,7 +53,10 @@ returns boolean language sql immutable as $$
          or char_length(coalesce(x->>'name', '')) > 20
          or (jsonb_typeof(x->'birthday') = 'string' and (x->>'birthday') !~ '^\d{4}-\d{2}-\d{2}$')
          or (x ? 'birthday' and jsonb_typeof(x->'birthday') not in ('string', 'null'))
-         or (x ? 'born' and jsonb_typeof(x->'born') <> 'boolean'))
+         or (x ? 'born' and jsonb_typeof(x->'born') <> 'boolean')
+         -- 임신 시작일 (없거나 'YYYY-MM-DD')
+         or (jsonb_typeof(x->'start') = 'string' and (x->>'start') !~ '^\d{4}-\d{2}-\d{2}$')
+         or (x ? 'start' and jsonb_typeof(x->'start') not in ('string', 'null')))
 $$;
 alter table public.families drop constraint if exists families_children_check;
 alter table public.families add constraint families_children_check check (public.valid_children(children));
@@ -252,9 +260,11 @@ begin
   return f;
 end $$;
 
-create or replace function public.invite_info(p_code text)
-returns table (name text, baby_name text) language sql stable security definer set search_path = public as $$
-  select name, baby_name from families
+-- 돌려주는 칸이 바뀌면 먼저 지워야 해요 (앨범 종류 kind 추가)
+drop function if exists public.invite_info(text);
+create function public.invite_info(p_code text)
+returns table (name text, baby_name text, kind text) language sql stable security definer set search_path = public as $$
+  select name, baby_name, kind from families
   where invite_code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'));
 $$;
 

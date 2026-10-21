@@ -138,6 +138,67 @@ export function postAge(birthday: D, at: D) {
   return `만 ${Math.floor(months / 12)}살`;
 }
 
+/** 'YYYY-MM-DD'에 며칠 더하기 */
+export function addDays(v: D, n: number) {
+  const d = toDate(v);
+  return d ? ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)) : '';
+}
+
+/** a에서 b까지 며칠 (같은 날이면 0) */
+export function daysBetween(a: D, b: D) {
+  const x = toDate(a), y = toDate(b);
+  if (!x || !y) return null;
+  return Math.round((+startOfDay(y) - +startOfDay(x)) / DAY);
+}
+
+/** 기념일 목록 (첫날을 1일로 세요): 아기는 50일 · 백일 · 200일 · 300일 · 첫 돌 · N번째 생일, 모임은 100일 · 200일 · 300일 · N주년 */
+export type MilestoneKind = 'baby' | 'group';
+function milestones(base: Date, kind: MilestoneKind, untilYear: number) {
+  const days: Array<[number, string]> = kind === 'baby' ? [[50, '50일'], [100, '백일'], [200, '200일'], [300, '300일']] : [[100, '100일'], [200, '200일'], [300, '300일']];
+  const out = days.map(([n, label]) => ({ date: new Date(base.getFullYear(), base.getMonth(), base.getDate() + n - 1), label }));
+  for (let y = 1; base.getFullYear() + y <= untilYear; y++) {
+    out.push({ date: new Date(base.getFullYear() + y, base.getMonth(), base.getDate()), label: kind === 'baby' ? (y === 1 ? '첫 돌' : `${y}번째 생일`) : `${y}주년` });
+  }
+  return out.sort((a, b) => +a.date - +b.date);
+}
+
+/** 다음 기념일: '백일까지 94일' (오늘이 기념일이면 daysLeft 0) · progress는 지난 기념일(또는 첫날)부터 다음 기념일까지 얼마나 왔는지 */
+export function nextMilestone(start: D, kind: MilestoneKind, at: D = new Date()) {
+  const base = toDate(start), now = toDate(at);
+  if (!base || !now) return null;
+  const today = startOfDay(now);
+  const b = startOfDay(base);
+  if (+today < +b) return null;
+  const list = milestones(b, kind, today.getFullYear() + 1);
+  const i = list.findIndex((m) => +m.date >= +today);
+  if (i < 0) return null;
+  const next = list[i];
+  const prev = i > 0 ? list[i - 1].date : b;
+  const span = Math.max(1, Math.round((+next.date - +prev) / DAY));
+  const daysLeft = Math.round((+next.date - +today) / DAY);
+  return { label: next.label, date: ymd(next.date), daysLeft, progress: Math.min(1, Math.max(0, 1 - daysLeft / span)) };
+}
+
+/** 모임 기념일 (그날 올린 게시물 옆): '100일' · '1주년' */
+export function groupMilestone(start: D, at: D) {
+  const day = babyDay(start, at);
+  if (day === null || day < 2) return '';
+  if (day === 100 || day === 200 || day === 300) return `${day}일`;
+  const b = toDate(start)!, d = toDate(at)!;
+  if (d.getMonth() === b.getMonth() && d.getDate() === b.getDate()) return `${d.getFullYear() - b.getFullYear()}주년`;
+  return '';
+}
+
+/** '1년 6개월' · '5개월' · '23일' (첫날을 1일로) */
+export function spanLabel(start: D, at: D = new Date()) {
+  const day = babyDay(start, at);
+  const m = babyMonths(start, at);
+  if (day === null || m === null || day < 1) return '';
+  if (m < 1) return `${day}일`;
+  const y = Math.floor(m / 12), r = m % 12;
+  return y ? `${y}년${r ? ` ${r}개월` : ''}` : `${r}개월`;
+}
+
 // 사진 촬영 날짜 (JPEG EXIF)
 export async function readPhotoDate(file: File): Promise<Date> {
   try {

@@ -16,8 +16,11 @@ import { clearCache } from '../lib/photoCache';
 import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
-import { ymd } from '../lib/dates';
-import { childName, kidsPatch, newChild, spaceAmp, suggestAlbumName, type Child } from '../lib/kids';
+import { fmtDate, ymd } from '../lib/dates';
+import { albumSince } from '../lib/album';
+import { DatePickerSheet } from '../components/DatePicker';
+import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlbumName, termDays, type Child } from '../lib/kids';
+import type { AlbumKind } from '../lib/types';
 import { KidsForm } from '../components/KidsForm';
 
 import { callName } from '../lib/korean';
@@ -76,7 +79,7 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
           <span>사진 바꾸기</span>
         </button>
         <input ref={file} type="file" accept="image/*" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setPhoto(f); }} data-who="file" />
-        <Group footer="가족에게 보이는 이름이에요.">
+        <Group footer="앨범에서 보이는 이름이에요.">
           <Field label="나는 아이의" value={name} onChange={(e) => setName(e.target.value)} maxLength={20} placeholder="엄마" name="role" data-who="name" />
         </Group>
         <Button size="lg" block onClick={save} data-save>저장</Button>
@@ -130,6 +133,7 @@ export function Settings() {
 
         <Group title="앨범">
           <Row icon={<CoverFace size={30} />} label="앨범 설정" detail={album.name} onClick={() => nav('/settings/album')} data-row="album" />
+          <Row icon={<span aria-hidden="true">{album.kind === 'group' ? '🙌' : '👶'}</span>} label="앨범 종류" detail={album.kind === 'group' ? '친구·모임' : '아기·가족'} onClick={() => nav('/settings/album')} data-row="kind" />
           <Row icon={<Icon name="swap" size={22} />} label="다른 앨범" detail={`${albums.length}개`} onClick={() => setSheet('albums')} data-row="albums" />
         </Group>
 
@@ -162,7 +166,7 @@ function TextSizeSheet({ open, onClose }: { open: boolean; onClose: () => void }
   const setTextSize = useSession((st) => st.setTextSize);
   return (
     <Sheet open={open} onClose={onClose} title="글자 크기">
-      <p className={s.preview}>{album?.babyName ? `${callName(album.babyName)}가` : '아기가'} 웃고 있어요 🙂</p>
+      <p className={s.preview}>{album?.kind === 'group' ? '오늘도 모두 웃고 있어요 🙂' : `${album?.babyName ? `${callName(album.babyName)}가` : '아기가'} 웃고 있어요 🙂`}</p>
       <div className={s.options}>
         {TEXT_SIZES.map((t) => (
           <button key={t.value} className={s.option} onClick={() => setTextSize(t.value)} aria-pressed={textSize === t.value} data-value={t.value}>
@@ -246,10 +250,10 @@ export function DeleteAccount() {
         <h2 className={s.bigTitle}>계정을 삭제하기 전에<br />확인해 주세요</h2>
         <ul className={s.bullets}>
           {alone.length > 0 && <li>혼자 쓰는 앨범 {alone.length}개({alone.map((a) => a.name).join(', ')})는 사진과 함께 완전히 지워져요.</li>}
-          {shared.length > 0 && <li>가족과 함께 쓰는 앨범 {shared.length}개에서 나가게 돼요. 내가 올린 사진과 댓글은 앨범에 남아요.</li>}
-          {released.length > 0 && <li data-f="drive-release">{released.map((n) => `‘${n}’`).join(', ')} 앨범이 쓰던 내 구글 드라이브 연결이 끊겨요. 드라이브에 저장된 사진은 가족이 앱에서 더 이상 볼 수 없어요. (사진은 내 드라이브에 그대로 남아요)</li>}
+          {shared.length > 0 && <li>다른 사람과 함께 쓰는 앨범 {shared.length}개에서 나가게 돼요. 내가 올린 사진과 댓글은 앨범에 남아요.</li>}
+          {released.length > 0 && <li data-f="drive-release">{released.map((n) => `‘${n}’`).join(', ')} 앨범이 쓰던 내 구글 드라이브 연결이 끊겨요. 드라이브에 저장된 사진은 멤버가 앱에서 더 이상 볼 수 없어요. (사진은 내 드라이브에 그대로 남아요)</li>}
           <li>내가 누른 좋아요는 지워져요.</li>
-          {owned.length > 0 && <li>내가 관리자인 앨범은 가장 먼저 들어온 가족이 관리자가 돼요.</li>}
+          {owned.length > 0 && <li>내가 관리자인 앨범은 가장 먼저 들어온 멤버가 관리자가 돼요.</li>}
           <li>{name} 계정은 지워지지 않아요. 이 앱과의 연결만 끊겨요.</li>
           <li>삭제한 계정은 되살릴 수 없어요. 필요한 사진은 먼저 저장해 두세요.</li>
         </ul>
@@ -270,12 +274,32 @@ export function AlbumSettings() {
   const members = useSession((st) => st.members);
   const isOwner = album.myRole === 'owner';
   const nav = useNavigate();
-  const [sheet, setSheet] = useState<'members' | null>(null);
+  const [sheet, setSheet] = useState<'members' | 'since' | null>(null);
   const code = `${album.inviteCode.slice(0, 4)}-${album.inviteCode.slice(4)}`;
   const alone = members.length <= 1;
+  const isGroup = album.kind === 'group';
+  const since = albumSince(album);
+
+  // 앨범 종류: 아기·가족 ↔ 친구·모임 (아이 정보는 지우지 않고 그대로 둬요)
+  const setKind = async (kind: AlbumKind) => {
+    if (kind === album.kind) return;
+    try {
+      await api.updateAlbum(album.id, { kind });
+      useSession.getState().patchAlbum({ kind });
+      toast(kind === 'group' ? '친구·모임 앨범으로 바꿨어요' : '아기·가족 앨범으로 바꿨어요');
+    } catch (e) { toast((e as Error).message); }
+  };
+  const setSince = async (v: string | null) => {
+    try {
+      await api.updateAlbum(album.id, { since: v });
+      useSession.getState().patchAlbum({ since: v });
+      toast('모임 시작일을 바꿨어요');
+    } catch (e) { toast((e as Error).message); }
+  };
+  const check = <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />;
 
   const newCode = async () => {
-    if (!(await confirm({ title: '초대 코드를 새로 만들까요?', message: '지금 코드는 더 이상 쓸 수 없어요. 이미 들어온 가족은 그대로예요.', ok: '새로 만들기' }))) return;
+    if (!(await confirm({ title: '초대 코드를 새로 만들까요?', message: '지금 코드는 더 이상 쓸 수 없어요. 이미 들어온 멤버는 그대로예요.', ok: '새로 만들기' }))) return;
     try {
       const c = await api.resetInvite(album.id);
       useSession.getState().patchAlbum({ inviteCode: c });
@@ -284,7 +308,7 @@ export function AlbumSettings() {
   };
   const leave = async () => {
     const lastOwner = isOwner && !members.some((m) => m.userId !== me.id && m.role === 'owner');
-    if (!(await confirm({ title: '앨범에서 나갈까요?', message: `내가 올린 사진과 댓글은 앨범에 남아요.${lastOwner ? '\n가장 먼저 들어온 가족이 관리자가 돼요.' : ''}\n다시 들어오려면 초대 코드가 필요해요.`, ok: '나가기', danger: true }))) return;
+    if (!(await confirm({ title: '앨범에서 나갈까요?', message: `내가 올린 사진과 댓글은 앨범에 남아요.${lastOwner ? '\n가장 먼저 들어온 멤버가 관리자가 돼요.' : ''}\n다시 들어오려면 초대 코드가 필요해요.`, ok: '나가기', danger: true }))) return;
     try {
       await api.leaveAlbum(album.id, me.id);
       await useSession.getState().loadAlbums();
@@ -308,24 +332,38 @@ export function AlbumSettings() {
     <Page>
       <TopBar back title="앨범 설정" />
       <div className={s.page}>
-        {/* 이름·소개·출산 예정일·앨범 사진은 가족 탭의 '프로필 편집'에서 바꿔요 */}
+        {/* 앨범 종류와 기준 날짜 (아기: 아이·예정일·임신 시작일은 '프로필 편집'에서 · 모임: 시작일은 여기서) */}
+        <Group title="앨범 종류" footer={isGroup
+          ? '친구·모임 앨범은 시작일부터 함께한 날과 다음 기념일(100일 · 1주년)까지 남은 날을 보여 줘요.'
+          : '아기·가족 앨범은 출산 예정일까지 남은 날과 임신 주수를 보여 줘요. 임신 시작일을 넣으면 쌍둥이처럼 일찍 낳는 경우도 정확해요.'}>
+          <Row icon={<span aria-hidden="true">👶</span>} label="아기·가족 앨범" onClick={isOwner ? () => setKind('baby') : undefined} chevron={false} data-kind="baby">{!isGroup && check}</Row>
+          <Row icon={<span aria-hidden="true">🙌</span>} label="친구·모임 앨범" onClick={isOwner ? () => setKind('group') : undefined} chevron={false} data-kind="group">{isGroup && check}</Row>
+          {isGroup
+            ? <Row icon={<Icon name="calendar" size={22} />} label="모임 시작일" detail={since ? fmtDate(since) : '고르기'} onClick={isOwner ? () => setSheet('since') : undefined} data-row="since" />
+            : <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isOwner ? () => nav('/settings/album/info') : undefined} data-row="kids" />}
+        </Group>
+
         <Group title="멤버" footer={isOwner ? '가족뿐 아니라 초대받은 누구나 멤버가 될 수 있어요. 관리자는 멤버와 초대 코드를 관리해요.' : undefined}>
           <Row icon={<Icon name="users" size={22} />} label="멤버" detail={`${members.length}명`} onClick={() => setSheet('members')} data-row="members" />
           <Row icon={<Icon name="key" size={22} />} label="초대 코드" detail={code} onClick={async () => { if (await copyText(album.inviteCode)) toast('초대 코드를 복사했어요'); }} chevron={false} />
           {isOwner && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
         </Group>
 
-        <Group title="사진" footer="사진은 원본 화질 그대로 저장돼요. 가족이 내려받으면 원본이 저장돼요.">
+        <Group title="사진" footer="내려받으면 원본 화질 그대로 저장돼요.">
           <Row icon={<Icon name="cloud" size={22} />} label="사진 저장 위치" detail={album.storage === 'drive' ? (isOwner ? '구글 드라이브' : '관리자의 구글 드라이브') : '기본 저장소'}
             onClick={isOwner ? () => nav('/settings/storage') : undefined} />
         </Group>
 
-        <Group footer={isOwner ? '앨범을 지우면 모든 가족에게서 사라져요.' : undefined}>
+        <Group footer={isOwner ? '앨범을 지우면 모든 멤버에게서 사라져요.' : undefined}>
           {!alone && <Row label="앨범에서 나가기" onClick={leave} danger chevron={false} data-row="leave" />}
           {isOwner && <Row label="앨범 지우기" onClick={remove} danger chevron={false} data-row="delete-album" />}
         </Group>
       </div>
       <MembersSheet open={sheet === 'members'} onClose={() => setSheet(null)} />
+      {isOwner && isGroup && (
+        <DatePickerSheet open={sheet === 'since'} onClose={() => setSheet(null)} title="모임 시작일" value={since} min="1950-01-01" max={ymd(new Date())}
+          onChange={(v) => { if (v) setSince(v); }} />
+      )}
     </Page>
   );
 }
@@ -337,21 +375,26 @@ export function AlbumInfo() {
   const nav = useNavigate();
   const cover = useCoverChanger();
   const isOwner = album.myRole === 'owner';
+  const isGroup = album.kind === 'group';
   const [kids, setKids] = useState<Child[]>(() => (album.children.length ? album.children : [newChild()]));
-  // 앨범 이름을 직접 바꾼 적이 없으면 아이 이름을 따라가요 (태어나서 이름을 넣으면 '하준이네 앨범'으로)
-  const [touched, setTouched] = useState(() => spaceAmp(album.name) !== suggestAlbumName(album.children));
+  // 앨범 이름을 직접 바꾼 적이 없으면 아이 이름을 따라가요 (태어나서 이름을 넣으면 '하준이네 앨범'으로). 모임 앨범은 직접 써요
+  const [touched, setTouched] = useState(() => isGroup || spaceAmp(album.name) !== suggestAlbumName(album.children));
   const [name, setName] = useState(album.name);
   const [bio, setBio] = useState(album.bio || '');
   const albumName = touched ? name : suggestAlbumName(kids) || name;
   const save = async () => {
     const filled = kids.filter((c) => childName(c));
-    if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요');
-    if (filled.some((c) => c.born && c.birthday && c.birthday > ymd(new Date()))) return toast('태어난 날은 오늘이나 그 전 날짜로 골라 주세요');
+    if (!isGroup) {
+      if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요');
+      if (filled.some((c) => c.born && c.birthday && c.birthday > ymd(new Date()))) return toast('태어난 날은 오늘이나 그 전 날짜로 골라 주세요');
+      if (filled.some((c) => !isBorn(c) && c.start && c.birthday && termDays(c) === null)) return toast('임신 시작일과 출산 예정일 사이가 20주 ~ 44주가 되게 골라 주세요');
+    }
     const n = spaceAmp(albumName);
     if (!n) return toast('앨범 이름을 적어 주세요');
     try {
-      await api.updateAlbum(album.id, { name: n, bio: bio.trim(), children: filled });
-      useSession.getState().patchAlbum({ name: n, bio: bio.trim(), ...kidsPatch(filled) });
+      // 모임 앨범은 아이 정보를 건드리지 않아요 (아기 앨범으로 돌아가면 그대로 있어요)
+      await api.updateAlbum(album.id, { name: n, bio: bio.trim(), ...(isGroup ? {} : { children: filled }) });
+      useSession.getState().patchAlbum({ name: n, bio: bio.trim(), ...(isGroup ? {} : kidsPatch(filled)) });
       toast('저장했어요');
       nav(-1);
     } catch (e) { toast((e as Error).message); }
@@ -375,17 +418,19 @@ export function AlbumInfo() {
           <span>사진 바꾸기</span>
         </button>
 
-        <Group title="앨범" footer={`${touched ? '' : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요. '}소개는 가족 탭 맨 위에 보여요.`}>
+        <Group title="앨범" footer={`${touched ? '' : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요. '}소개는 ${isGroup ? '모임' : '가족'} 탭 맨 위에 보여요.`}>
           <Field label="앨범 이름" value={albumName} onChange={(e) => { setTouched(true); setName(e.target.value); }} onBlur={() => setName((v) => spaceAmp(v))} maxLength={40} name="album" />
           <label className={s.bioRow}>
             <span className={s.bioLabel}>소개</span>
             <textarea className={s.bioBox} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={BIO_MAX} rows={4}
-              placeholder="예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요" name="bio" />
+              placeholder={isGroup ? '예) 2019년부터 함께한 우리 모임 사진첩이에요' : '예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요'} name="bio" />
             <small className={s.count} data-f="bio-count">{bio.length}/{BIO_MAX}</small>
           </label>
         </Group>
 
-        <KidsForm kids={kids} onChange={setKids} />
+        {isGroup
+          ? <p className={s.kindNote}>친구·모임 앨범이에요. 모임 시작일은 <b>설정 → 앨범 종류</b>에서 바꿀 수 있어요.</p>
+          : <KidsForm kids={kids} onChange={setKids} />}
       </div>
       {cover.ui}
     </Page>
@@ -441,7 +486,7 @@ export function StorageSettings() {
         </Group>
 
         {album.storage === 'drive' || album.driveReady ? (
-          <Group title="구글 드라이브" footer="사진은 드라이브의 ‘Pastel Memories’ 폴더에 비공개로 저장돼요. 가족은 앱 안에서만 볼 수 있어요.">
+          <Group title="구글 드라이브" footer="사진은 드라이브의 ‘Pastel Memories’ 폴더에 비공개로 저장돼요. 멤버는 앱 안에서만 볼 수 있어요.">
             <Row label="연결된 계정" detail={album.driveEmail || '확인 중'} />
             <Row label="다른 계정으로 다시 연결" onClick={connect} />
             <Row label="연결 끊기" onClick={disconnect} danger chevron={false} />
@@ -450,7 +495,7 @@ export function StorageSettings() {
           <div className={s.driveCard}>
             <Icon name="shield" size={28} />
             <b>내 구글 드라이브에 저장하기</b>
-            <p>가족이 올린 사진이 관리자의 드라이브 폴더에 비공개로 모여요. 드라이브 공간(무료 15GB)을 쓰니 더 많이 저장할 수 있어요.</p>
+            <p>멤버가 올린 사진이 관리자의 드라이브 폴더에 비공개로 모여요. 드라이브 공간(무료 15GB)을 쓰니 더 많이 저장할 수 있어요.</p>
             <Button onClick={connect} disabled={!driveConfigured()}>{driveConfigured() ? '구글 드라이브 연결' : '설정이 필요해요 (설명서 참고)'}</Button>
           </div>
         )}

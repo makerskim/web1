@@ -3,6 +3,9 @@ import type { Child } from './kids';
 export type StorageKind = 'supabase' | 'drive';
 export type Role = 'owner' | 'member';
 
+/** 앨범 종류: 아기·가족 앨범 / 친구·모임 앨범 */
+export type AlbumKind = 'baby' | 'group';
+
 export interface Album {
   id: string;
   name: string;
@@ -20,6 +23,10 @@ export interface Album {
   driveReady: boolean;
   /** 가족 탭 맨 위 앨범 사진: '' | 이 앨범 사진 경로 | drive:파일ID */
   cover: string;
+  /** 아기·가족 앨범(baby) / 친구·모임 앨범(group) */
+  kind: AlbumKind;
+  /** 모임 시작일 'YYYY-MM-DD' (없으면 앨범을 만든 날) */
+  since: string | null;
   createdAt: string;
   myRole: Role;
   myName: string;

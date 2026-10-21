@@ -5,7 +5,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, type PanInfo } from 'motion/react';
 import { Sheet, useLatest } from './ui';
 import { Icon } from './Icon';
-import { WEEKDAYS, fmtDate, monthCells, toDate, ymd } from '../lib/dates';
+import { WEEKDAYS, addDays, daysBetween, fmtDate, monthCells, toDate, ymd } from '../lib/dates';
+import { weeksText } from '../lib/kids';
 import s from './DatePicker.module.css';
 
 const slide = { type: 'spring' as const, stiffness: 380, damping: 40, mass: 0.9 }; // 아이폰처럼 미끄러지는 달 넘김
@@ -163,8 +164,9 @@ export function DatePickerSheet({ open, title, value, onChange, onClose, min, ma
 }
 
 // 아이폰 휠: 위아래로 굴리면 가운데 띠에 걸린 값이 골라져요. 눌러도 그 값이 가운데로 와요.
+// kind: 'year' · 'month' (달력) · 'week' · 'wday' (임신 주수)
 function Wheel({ kind, label, items, value, onPick }: {
-  kind: 'year' | 'month'; label: string; items: Array<{ v: number; text: string; dim?: boolean }>; value: number; onPick: (v: number) => void;
+  kind: 'year' | 'month' | 'week' | 'wday'; label: string; items: Array<{ v: number; text: string; dim?: boolean }>; value: number; onPick: (v: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const target = useRef<number | null>(null); // 코드로 굴리는 중이면 그 목적지
@@ -222,10 +224,10 @@ function Wheel({ kind, label, items, value, onPick }: {
   const touchOff = () => { hold.current = false; snapBack(); };
 
   return (
-    <div ref={ref} className={`${s.col} ${kind === 'year' ? s.colYear : s.colMonth}`} onScroll={onScroll}
+    <div ref={ref} className={`${s.col} ${kind === 'year' || kind === 'week' ? s.colYear : s.colMonth}`} onScroll={onScroll}
       onPointerDown={grab} onTouchStart={touchOn} onTouchEnd={touchOff} onTouchCancel={touchOff} onWheel={grab} role="group" aria-label={label}>
       {items.map((it) => {
-        const attr = kind === 'year' ? { 'data-wheel-year': it.v } : { 'data-wheel-month': it.v };
+        const attr = { [`data-wheel-${kind}`]: it.v };
         return (
           <button key={it.v} type="button" className={`${s.item} ${it.v === value ? s.itemOn : ''} ${it.dim ? s.itemDim : ''}`}
             onClick={() => onPick(it.v)} aria-pressed={it.v === value} aria-label={it.text} {...attr}>
@@ -254,3 +256,40 @@ export function DateField({ label, value, onChange, title, placeholder = '날짜
     </>
   );
 }
+
+// 임신 주수로 넣기: '오늘 임신 몇 주인가요?' → 33주 2일을 고르면 임신 시작일(오늘 - 33주 2일)이 돼요
+export function WeeksSheet({ open, onClose, start, due, onChange }: {
+  open: boolean; onClose: () => void; start: string | null; due: string | null; onChange: (start: string) => void;
+}) {
+  const today = ymd(new Date());
+  const initial = () => {
+    // 지금 값: 임신 시작일이 있으면 그날부터, 없으면 예정일을 40주로 보고
+    const n = start ? daysBetween(start, today) : due ? 280 - (daysBetween(today, due) ?? 0) : null;
+    const g = Math.min(WEEKS_MAX * 7 + 6, Math.max(WEEKS_MIN * 7, n ?? 20 * 7));
+    return { w: Math.floor(g / 7), d: g % 7 };
+  };
+  const [v, setV] = useState(initial);
+  useEffect(() => { if (open) setV(initial()); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const startOf = addDays(today, -(v.w * 7 + v.d));
+  const total = due ? daysBetween(startOf, due) : null;
+  const weeks = Array.from({ length: WEEKS_MAX - WEEKS_MIN + 1 }, (_, i) => ({ v: WEEKS_MIN + i, text: `${WEEKS_MIN + i}주` }));
+  const days = Array.from({ length: 7 }, (_, i) => ({ v: i, text: `${i}일` }));
+  return (
+    <Sheet open={open} onClose={onClose} title="오늘 임신 몇 주인가요?">
+      <p className={s.weeksLead}>병원에서 들은 주수를 골라 주세요.</p>
+      <div className={s.wheel} data-weeks>
+        <Wheel kind="week" label="주" items={weeks} value={v.w} onPick={(w) => setV((x) => ({ ...x, w }))} />
+        <Wheel kind="wday" label="일" items={days} value={v.d} onPick={(d) => setV((x) => ({ ...x, d }))} />
+      </div>
+      <p className={s.weeksNote} data-weeks-note>
+        임신 시작일 <b>{fmtDate(startOf)}</b>
+        {total !== null && total > 0 && <><br />출산 예정일엔 <b>{weeksText(Math.floor(total / 7), total % 7)}</b>{total % 7 ? '이에요' : '예요'}</>}
+      </p>
+      <div className={s.weeksBtns}>
+        <button type="button" className={s.weeksOk} onClick={() => { onChange(startOf); onClose(); }} data-weeks-ok>확인</button>
+      </div>
+    </Sheet>
+  );
+}
+const WEEKS_MIN = 2;
+const WEEKS_MAX = 44;
