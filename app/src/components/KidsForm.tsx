@@ -18,7 +18,11 @@ export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Chil
   const today = ymd(new Date());
   const dueMax = ymd(new Date(Date.now() + 300 * 86400000)); // 예정일은 열 달 안쪽
   // 날짜를 고르면: 앞으로의 날짜는 예정일(뱃속), 지난 날짜는 생일(태어났어요). 오늘은 고른 그대로
-  const pickDate = (i: number, v: string | null) => set(i, { birthday: v, ...(v && v > today ? { born: false } : v && v < today ? { born: true } : {}) });
+  // 앞으로의 예정일이 쌍둥이와 같으면 그 아이의 임신 시작일도 함께 써요
+  const pickDate = (i: number, v: string | null) => {
+    const twin = v && v > today && !kids[i].start ? kids.find((c, j) => j !== i && c.birthday === v && !isBorn(c) && c.start) : undefined;
+    set(i, { birthday: v, ...(v && v > today ? { born: false } : v && v < today ? { born: true } : {}), ...(twin ? { start: twin.start } : {}) });
+  };
   // 임신 시작일: 쌍둥이(같은 예정일, 뱃속)는 같이 바뀌어요. 예정일이 비어 있으면 40주 뒤로 채워 줘요
   const pickStart = (i: number, v: string | null) => {
     const me = kids[i];
@@ -81,7 +85,7 @@ export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Chil
       <WeeksSheet open={weeksFor !== null} onClose={() => setWeeksFor(null)} start={weeksFor !== null ? kids[weeksFor]?.start ?? null : null}
         due={weeksFor !== null ? kids[weeksFor]?.birthday ?? null : null} onChange={(v) => weeksFor !== null && pickStart(weeksFor, v)} />
       {kids.length < MAX_KIDS && (
-        <button type="button" className={s.add} onClick={() => onChange([...kids, newChild({ birthday: kids[0]?.birthday ?? null, born: kids[0] ? isBorn(kids[0]) : false, start: kids[0]?.start ?? null })])} data-kid-add>
+        <button type="button" className={s.add} onClick={() => onChange([...kids, newChild({ birthday: kids[0]?.birthday ?? null, born: kids[0] ? isBorn(kids[0]) : false, start: kids[0] && !isBorn(kids[0]) ? kids[0].start ?? null : null })])} data-kid-add>
           <Icon name="plus" size={20} stroke={2.4} /> 아이 추가 <small>쌍둥이·다둥이</small>
         </button>
       )}

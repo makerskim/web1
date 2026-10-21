@@ -17,9 +17,12 @@
 .media {
   position: relative; width: 100%; background: var(--c-fill); overflow: hidden; user-select: none; -webkit-user-select: none;
   --chrome: calc(var(--bar-h) + var(--tab-h) + var(--safe-t) + var(--safe-b) + 108px + 4.5rem);
-  max-height: max(16rem, calc(100vh - var(--chrome)));
-  max-height: max(16rem, calc(100dvh - var(--chrome)));
+  --vh: 100vh;
+  /* 아주 작은 화면에서도 사진이 너무 작아지지 않게 (글자 크기와 상관없이 240px까지) */
+  max-height: max(240px, calc(var(--vh) - var(--chrome)));
 }
+/* 주소창이 접혔다 펴져도 맞게 (dvh를 아는 브라우저만) */
+@supports (height: 100dvh) { .media { --vh: 100dvh; } }
 .track { display: flex; height: 100%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .track::-webkit-scrollbar { display: none; }
 .slide { flex: 0 0 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; }

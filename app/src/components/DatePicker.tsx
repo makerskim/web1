@@ -269,7 +269,12 @@ export function WeeksSheet({ open, onClose, start, due, onChange }: {
     return { w: Math.floor(g / 7), d: g % 7 };
   };
   const [v, setV] = useState(initial);
-  useEffect(() => { if (open) setV(initial()); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 열리는 순간(휠이 그려지기 전)에 지금 값으로 맞춰요 — 다른 아이 값에서 굴러오지 않게
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setV(initial());
+  }
   const startOf = addDays(today, -(v.w * 7 + v.d));
   const total = due ? daysBetween(startOf, due) : null;
   const weeks = Array.from({ length: WEEKS_MAX - WEEKS_MIN + 1 }, (_, i) => ({ v: WEEKS_MIN + i, text: `${WEEKS_MIN + i}주` }));
