@@ -108,6 +108,19 @@ export function babyAge(birthday: D, at: D = new Date(), { short = false } = {})
   return rest ? `만 ${y}살 ${rest}개월` : `만 ${y}살`;
 }
 
+/** y년 뒤 같은 날 (2월 29일은 윤년이 아니면 2월 28일) */
+function anniversary(base: Date, y: number) {
+  const last = new Date(base.getFullYear() + y, base.getMonth() + 1, 0).getDate();
+  return new Date(base.getFullYear() + y, base.getMonth(), Math.min(base.getDate(), last));
+}
+/** 오늘이 몇 번째 해의 같은 날인지 (아니면 0) */
+function yearsToday(base: Date, d: Date) {
+  const y = d.getFullYear() - base.getFullYear();
+  if (y < 1) return 0;
+  const a = anniversary(base, y);
+  return a.getMonth() === d.getMonth() && a.getDate() === d.getDate() ? y : 0;
+}
+
 export function babyMilestone(birthday: D, at: D = new Date()) {
   const day = babyDay(birthday, at);
   if (day === null) return '';
@@ -118,10 +131,8 @@ export function babyMilestone(birthday: D, at: D = new Date()) {
   if (day === 100) return '백일';
   if (day === 200) return '200일';
   if (day === 300) return '300일';
-  if (d.getMonth() === b.getMonth() && d.getDate() === b.getDate() && day > 1) {
-    const y = d.getFullYear() - b.getFullYear();
-    return y === 1 ? '첫 돌' : `${y}번째 생일`;
-  }
+  const y = day > 1 ? yearsToday(b, d) : 0;
+  if (y) return y === 1 ? '첫 돌' : `${y}번째 생일`;
   return '';
 }
 
@@ -157,7 +168,7 @@ function milestones(base: Date, kind: MilestoneKind, untilYear: number) {
   const days: Array<[number, string]> = kind === 'baby' ? [[50, '50일'], [100, '백일'], [200, '200일'], [300, '300일']] : [[100, '100일'], [200, '200일'], [300, '300일']];
   const out = days.map(([n, label]) => ({ date: new Date(base.getFullYear(), base.getMonth(), base.getDate() + n - 1), label }));
   for (let y = 1; base.getFullYear() + y <= untilYear; y++) {
-    out.push({ date: new Date(base.getFullYear() + y, base.getMonth(), base.getDate()), label: kind === 'baby' ? (y === 1 ? '첫 돌' : `${y}번째 생일`) : `${y}주년` });
+    out.push({ date: anniversary(base, y), label: kind === 'baby' ? (y === 1 ? '첫 돌' : `${y}번째 생일`) : `${y}주년` });
   }
   return out.sort((a, b) => +a.date - +b.date);
 }
@@ -184,9 +195,8 @@ export function groupMilestone(start: D, at: D) {
   const day = babyDay(start, at);
   if (day === null || day < 2) return '';
   if (day === 100 || day === 200 || day === 300) return `${day}일`;
-  const b = toDate(start)!, d = toDate(at)!;
-  if (d.getMonth() === b.getMonth() && d.getDate() === b.getDate()) return `${d.getFullYear() - b.getFullYear()}주년`;
-  return '';
+  const y = yearsToday(toDate(start)!, toDate(at)!);
+  return y ? `${y}주년` : '';
 }
 
 /** '1년 6개월' · '5개월' · '23일' (첫날을 1일로) */

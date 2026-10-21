@@ -80,7 +80,8 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
         </button>
         <input ref={file} type="file" accept="image/*" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setPhoto(f); }} data-who="file" />
         <Group footer="앨범에서 보이는 이름이에요.">
-          <Field label="나는 아이의" value={name} onChange={(e) => setName(e.target.value)} maxLength={20} placeholder="엄마" name="role" data-who="name" />
+          <Field label={album.kind === 'group' ? '앨범에서 보일 이름' : '나는 아이의'} value={name} onChange={(e) => setName(e.target.value)} maxLength={20}
+            placeholder={album.kind === 'group' ? '민지' : '엄마'} name="role" data-who="name" />
         </Group>
         <Button size="lg" block onClick={save} data-save>저장</Button>
       </div>

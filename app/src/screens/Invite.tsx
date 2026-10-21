@@ -22,7 +22,7 @@ export function InviteSheet({ open, onClose, welcome = false }: { open: boolean;
   return (
     <Sheet open={open} onClose={onClose} title={welcome ? '앨범을 만들었어요' : '초대하기'}>
       <div className={s.wrap}>
-        <p className={s.lead}>{welcome ? `이제 ${group ? '멤버' : '가족'}를 초대해 보세요. ` : ''}초대받은 사람은 로그인한 뒤 이 코드를 넣으면 들어올 수 있어요.</p>
+        <p className={s.lead}>{welcome ? `이제 ${group ? '멤버를' : '가족을'} 초대해 보세요. ` : ''}초대받은 사람은 로그인한 뒤 이 코드를 넣으면 들어올 수 있어요.</p>
         <button className={s.code} onClick={async () => { if (await copyText(album.inviteCode)) toast('코드를 복사했어요'); }} aria-label="초대 코드 복사">
           <small>초대 코드</small>
           <strong data-code={album.inviteCode}>{fmt(album.inviteCode)}</strong>

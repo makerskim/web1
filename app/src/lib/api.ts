@@ -104,7 +104,14 @@ export async function createAlbum(p: { name: string; children: Child[]; bio?: st
   })) as Row;
   // 아이들(태명·이름)과 소개는 만든 뒤에 저장해요. 데이터베이스가 예전 설정이어도 앨범은 만들어져요
   await sb.from('families').update({ children: k.children, ...(p.bio ? { bio: p.bio } : {}) }).eq('id', f.id).then(() => {}, () => {});
-  if (group) check(await sb.from('families').update({ kind: 'group', since: p.since ?? null }).eq('id', f.id).select('id'));
+  if (group) {
+    const r = await sb.from('families').update({ kind: 'group', since: p.since ?? null }).eq('id', f.id).select('id');
+    // 모임으로 못 바꿨으면 방금 만든 앨범을 지워요 (아기 앨범이 남지 않게)
+    if (r.error || !r.data?.length) {
+      await sb.from('families').delete().eq('id', f.id).then(() => {}, () => {});
+      throw new Error(r.error ? friendly(r.error) : '앨범을 만들지 못했어요. 다시 시도해 주세요.');
+    }
+  }
   return f.id as string;
 }
 
