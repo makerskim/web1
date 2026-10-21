@@ -5,9 +5,6 @@
 .top h2 { text-align: center; font-size: var(--t-headline); font-weight: 700; letter-spacing: -0.01em; }
 .iconBtn { justify-self: start; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--c-label); }
 .iconBtn:active { background: var(--c-surface-2); }
-.topPost { justify-self: end; min-width: 44px; min-height: 44px; padding: 0 var(--s-3); border-radius: var(--r-full); font-size: var(--t-headline); font-weight: 700; color: var(--c-accent-strong); }
-.topPost:active { background: var(--c-accent-soft); }
-.topPost:disabled { opacity: .4; }
 
 .body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
 
@@ -59,9 +56,6 @@
 .captionBox textarea::placeholder { color: var(--c-label-3); }
 
 /* 원본 안내 (설정 없이 항상 원본으로 저장) */
-.info { display: flex; align-items: flex-start; gap: var(--s-3); margin: var(--s-4) var(--gutter) 0; padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background: var(--c-surface-2); color: var(--c-label-2); font-size: var(--t-sub); line-height: 1.5; }
-.infoIcon { flex: none; width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: var(--c-accent-soft); color: var(--c-accent-strong); }
-.info > span:last-child { padding-top: 0.3rem; }
 .note { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-3) var(--gutter); font-size: var(--t-footnote); color: var(--c-label-3); }
 
 .foot { flex: none; padding: var(--s-3) var(--gutter) calc(var(--s-3) + var(--safe-b)); border-top: 1px solid var(--c-hairline); background: var(--c-surface); }

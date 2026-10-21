@@ -6,7 +6,7 @@ import { Icon } from './Icon';
 import { FaceStack } from './People';
 import { useSession } from '../state/session';
 import { liked, toggleLike } from '../state/actions';
-import { babyAge, timeAgo } from '../lib/dates';
+import { postAge, timeAgo } from '../lib/dates';
 import { hasBatchim } from '../lib/korean';
 import type { Post } from '../lib/types';
 import s from './PostCard.module.css';
@@ -35,7 +35,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
   const first = post.photos[0];
   const ratio = Math.min(1.25, Math.max(0.52, first.h / first.w)); // 4:5 ~ 1.91:1
   // 아이 나이는 올린 날 기준
-  const age = album?.babyBirthday ? babyAge(album.babyBirthday, post.createdAt, { short: true }) : '';
+  const age = album?.babyBirthday ? postAge(album.babyBirthday, post.createdAt) : '';
 
   const onTap = () => {
     const now = Date.now();
@@ -72,7 +72,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
       <header className={s.head}>
         <span className={s.who}>
           <Avatar src={author.avatar} name={author.displayName} size={36} />
-          <span className={s.whoText}><b>{author.displayName}</b>{age && <small>{age}</small>}</span>
+          <span className={s.whoText}><b>{author.displayName}</b>{age && <small className={s.ageTag} data-f="age">{age}</small>}</span>
         </span>
         <button className={s.iconBtn} onClick={() => h.onMore(post)} aria-label="더보기" data-act="more"><Icon name="more" size={22} /></button>
       </header>

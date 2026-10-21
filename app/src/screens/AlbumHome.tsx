@@ -10,7 +10,7 @@ import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { babyAge, babyDay, babyMonths, fmtDate, ymd } from '../lib/dates';
-import { childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, type Child } from '../lib/kids';
+import { childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, type Child } from '../lib/kids';
 import { DatePickerSheet } from '../components/DatePicker';
 import { toast } from '../components/ui';
 import { subj } from '../lib/korean';
@@ -69,12 +69,17 @@ export function AlbumHome() {
   // 묶음이 아이들 전부가 아니면 누구 이야기인지 이름을 붙여요 ('튼튼이 만나기까지 90일')
   const groupName = group.map(label).join(' & ');
   const who = all.length > 1 && group.length < all.length ? `${groupName} ` : '';
-  const status = due ? dueStatus(due)
-    : born && months !== null && day !== null ? (months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`) : '';
-  // 상태 아래 작은 글씨 한 줄: 날짜 (같은 걸 두 번 쓰지 않게)
-  const shortDate = (v: string) => (v.slice(0, 4) === today.slice(0, 4) ? fmtDate(v).replace(/^\d{4}년 /, '') : fmtDate(v));
-  const statusNote = due ? `${shortDate(bday!)} 출산 예정`
-    : born && bday ? (months !== null && months >= 1 && months < 24 && day ? `${day.toLocaleString()}일째 · ${shortDate(bday)}생` : `${shortDate(bday)}생`) : '';
+  // 세 번째 숫자: 태어나기 전 'D-64 만나기까지' · 예정일 지나면 'D+3 예정일 지남' · 태어난 뒤 '95일 함께한 날'
+  const dStat = due
+    ? (due.daysLeft > 0 ? { value: `D-${due.daysLeft.toLocaleString()}`, label: '만나기까지' }
+      : due.daysLeft === 0 ? { value: 'D-day', label: '오늘 예정일' } : { value: `D+${(-due.daysLeft).toLocaleString()}`, label: '예정일 지남' })
+    : born && day !== null ? { value: `${day.toLocaleString()}일`, label: '함께한 날' } : null;
+  // 날짜 한 줄 (조금 크게): '📅 12월 24일 목요일 출산 예정 · 임신 30주 5일' / '🎂 2026년 6월 1일 태어났어요 · 생후 4개월'
+  const shortDate = (v: string) => (v.slice(0, 4) === today.slice(0, 4) ? fmtDate(v, true).replace(/^\d{4}년 /, '') : fmtDate(v, true));
+  const age = born && months !== null && day !== null ? (months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`) : '';
+  const weeks = due && due.daysLeft > 0 ? weeksLabel(due) : '';
+  const dateLine = due ? `${who}${shortDate(bday!)} 출산 예정${weeks ? ` · ${weeks}` : ''}`
+    : born && bday ? `🎂 ${who}${fmtDate(bday)} 태어났어요${age ? ` · ${age}` : ''}` : '';
   // 다른 아이들(형·누나, 예정일이 다른 동생)은 작게 한 줄씩 (많으면 3줄까지)
   const otherGroups = new Map<string, Child[]>();
   for (const c of all) {
@@ -86,10 +91,10 @@ export function AlbumHome() {
     const c = cs[0];
     const n = cs.map(label).join(' & ');
     const i = dueInfo(c);
-    return { key: k, text: i ? `🗓️ ${n} · ${dueStatus(i)} (${shortDate(c.birthday!)} 예정)` : `🎂 ${n} · ${babyAge(c.birthday!)}` };
+    return { key: k, text: i ? `👶 ${n} · ${dueStatus(i)} (${shortDate(c.birthday!)} 예정)` : `🎂 ${n} · ${babyAge(c.birthday!)}` };
   });
   const unnamed = isOwner ? kids.find(needsName) : undefined;
-  const photoCount = tiles?.reduce((n, t) => n + t.count, 0);
+  const postCount = tiles?.length;
   const base = useMemo(() => (tiles || []).filter((t) => tab === 'all' || t.likedBy.includes(me.id)), [tiles, tab, me.id]);
   const shown = useMemo(() => base.filter((t) => matches(filter, t)), [base, filter]);
   const names = album.babyName || album.name;
@@ -130,17 +135,18 @@ export function AlbumHome() {
               <h2 className={`${s.names} ${all.length > 2 ? s.namesMany : ''}`} data-f="names"><AmpText text={names} /></h2>
               <button className={s.gear} onClick={() => nav('/settings')} aria-label="설정" data-f="settings"><Icon name="settings" size={24} /></button>
             </div>
-            {/* 만나기까지 · 생후: 크게 */}
-            {status && <p className={s.status} data-f="status">{who}{status}</p>}
-            {statusNote && <p className={s.note} data-f={due ? 'due' : 'birthday'}>{statusNote}</p>}
-            {/* 인스타그램처럼 숫자는 작게 한 줄로 */}
+            {/* 인스타그램처럼 숫자 위, 이름 아래: 게시물 · 멤버 · D-64 */}
             <div className={s.stats}>
-              <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="photos">사진 <b>{photoCount?.toLocaleString() ?? '–'}</b>장</button>
-              <button onClick={() => setSheet('members')} data-stat="members">가족 <b>{members.length}</b>명</button>
+              <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="posts">
+                <b>{postCount?.toLocaleString() ?? '–'}</b><span>게시물</span>
+              </button>
+              <button onClick={() => setSheet('members')} data-stat="members"><b>{members.length}</b><span>멤버</span></button>
+              {dStat && <div className={s.dStat} data-stat="dday"><b>{dStat.value}</b><span>{dStat.label}</span></div>}
             </div>
           </div>
         </div>
 
+        {dateLine && <p className={s.dateLine} data-f={due ? 'due' : 'birthday'}>{due && <Icon name="calendar" size={18} stroke={2.2} className={s.dateIcon} />}{dateLine}</p>}
         {otherLines.length > 0 && (
           <ul className={s.dates}>
             {otherLines.map((l) => <li key={l.key} data-kid-line>{l.text}</li>)}
@@ -165,7 +171,7 @@ export function AlbumHome() {
           {isOwner
             ? <button className={s.btn} onClick={editProfile} data-f="edit-profile">프로필 편집</button>
             : <button className={s.btn} onClick={() => setSheet('profile')} data-f="me">내 프로필</button>}
-          <button className={s.btn} onClick={() => setSheet('invite')} data-f="invite">가족 초대</button>
+          <button className={s.btn} onClick={() => setSheet('invite')} data-f="invite">초대하기</button>
         </div>
       </section>
 

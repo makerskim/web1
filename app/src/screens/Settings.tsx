@@ -292,7 +292,7 @@ export function AlbumSettings() {
     } catch (e) { toast((e as Error).message); }
   };
   const remove = async () => {
-    if (!(await confirm({ title: `‘${album.name}’을 지울까요?`, message: `모든 사진과 댓글이 지워지고, 가족 ${members.length}명 모두 더 이상 볼 수 없어요.`, ok: '지우기', danger: true }))) return;
+    if (!(await confirm({ title: `‘${album.name}’을 지울까요?`, message: `모든 사진과 댓글이 지워지고, 멤버 ${members.length}명 모두 더 이상 볼 수 없어요.`, ok: '지우기', danger: true }))) return;
     if (!(await confirm({ title: '정말 지울까요?', message: '되돌릴 수 없어요. 필요한 사진은 먼저 저장해 두세요.', ok: '영원히 지우기', danger: true }))) return;
     const p = progress('앨범을 지우는 중');
     try {
@@ -309,8 +309,8 @@ export function AlbumSettings() {
       <TopBar back title="앨범 설정" />
       <div className={s.page}>
         {/* 이름·소개·출산 예정일·앨범 사진은 가족 탭의 '프로필 편집'에서 바꿔요 */}
-        <Group title="가족" footer={isOwner ? '관리자는 가족과 초대 코드를 관리할 수 있어요.' : undefined}>
-          <Row icon={<Icon name="users" size={22} />} label="가족 구성원" detail={`${members.length}명`} onClick={() => setSheet('members')} data-row="members" />
+        <Group title="멤버" footer={isOwner ? '가족뿐 아니라 초대받은 누구나 멤버가 될 수 있어요. 관리자는 멤버와 초대 코드를 관리해요.' : undefined}>
+          <Row icon={<Icon name="users" size={22} />} label="멤버" detail={`${members.length}명`} onClick={() => setSheet('members')} data-row="members" />
           <Row icon={<Icon name="key" size={22} />} label="초대 코드" detail={code} onClick={async () => { if (await copyText(album.inviteCode)) toast('초대 코드를 복사했어요'); }} chevron={false} />
           {isOwner && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
         </Group>

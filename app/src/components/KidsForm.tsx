@@ -23,7 +23,7 @@ export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Chil
         const footer = early ? '생일이 아직 오지 않았어요. 태어난 날로 바꿔 주세요.'
           : late ? '예정일이 지났어요. 태어났으면 ‘태어났어요’를 눌러 생일을 넣어 주세요.'
           : born && !c.name.trim() ? '태어났어요! 이름을 넣으면 앨범에 이름으로 보여요.'
-          : i === 0 ? '태어나기 전엔 태명으로, 태어나면 이름으로 보여요.' : undefined;
+          : i === 0 ? (born ? '이름을 넣으면 태명 대신 이름으로 보여요.' : '태어나면 ‘태어났어요’를 누르고 이름을 넣어 주세요.') : undefined;
         return (
           <Group key={c.id} title={kids.length > 1 ? `${ORDER[i]} 아이` : '아이'} footer={footer}>
             {/* 뱃속에 있어요 | 태어났어요: 예정일이 지나도 누르기 전까지는 '태어났다'고 하지 않아요 */}
@@ -31,8 +31,11 @@ export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Chil
               <button type="button" className={!born ? s.segOn : ''} aria-pressed={!born} onClick={() => set(i, { born: false })} data-born-opt="no">🤰 뱃속에 있어요</button>
               <button type="button" className={born ? s.segOn : ''} aria-pressed={born} onClick={() => set(i, { born: true })} data-born-opt="yes">👶 태어났어요</button>
             </div>
+            {/* 뱃속에 있으면 태명만, 태어나면 이름(그리고 태명) */}
+            {(born || !!c.name.trim()) && (
+              <Field label="이름" value={c.name} onChange={(e) => set(i, { name: e.target.value })} maxLength={20} placeholder="이름을 넣어 주세요" name={`name${i}`} autoComplete="off" />
+            )}
             <Field label="태명" value={c.nickname} onChange={(e) => set(i, { nickname: e.target.value })} maxLength={20} placeholder="튼튼이" name={`nick${i}`} autoComplete="off" />
-            <Field label="이름" value={c.name} onChange={(e) => set(i, { name: e.target.value })} maxLength={20} placeholder={born ? '이름을 넣어 주세요' : '태어나면 넣어요'} name={`name${i}`} autoComplete="off" />
             {/* 뱃속이면 '출산 예정일', 태어났으면 '생일' */}
             <DateField label={born ? '생일' : '출산 예정일'} title={born ? '생일' : '출산 예정일'} value={c.birthday} onChange={(v) => pickDate(i, v)}
               name={`bday${i}`} min="2000-01-01" max={born ? today : dueMax} allowClear />

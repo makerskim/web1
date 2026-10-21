@@ -19,7 +19,7 @@ export function InviteSheet({ open, onClose, welcome = false }: { open: boolean;
     if (await copyText(text)) toast('초대 글을 복사했어요. 가족 대화방에 붙여 넣어 주세요.');
   };
   return (
-    <Sheet open={open} onClose={onClose} title={welcome ? '앨범을 만들었어요' : '가족 초대'}>
+    <Sheet open={open} onClose={onClose} title={welcome ? '앨범을 만들었어요' : '초대하기'}>
       <div className={s.wrap}>
         <p className={s.lead}>{welcome ? '이제 가족을 초대해 보세요. ' : ''}초대받은 가족은 로그인한 뒤 이 코드를 넣으면 들어올 수 있어요.</p>
         <button className={s.code} onClick={async () => { if (await copyText(album.inviteCode)) toast('코드를 복사했어요'); }} aria-label="초대 코드 복사">

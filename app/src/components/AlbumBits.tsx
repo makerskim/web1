@@ -46,7 +46,7 @@ export function MembersSheet({ open, onClose }: { open: boolean; onClose: () => 
     return rank(a) - rank(b) || a.displayName.localeCompare(b.displayName, 'ko');
   });
   return (
-    <Sheet open={open} onClose={onClose} title={`가족 ${members.length}명`}>
+    <Sheet open={open} onClose={onClose} title={`멤버 ${members.length}명`}>
       <PeopleList>
         {ordered.map((m) => (
           <PersonRow key={m.userId} m={m} me={m.userId === me.id} action={isOwner && m.userId !== me.id
