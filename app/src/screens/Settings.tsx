@@ -349,12 +349,12 @@ export function AlbumSettings() {
         </Group>
 
         {/* 기념일: 모든 앨범 (앨범 만든 날 · 결혼기념일 · 가족 생일 …) */}
-        <Group title="기념일" footer="기념일 당일엔 홈 맨 위에 축하가 뜨고, 가족 탭에 다가오는 기념일이 보여요.">
+        <Group title="기념일" footer={`기념일 당일엔 홈 맨 위에 축하가 뜨고, ${album.kind === 'group' ? '모임' : '가족'} 탭에 다가오는 기념일이 보여요.`}>
           {album.days.map((d) => {
             const u = upcoming.get(d.id);
             return (
-              <Row key={d.id} icon={<span aria-hidden="true">{d.yearly ? '🎂' : '🎉'}</span>} label={d.name}
-                detail={`${fmtDate(d.date)}${u ? (u.daysLeft ? ` · D-${u.daysLeft.toLocaleString()}` : ' · 오늘') : ''}`}
+              <Row key={d.id} icon={<span aria-hidden="true">{d.yearly ? '🎂' : '🎉'}</span>} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
+                detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
                 onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
             );
           })}
@@ -437,12 +437,12 @@ export function AlbumInfo() {
           <span>사진 바꾸기</span>
         </button>
 
-        <Group title="앨범" footer={`${touched ? '' : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요. '}소개는 ${isGroup ? '모임' : '가족'} 탭 맨 위에 보여요.`}>
+        <Group title="앨범" footer={`${touched ? '' : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요. '}소개는 ${album.kind === 'group' ? '모임' : '가족'} 탭 맨 위에 보여요.`}>
           <Field label="앨범 이름" value={albumName} onChange={(e) => { setTouched(true); setName(e.target.value); }} onBlur={() => setName((v) => spaceAmp(v))} maxLength={40} name="album" />
           <label className={s.bioRow}>
             <span className={s.bioLabel}>소개</span>
             <textarea className={s.bioBox} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={BIO_MAX} rows={4}
-              placeholder={isGroup ? '예) 2019년부터 함께한 우리 모임 사진첩이에요' : '예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요'} name="bio" />
+              placeholder={album.kind === 'group' ? '예) 2019년부터 함께한 우리 모임 사진첩이에요' : album.kind === 'family' ? '예) 우리 가족의 소중한 순간을 모아요' : '예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요'} name="bio" />
             <small className={s.count} data-f="bio-count">{bio.length}/{BIO_MAX}</small>
           </label>
         </Group>

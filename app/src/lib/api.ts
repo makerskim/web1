@@ -103,7 +103,7 @@ export async function createAlbum(p: { name: string; children: Child[]; bio?: st
   const k = kidsRow(p.children);
   const group = !!p.kind && p.kind !== 'baby';
   // 가족·모임 앨범은 데이터베이스에 '앨범 종류' 칸이 있어야 해요 (없으면 만들기 전에 알려 줘요)
-  if (group) check(await sb.from('families').select('kind, since').limit(1));
+  if (group) check(await sb.from('families').select('kind, since, days').limit(1));
   const f = check(await sb.rpc('create_family', {
     p_name: p.name, p_baby_name: k.baby_name, p_baby_birthday: k.baby_birthday, p_display_name: p.displayName, p_avatar: p.avatar,
   })) as Row;

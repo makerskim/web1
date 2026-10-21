@@ -8,7 +8,8 @@ import { confirm, toast } from '../components/ui';
 import { useAlbum, useSession } from '../state/session';
 import * as api from '../lib/api';
 import { fmtDate, ymd } from '../lib/dates';
-import { nextDay } from '../lib/album';
+import { albumSince, nextDay } from '../lib/album';
+import { hasBatchim } from '../lib/korean';
 import { uuid } from '../lib/uuid';
 import type { Anniversary } from '../lib/types';
 import s from './Settings.module.css';
@@ -25,8 +26,10 @@ export function DayEdit() {
   const [yearly, setYearly] = useState(old?.yearly ?? false);
   const isOwner = album.myRole === 'owner';
   // 자주 쓰는 기념일: 누르면 이름(과 날짜)이 채워져요
+  // 가족·모임 앨범은 시작일을 비워 두면 이미 앨범 만든 날부터 세니까 '앨범 만든 날'은 빼요 (두 번 축하하지 않게)
+  const created = ymd(album.createdAt);
   const presets: Array<{ name: string; date?: string; yearly: boolean }> = [
-    { name: '앨범 만든 날', date: ymd(album.createdAt), yearly: false },
+    ...(album.kind !== 'baby' && albumSince(album) === created ? [] : [{ name: '앨범 만든 날', date: created, yearly: false }]),
     { name: '결혼기념일', yearly: false },
     { name: '처음 만난 날', yearly: false },
     { name: '생일', yearly: true },
@@ -48,7 +51,7 @@ export function DayEdit() {
     } catch (e) { toast((e as Error).message); }
   };
   const remove = async () => {
-    if (!old || !(await confirm({ title: `‘${old.name}’을 지울까요?`, ok: '지우기', danger: true }))) return;
+    if (!old || !(await confirm({ title: `‘${old.name}’${hasBatchim(old.name) ? '을' : '를'} 지울까요?`, ok: '지우기', danger: true }))) return;
     const days = album.days.filter((d) => d.id !== old.id);
     try {
       await api.updateAlbum(album.id, { days });
@@ -90,7 +93,7 @@ export function DayEdit() {
         </div>
         {preview && (
           <p className={s.dayPreview} data-f="day-preview">
-            {preview.daysLeft ? <>다음은 <b>{preview.label}</b> · {fmtDate(preview.date)} (D-{preview.daysLeft.toLocaleString()})</> : <>오늘이 <b>{preview.label}</b>이에요 🎉</>}
+            {preview.daysLeft ? <>다음은 <b>{preview.label}</b> · {fmtDate(preview.date)} (D-{preview.daysLeft.toLocaleString()})</> : <>오늘이 <b>{preview.label}</b>{hasBatchim(preview.label) ? '이에요' : '예요'} 🎉</>}
           </p>
         )}
         {old && <button type="button" className={s.dayRemove} onClick={remove} data-f="day-remove">이 기념일 지우기</button>}

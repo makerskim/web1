@@ -201,20 +201,26 @@ export function groupMilestone(start: D, at: D) {
   return y ? `${y}주년` : '';
 }
 
-/** 생일처럼 해마다: 오늘이 그날인지 (2월 29일은 윤년이 아니면 2월 28일) */
-export function isYearlyDay(date: D, at: D) {
-  const b = toDate(date), d = toDate(at);
-  return !!b && !!d && yearsToday(b, d) > 0;
+/** 생일처럼 해마다: 몇 년인지와 상관없이 그해의 같은 달·날 (2월 29일은 윤년이 아니면 2월 28일) */
+function sameDayIn(base: Date, year: number) {
+  return anniversary(base, year - base.getFullYear());
 }
 
-/** 생일처럼 해마다: 다음 그날까지 며칠 (오늘이면 0) */
+/** 생일처럼 해마다: 오늘이 그날인지 */
+export function isYearlyDay(date: D, at: D) {
+  const b = toDate(date), d = toDate(at);
+  if (!b || !d) return false;
+  const a = sameDayIn(b, d.getFullYear());
+  return a.getMonth() === d.getMonth() && a.getDate() === d.getDate();
+}
+
+/** 생일처럼 해마다: 다음 그날까지 며칠 (오늘이면 0). 넣은 해와 상관없이 올해 그날이 지났으면 내년 */
 export function nextYearly(date: D, at: D = new Date()) {
   const b = toDate(date), now = toDate(at);
   if (!b || !now) return null;
   const today = startOfDay(now);
-  let y = Math.max(1, today.getFullYear() - b.getFullYear());
-  let next = anniversary(b, y);
-  if (+next < +today) next = anniversary(b, ++y);
+  let next = sameDayIn(b, today.getFullYear());
+  if (+next < +today) next = sameDayIn(b, today.getFullYear() + 1);
   return { date: ymd(next), daysLeft: Math.round((+next - +today) / DAY) };
 }
 

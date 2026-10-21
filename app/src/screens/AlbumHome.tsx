@@ -100,7 +100,8 @@ export function AlbumHome() {
     }
     if (due) {
       const dl = due.daysLeft;
-      const left = Math.max(0, 100 - Math.round(due.progress * 100));
+      // 하루라도 남았으면 1% 이상으로 (D-1에 '0% 남았어요'가 되지 않게)
+      const left = Math.max(1, 100 - Math.round(due.progress * 100));
       return {
         f: 'due',
         left: `임신 ${weekNth(due.week)}`,

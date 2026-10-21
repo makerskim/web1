@@ -20,7 +20,7 @@ export function friendly(err: unknown): string {
     [/Payload too large|exceeded the maximum/i, '사진 용량이 너무 커요.'],
     [/provider is not enabled|Unsupported provider/i, '이 로그인 방법이 아직 켜져 있지 않아요. (설명서의 로그인 단계)'],
     [/rate limit|too many/i, '잠시 후에 다시 시도해 주세요.'],
-    [/relation .* does not exist|schema cache|Could not find the function|column .* does not exist/i, 'Supabase에 새 데이터베이스 설정이 필요해요. SQL Editor에서 schema.sql을 한 번 더 실행해 주세요. (설명서 참고)'],
+    [/relation .* does not exist|schema cache|Could not find the function|column .* does not exist|families_kind_check|families_days_check/i, 'Supabase에 새 데이터베이스 설정이 필요해요. SQL Editor에서 schema.sql을 한 번 더 실행해 주세요. (설명서 참고)'],
   ];
   for (const [re, ko] of map) if (re.test(msg)) return ko;
   return msg || '알 수 없는 문제가 생겼어요.';
