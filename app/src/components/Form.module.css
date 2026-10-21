@@ -7,7 +7,7 @@
   position: relative; display: grid; grid-template-columns: 6.5em 1fr; align-items: center; gap: var(--s-3);
   min-height: 56px; padding: 0 var(--s-4); text-align: left; width: 100%;
 }
-.row + .row::before { content: ""; position: absolute; top: 0; left: var(--s-4); right: 0; height: 1px; background: var(--c-hairline); }
+.row + .row::before, :global([data-date-field]) + .row::before { content: ""; position: absolute; top: 0; left: var(--s-4); right: 0; height: 1px; background: var(--c-hairline); }
 .label { font-size: var(--t-callout); font-weight: 500; color: var(--c-label); }
 .input:focus-visible { outline: none; }
 .input { width: 100%; min-width: 0; height: 52px; border: 0; outline: none; background: transparent; font-size: var(--t-callout); color: var(--c-label); }

@@ -91,3 +91,14 @@
 .fieldValue { font-size: var(--t-callout); font-weight: 600; }
 .placeholder { color: var(--c-label-3); font-weight: 400; }
 .fieldIcon { color: var(--c-accent-strong); }
+
+/* 임신 주수 휠 */
+.weeksLead { margin: 0 0 var(--s-2); font-size: var(--t-sub); color: var(--c-label-2); }
+.weeksNote { margin: var(--s-3) 0 0; text-align: center; font-size: var(--t-sub); line-height: 1.6; color: var(--c-label-2); }
+.weeksNote b { color: var(--c-label); font-weight: 700; }
+.weeksBtns { margin-top: var(--s-3); }
+.weeksOk {
+  width: 100%; min-height: 3rem; border-radius: var(--r-md); background: var(--c-accent-strong); color: #fff;
+  font-size: var(--t-headline); font-weight: 700;
+}
+.weeksOk:active { opacity: .85; }

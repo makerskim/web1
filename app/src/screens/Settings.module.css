@@ -51,3 +51,7 @@
 }
 .count { grid-column: 2; justify-self: end; padding-bottom: var(--s-2); font-size: var(--t-footnote); color: var(--c-label-3); font-variant-numeric: tabular-nums; }
 .ownerOnly { padding: var(--s-10) 0; text-align: center; font-size: var(--t-callout); color: var(--c-label-2); }
+
+/* 프로필 편집: 모임 앨범 안내 */
+.kindNote { margin: 0 var(--s-4); font-size: var(--t-sub); line-height: 1.55; color: var(--c-label-2); }
+.kindNote b { color: var(--c-label); }

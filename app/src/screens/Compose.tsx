@@ -186,7 +186,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
         p.set(((i + 1) / photos.length) * 0.15);
       }
       if (skipped) toast(`${skipped}장은 원본으로 올릴 수 없어 일반 화질로 올려요`);
-      p.set(0.15, '가족에게 올리는 중');
+      p.set(0.15, '앨범에 올리는 중');
       const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: first.toISOString(), photos: out }, (f) => p.set(0.15 + f * 0.85));
       p.close();
       usePosts.getState().prepend(post);

@@ -9,7 +9,8 @@ import { usePageScroll } from '../components/Stack';
 import { AmpText } from '../components/AlbumBits';
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
-import { babyMilestone, ymd } from '../lib/dates';
+import { babyMilestone, groupMilestone, ymd } from '../lib/dates';
+import { albumSince } from '../lib/album';
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import { InviteSheet } from './Invite';
@@ -39,7 +40,9 @@ export function Feed() {
     return () => io.disconnect();
   }, [loadMore, posts.length, root]);
 
-  const milestone = album.babyBirthday ? babyMilestone(album.babyBirthday) : '';
+  const group = album.kind === 'group';
+  const since = group ? albumSince(album) : null;
+  const milestone = group ? (since ? groupMilestone(since, new Date()) : '') : album.babyBirthday ? babyMilestone(album.babyBirthday) : '';
   const msKey = `pm-ms-${album.id}-${ymd(new Date())}`;
   const [msHidden, setMsHidden] = useState(() => !!load(msKey, false));
 
@@ -53,7 +56,7 @@ export function Feed() {
 
       {milestone && !msHidden && (
         <div className={s.milestone}>
-          <p>오늘은 {callName(album.babyName || '아이')}의 <b>{milestone}</b>이에요</p>
+          <p>오늘은 {group ? '우리 모임' : callName(album.babyName || '아이')}의 <b>{milestone}</b>이에요</p>
           <button onClick={() => { save(msKey, true); setMsHidden(true); }} aria-label="닫기"><Icon name="close" size={18} /></button>
         </div>
       )}

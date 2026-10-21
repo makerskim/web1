@@ -1,6 +1,6 @@
 // 아이(들): 태어나기 전엔 태명, 태어나면 이름. 한 명이 기본이고 쌍둥이·다둥이는 더 넣을 수 있어요.
 import { uuid } from './uuid';
-import { babyDay, toDate } from './dates';
+import { babyDay, daysBetween, toDate } from './dates';
 import { callName } from './korean';
 
 export interface Child {
@@ -13,6 +13,8 @@ export interface Child {
   birthday: string | null;
   /** 태어났는지 (false: 날짜는 출산 예정일 · true: 날짜는 생일 · 없음: 예전 앨범이라 날짜로 짐작) */
   born?: boolean;
+  /** 임신 시작일 'YYYY-MM-DD' (마지막 생리 시작일 · 병원 주수 기준). 없으면 예정일을 40주로 봐요 */
+  start?: string | null;
 }
 
 export const MAX_KIDS = 6;
@@ -57,6 +59,7 @@ export function kidsFrom(raw: unknown, babyName: string, babyBirthday: string | 
       name: typeof x.name === 'string' ? x.name : '',
       birthday: typeof x.birthday === 'string' && toDate(x.birthday) ? x.birthday : null,
       ...(typeof x.born === 'boolean' ? { born: x.born } : {}),
+      ...(typeof x.start === 'string' && toDate(x.start) ? { start: x.start } : {}),
     }));
   }
   if (babyName || babyBirthday) return [newChild({ name: babyName || '', birthday: babyBirthday, born: undefined })];
@@ -76,25 +79,54 @@ export function ageBirthday(kids: Child[], at: Date = new Date()): string | null
 /** 앨범에 바로 반영할 값 (보이는 이름·기준 생일 포함) */
 export const kidsPatch = (kids: Child[]) => ({ children: kids, babyName: kidsLabel(kids), babyBirthday: ageBirthday(kids) });
 
-/** 출산 예정일까지: 예정일을 임신 40주 0일로 봐요 (태어났거나 날짜가 없으면 null) */
+/** 출산 예정일까지 (태어났거나 날짜가 없으면 null)
+ *  임신 시작일이 있으면 그날부터, 없으면 예정일을 임신 40주 0일로 보고 셉니다 (쌍둥이는 일찍 낳는 경우가 많아요) */
 export interface DueInfo {
   /** 'D-68'의 68 (예정일 전날이 1) */
   daysLeft: number;
-  /** 임신 주수 · 일수 (30주 2일) */
+  /** 오늘 임신 주수 · 일수 (33주 2일) */
   week: number;
   day: number;
-  /** 0 ~ 1 (0주 → 40주) */
+  /** 0 ~ 1 (임신 시작 → 출산 예정일) */
   progress: number;
+  /** 임신 시작부터 예정일까지 며칠 (보통 280일) */
+  total: number;
+  /** 예정일의 주수 (37주 2일) */
+  dueWeek: number;
+  dueDay: number;
+  /** 임신 시작일을 넣었는지 */
+  custom: boolean;
 }
 export const FULL_TERM = 280;
-export function dueInfo(c: Pick<Child, 'birthday' | 'born'> | null | undefined, now: Date = new Date()): DueInfo | null {
+/** 임신 시작일부터 예정일까지 20주 ~ 44주일 때만 그 날짜를 써요 */
+export const TERM_MIN = 140;
+export const TERM_MAX = 308;
+export function termDays(c: Pick<Child, 'birthday' | 'start'>): number | null {
+  const n = c.start && c.birthday ? daysBetween(c.start, c.birthday) : null;
+  return n !== null && n >= TERM_MIN && n <= TERM_MAX ? n : null;
+}
+export function dueInfo(c: Pick<Child, 'birthday' | 'born' | 'start'> | null | undefined, now: Date = new Date()): DueInfo | null {
   const d = c?.birthday ? babyDay(c.birthday, now) : null;
   if (d === null || !c || isBorn(c, now)) return null;
   // 예정일이 지났는데 아직 뱃속이면 0이나 음수 (D-day, D+3)
   const daysLeft = 1 - d;
-  const gest = Math.min(FULL_TERM, Math.max(0, FULL_TERM - daysLeft));
-  return { daysLeft, week: Math.floor(gest / 7), day: gest % 7, progress: gest / FULL_TERM };
+  const custom = termDays(c);
+  const total = custom ?? FULL_TERM;
+  // 예정일이 지나도 주수는 계속 늘어요 (40주 3일)
+  const gest = Math.max(0, total - daysLeft);
+  return { daysLeft, week: Math.floor(gest / 7), day: gest % 7, progress: Math.min(1, gest / total), total, dueWeek: Math.floor(total / 7), dueDay: total % 7, custom: custom !== null };
 }
+
+/** 태어난 주수 (임신 시작일을 넣었을 때만): '37주 2일' */
+export function bornWeeks(c: Pick<Child, 'birthday' | 'start'>) {
+  const n = c.start && c.birthday ? daysBetween(c.start, c.birthday) : null;
+  return n !== null && n >= TERM_MIN && n <= TERM_MAX ? `${Math.floor(n / 7)}주${n % 7 ? ` ${n % 7}일` : ''}` : '';
+}
+
+/** '33주 2일' (0일이면 '33주') */
+export const weeksText = (w: number, d: number) => `${w}주${d ? ` ${d}일` : ''}`;
+/** '33주 2일이에요' · '37주예요' */
+export const weeksIs = (w: number, d: number) => `${weeksText(w, d)}${d ? '이에요' : '예요'}`;
 
 /** 'D-68' · 'D-day' · 'D+3' */
 export const ddayText = (i: DueInfo) => (i.daysLeft > 0 ? `D-${i.daysLeft.toLocaleString()}` : i.daysLeft === 0 ? 'D-day' : `D+${(-i.daysLeft).toLocaleString()}`);

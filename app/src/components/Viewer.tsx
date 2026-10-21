@@ -8,7 +8,8 @@ import { Avatar } from './Avatar';
 import { useBackClose } from './ui';
 import { usePhotoURL } from '../hooks/usePhoto';
 import { useSession } from '../state/session';
-import { fmtDate, postAge } from '../lib/dates';
+import { fmtDate } from '../lib/dates';
+import { postTag } from '../lib/album';
 import { photoURL } from '../lib/storage';
 import { saveWithChoice } from '../lib/media';
 import type { PhotoMeta } from '../lib/types';
@@ -106,8 +107,8 @@ export function Viewer({ items, start, onClose, onOpenPost }: {
   const member = useSession((st) => st.member);
   const album = useSession((st) => st.album());
   const author = member(it.authorId);
-  // 아이 나이는 올린 날 기준
-  const age = album?.babyBirthday ? postAge(album.babyBirthday, it.createdAt) : '';
+  // 아이 나이(모임은 기념일)는 올린 날 기준
+  const age = postTag(album, it.createdAt);
 
   return createPortal(
     <motion.div className={s.viewer} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>

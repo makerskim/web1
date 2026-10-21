@@ -72,7 +72,7 @@ export function Activity() {
   return (
     <Page>
       <TopBar large title={<span className={s.title}>소식</span>} />
-      {!rows.length && <p className={s.empty}>아직 새 소식이 없어요.<br />가족이 좋아요나 댓글을 남기면 여기에 보여요.</p>}
+      {!rows.length && <p className={s.empty}>아직 새 소식이 없어요.<br />멤버가 좋아요나 댓글을 남기면 여기에 보여요.</p>}
       {rows.map(([g, list]) => (
         <section key={g}>
           <h3 className={s.group}>{g}</h3>

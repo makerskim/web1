@@ -6,7 +6,8 @@ import { Icon } from './Icon';
 import { FaceStack } from './People';
 import { useSession } from '../state/session';
 import { liked, toggleLike } from '../state/actions';
-import { postAge, timeAgo } from '../lib/dates';
+import { timeAgo } from '../lib/dates';
+import { postTag } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import type { Post } from '../lib/types';
 import s from './PostCard.module.css';
@@ -34,8 +35,8 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
   const isLiked = liked(post);
   const first = post.photos[0];
   const ratio = Math.min(1.25, Math.max(0.52, first.h / first.w)); // 4:5 ~ 1.91:1
-  // 아이 나이는 올린 날 기준
-  const age = album?.babyBirthday ? postAge(album.babyBirthday, post.createdAt) : '';
+  // 아이 나이(모임은 기념일)는 올린 날 기준
+  const age = postTag(album, post.createdAt);
 
   const onTap = () => {
     const now = Date.now();

@@ -74,13 +74,13 @@ function WhoSheet({ open, onClose, items, value, onPick, unit }: {
   }, [items]);
   // 지금 가족 + 앨범을 떠난 가족(사진은 남아 있어요)
   const member = useSession((st) => st.member);
-  const people = [...members.filter((m) => counts.get(m.userId)), ...[...counts.keys()].filter((id) => !members.some((m) => m.userId === id)).map((id) => ({ ...member(id), displayName: '예전 가족' }))];
+  const people = [...members.filter((m) => counts.get(m.userId)), ...[...counts.keys()].filter((id) => !members.some((m) => m.userId === id)).map((id) => ({ ...member(id), displayName: '예전 멤버' }))];
   return (
     <Sheet open={open} onClose={onClose} title="올린 사람">
       <ul className={s.list}>
         <li><button type="button" className={s.option} onClick={() => onPick(null)} aria-pressed={!value}>
           <span className={s.allIcon}><Icon name="users" size={22} /></span>
-          <span className={s.optLabel}>모든 가족</span>
+          <span className={s.optLabel}>모든 사람</span>
           <small>{items.length}{unit}</small>
           {!value && <Icon name="check" size={20} className={s.check} />}
         </button></li>
