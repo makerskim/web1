@@ -447,7 +447,7 @@ revoke all on public.families, public.members, public.posts, public.likes, publi
   from anon, authenticated;
 
 grant select, delete on public.families to authenticated;
-grant update (name, baby_name, baby_birthday, storage, cover, children, bio) on public.families to authenticated;
+grant update (name, baby_name, baby_birthday, storage, cover, children, bio, kind, since) on public.families to authenticated;
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
 grant select, delete on public.posts to authenticated;

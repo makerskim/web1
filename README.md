@@ -92,6 +92,7 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 4. 휴대폰으로 **https://makerskim.github.io/web1/album/** 열기 → 카카오나 구글로 로그인 → 앨범 만들기 → 가족 초대
 
 > 이후로는 `master`에 합칠 때마다 자동으로 다시 빌드되고 올라가요.
+> 업데이트에 `supabase/schema.sql` 이 바뀌었으면 합친 뒤 **1번(데이터베이스 설정)을 한 번 더** 실행하세요. 여러 번 실행해도 안전하고, 사진·앨범은 그대로예요.
 
 ## 6. (선택) 사진을 구글 드라이브에 저장하기
 
@@ -132,7 +133,7 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 | 구글 **redirect_uri_mismatch** | 4-3 승인된 리디렉션 URI 확인 (JavaScript 원본 칸이 아니에요) |
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
-| “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 |
+| “새 데이터베이스 설정이 필요해요” · “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 (최신 `schema.sql` 전체를 붙여넣기) |
 | 드라이브 연결 버튼이 회색이에요 | 6-6번 `googleClientId` 확인 |
 | “구글 드라이브 기능이 아직 설정되지 않았어요” | 6-3 ~ 6-5번 확인 |
 | 드라이브 연결 창에 **origin_mismatch** | 4-3 승인된 JavaScript 원본이 `https://makerskim.github.io` (경로·끝 / 없이) 인지 |
