@@ -162,10 +162,12 @@ export function daysBetween(a: D, b: D) {
   return Math.round((+startOfDay(y) - +startOfDay(x)) / DAY);
 }
 
-/** 기념일 목록 (첫날을 1일로 세요): 아기는 50일 · 백일 · 200일 · 300일 · 첫 돌 · N번째 생일, 모임은 100일 · 200일 · 300일 · N주년 */
-export type MilestoneKind = 'baby' | 'group';
+/** 기념일 목록 (첫날을 1일로 세요): 아기는 50일 · 백일 · 200일 · 300일 · 첫 돌 · N번째 생일,
+ *  가족·모임·기념일은 100일 · 200일 · 300일 · 500일 · 1000일 · N주년 */
+export type MilestoneKind = 'baby' | 'together';
+const TOGETHER_DAYS = [100, 200, 300, 500, 1000];
 function milestones(base: Date, kind: MilestoneKind, untilYear: number) {
-  const days: Array<[number, string]> = kind === 'baby' ? [[50, '50일'], [100, '백일'], [200, '200일'], [300, '300일']] : [[100, '100일'], [200, '200일'], [300, '300일']];
+  const days: Array<[number, string]> = kind === 'baby' ? [[50, '50일'], [100, '백일'], [200, '200일'], [300, '300일']] : TOGETHER_DAYS.map((n) => [n, `${n}일`]);
   const out = days.map(([n, label]) => ({ date: new Date(base.getFullYear(), base.getMonth(), base.getDate() + n - 1), label }));
   for (let y = 1; base.getFullYear() + y <= untilYear; y++) {
     out.push({ date: anniversary(base, y), label: kind === 'baby' ? (y === 1 ? '첫 돌' : `${y}번째 생일`) : `${y}주년` });
@@ -190,13 +192,36 @@ export function nextMilestone(start: D, kind: MilestoneKind, at: D = new Date())
   return { label: next.label, date: ymd(next.date), daysLeft, progress: Math.min(1, Math.max(0, 1 - daysLeft / span)) };
 }
 
-/** 모임 기념일 (그날 올린 게시물 옆): '100일' · '1주년' */
+/** 가족·모임·기념일의 그날 (그날 올린 게시물 옆): '100일' · '1000일' · '1주년' */
 export function groupMilestone(start: D, at: D) {
   const day = babyDay(start, at);
   if (day === null || day < 2) return '';
-  if (day === 100 || day === 200 || day === 300) return `${day}일`;
+  if (TOGETHER_DAYS.includes(day)) return `${day}일`;
   const y = yearsToday(toDate(start)!, toDate(at)!);
   return y ? `${y}주년` : '';
+}
+
+/** 생일처럼 해마다: 몇 년인지와 상관없이 그해의 같은 달·날 (2월 29일은 윤년이 아니면 2월 28일) */
+function sameDayIn(base: Date, year: number) {
+  return anniversary(base, year - base.getFullYear());
+}
+
+/** 생일처럼 해마다: 오늘이 그날인지 */
+export function isYearlyDay(date: D, at: D) {
+  const b = toDate(date), d = toDate(at);
+  if (!b || !d) return false;
+  const a = sameDayIn(b, d.getFullYear());
+  return a.getMonth() === d.getMonth() && a.getDate() === d.getDate();
+}
+
+/** 생일처럼 해마다: 다음 그날까지 며칠 (오늘이면 0). 넣은 해와 상관없이 올해 그날이 지났으면 내년 */
+export function nextYearly(date: D, at: D = new Date()) {
+  const b = toDate(date), now = toDate(at);
+  if (!b || !now) return null;
+  const today = startOfDay(now);
+  let next = sameDayIn(b, today.getFullYear());
+  if (+next < +today) next = sameDayIn(b, today.getFullYear() + 1);
+  return { date: ymd(next), daysLeft: Math.round((+next - +today) / DAY) };
 }
 
 /** '1년 6개월' · '5개월' · '23일' (첫날을 1일로) */

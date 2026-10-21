@@ -17,7 +17,7 @@ import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
 import { fmtDate, ymd } from '../lib/dates';
-import { albumSince } from '../lib/album';
+import { KINDS, albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
 import { DatePickerSheet } from '../components/DatePicker';
 import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlbumName, termDays, type Child } from '../lib/kids';
 import type { AlbumKind } from '../lib/types';
@@ -80,7 +80,7 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
         </button>
         <input ref={file} type="file" accept="image/*" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setPhoto(f); }} data-who="file" />
         <Group footer="앨범에서 보이는 이름이에요.">
-          <Field label={album.kind === 'group' ? '앨범에서 보일 이름' : '나는 아이의'} value={name} onChange={(e) => setName(e.target.value)} maxLength={20}
+          <Field label={album.kind === 'baby' ? '나는 아이의' : '내 이름'} value={name} onChange={(e) => setName(e.target.value)} maxLength={20}
             placeholder={album.kind === 'group' ? '민지' : '엄마'} name="role" data-who="name" />
         </Group>
         <Button size="lg" block onClick={save} data-save>저장</Button>
@@ -134,7 +134,7 @@ export function Settings() {
 
         <Group title="앨범">
           <Row icon={<CoverFace size={30} />} label="앨범 설정" detail={album.name} onClick={() => nav('/settings/album')} data-row="album" />
-          <Row icon={<span aria-hidden="true">{album.kind === 'group' ? '🙌' : '👶'}</span>} label="앨범 종류" detail={album.kind === 'group' ? '친구·모임' : '아기·가족'} onClick={() => nav('/settings/album')} data-row="kind" />
+          <Row icon={<span aria-hidden="true">{kindInfo(album.kind).icon}</span>} label="앨범 종류" detail={kindInfo(album.kind).short} onClick={() => nav('/settings/album')} data-row="kind" />
           <Row icon={<Icon name="swap" size={22} />} label="다른 앨범" detail={`${albums.length}개`} onClick={() => setSheet('albums')} data-row="albums" />
         </Group>
 
@@ -167,7 +167,7 @@ function TextSizeSheet({ open, onClose }: { open: boolean; onClose: () => void }
   const setTextSize = useSession((st) => st.setTextSize);
   return (
     <Sheet open={open} onClose={onClose} title="글자 크기">
-      <p className={s.preview}>{album?.kind === 'group' ? '오늘도 모두 웃고 있어요 🙂' : `${album?.babyName ? `${callName(album.babyName)}가` : '아기가'} 웃고 있어요 🙂`}</p>
+      <p className={s.preview}>{album && album.kind !== 'baby' ? '오늘도 모두 웃고 있어요 🙂' : `${album?.babyName ? `${callName(album.babyName)}가` : '아기가'} 웃고 있어요 🙂`}</p>
       <div className={s.options}>
         {TEXT_SIZES.map((t) => (
           <button key={t.value} className={s.option} onClick={() => setTextSize(t.value)} aria-pressed={textSize === t.value} data-value={t.value}>
@@ -278,25 +278,26 @@ export function AlbumSettings() {
   const [sheet, setSheet] = useState<'members' | 'since' | null>(null);
   const code = `${album.inviteCode.slice(0, 4)}-${album.inviteCode.slice(4)}`;
   const alone = members.length <= 1;
-  const isGroup = album.kind === 'group';
+  const isBaby = album.kind === 'baby';
   const since = albumSince(album);
 
-  // 앨범 종류: 아기·가족 ↔ 친구·모임 (아이 정보는 지우지 않고 그대로 둬요)
+  // 앨범 종류: 아기 · 가족 · 친구·모임 (아이 정보는 지우지 않고 그대로 둬요)
   const setKind = async (kind: AlbumKind) => {
     if (kind === album.kind) return;
     try {
       await api.updateAlbum(album.id, { kind });
       useSession.getState().patchAlbum({ kind });
-      toast(kind === 'group' ? '친구·모임 앨범으로 바꿨어요' : '아기·가족 앨범으로 바꿨어요');
+      toast(`${kindInfo(kind).label}으로 바꿨어요`);
     } catch (e) { toast((e as Error).message); }
   };
   const setSince = async (v: string | null) => {
     try {
       await api.updateAlbum(album.id, { since: v });
       useSession.getState().patchAlbum({ since: v });
-      toast('모임 시작일을 바꿨어요');
+      toast(`${sinceLabel(album.kind)}을 바꿨어요`);
     } catch (e) { toast((e as Error).message); }
   };
+  const upcoming = new Map(upcomingDays(album, 10).map((u) => [u.id, u]));
   const check = <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />;
 
   const newCode = async () => {
@@ -333,15 +334,32 @@ export function AlbumSettings() {
     <Page>
       <TopBar back title="앨범 설정" />
       <div className={s.page}>
-        {/* 앨범 종류와 기준 날짜 (아기: 아이·예정일·임신 시작일은 '프로필 편집'에서 · 모임: 시작일은 여기서) */}
-        <Group title="앨범 종류" footer={isGroup
-          ? '친구·모임 앨범은 시작일부터 함께한 날과 다음 기념일(100일 · 1주년)까지 남은 날을 보여 줘요.'
-          : '아기·가족 앨범은 출산 예정일까지 남은 날과 임신 주수를 보여 줘요. 임신 시작일을 넣으면 쌍둥이처럼 일찍 낳는 경우도 정확해요.'}>
-          <Row icon={<span aria-hidden="true">👶</span>} label="아기·가족 앨범" onClick={isOwner ? () => setKind('baby') : undefined} chevron={false} data-kind="baby">{!isGroup && check}</Row>
-          <Row icon={<span aria-hidden="true">🙌</span>} label="친구·모임 앨범" onClick={isOwner ? () => setKind('group') : undefined} chevron={false} data-kind="group">{isGroup && check}</Row>
-          {isGroup
-            ? <Row icon={<Icon name="calendar" size={22} />} label="모임 시작일" detail={since ? fmtDate(since) : '고르기'} onClick={isOwner ? () => setSheet('since') : undefined} data-row="since" />
-            : <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isOwner ? () => nav('/settings/album/info') : undefined} data-row="kids" />}
+        {/* 앨범 종류와 기준 날짜 (아기: 아이·예정일·임신 시작일은 '프로필 편집'에서 · 가족/모임: 시작일은 여기서) */}
+        <Group title="앨범 종류" footer={isBaby
+          ? '아기 앨범은 출산 예정일까지 남은 날과 임신 주수, 태어난 뒤엔 아이 나이를 보여 줘요.'
+          : `${album.kind === 'family' ? '가족' : '친구·모임'} 앨범은 시작일부터 함께한 날과 다음 100일 · 1주년까지 남은 날을 보여 줘요.${album.kind === 'family' ? ' 예) 결혼한 날, 앨범을 시작한 날' : ' 예) 처음 모인 날'}`}>
+          {KINDS.map((k) => (
+            <Row key={k.v} icon={<span aria-hidden="true">{k.icon}</span>} label={k.label} onClick={isOwner ? () => setKind(k.v) : undefined} chevron={false} data-kind={k.v}>
+              {album.kind === k.v && check}
+            </Row>
+          ))}
+          {isBaby
+            ? <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isOwner ? () => nav('/settings/album/info') : undefined} data-row="kids" />
+            : <Row icon={<Icon name="calendar" size={22} />} label={sinceLabel(album.kind)} detail={since ? fmtDate(since) : '고르기'} onClick={isOwner ? () => setSheet('since') : undefined} data-row="since" />}
+        </Group>
+
+        {/* 기념일: 모든 앨범 (앨범 만든 날 · 결혼기념일 · 가족 생일 …) */}
+        <Group title="기념일" footer={`기념일 당일엔 홈 맨 위에 축하가 뜨고, ${album.kind === 'group' ? '모임' : '가족'} 탭에 다가오는 기념일이 보여요.`}>
+          {album.days.map((d) => {
+            const u = upcoming.get(d.id);
+            return (
+              <Row key={d.id} icon={<span aria-hidden="true">{d.yearly ? '🎂' : '🎉'}</span>} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
+                detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
+                onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
+            );
+          })}
+          {isOwner && album.days.length < 10 && <Row icon={<Icon name="plus" size={20} />} label="기념일 추가" onClick={() => nav('/settings/album/day/new')} data-row="day-add" />}
+          {!isOwner && !album.days.length && <Row label="아직 기념일이 없어요" />}
         </Group>
 
         <Group title="멤버" footer={isOwner ? '가족뿐 아니라 초대받은 누구나 멤버가 될 수 있어요. 관리자는 멤버와 초대 코드를 관리해요.' : undefined}>
@@ -361,8 +379,8 @@ export function AlbumSettings() {
         </Group>
       </div>
       <MembersSheet open={sheet === 'members'} onClose={() => setSheet(null)} />
-      {isOwner && isGroup && (
-        <DatePickerSheet open={sheet === 'since'} onClose={() => setSheet(null)} title="모임 시작일" value={since} min="1950-01-01" max={ymd(new Date())}
+      {isOwner && !isBaby && (
+        <DatePickerSheet open={sheet === 'since'} onClose={() => setSheet(null)} title={sinceLabel(album.kind)} value={since} min="1950-01-01" max={ymd(new Date())}
           onChange={(v) => { if (v) setSince(v); }} />
       )}
     </Page>
@@ -376,7 +394,7 @@ export function AlbumInfo() {
   const nav = useNavigate();
   const cover = useCoverChanger();
   const isOwner = album.myRole === 'owner';
-  const isGroup = album.kind === 'group';
+  const isGroup = album.kind !== 'baby';
   const [kids, setKids] = useState<Child[]>(() => (album.children.length ? album.children : [newChild()]));
   // 앨범 이름을 직접 바꾼 적이 없으면 아이 이름을 따라가요 (태어나서 이름을 넣으면 '하준이네 앨범'으로). 모임 앨범은 직접 써요
   const [touched, setTouched] = useState(() => isGroup || spaceAmp(album.name) !== suggestAlbumName(album.children));
@@ -419,18 +437,18 @@ export function AlbumInfo() {
           <span>사진 바꾸기</span>
         </button>
 
-        <Group title="앨범" footer={`${touched ? '' : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요. '}소개는 ${isGroup ? '모임' : '가족'} 탭 맨 위에 보여요.`}>
+        <Group title="앨범" footer={`${touched ? '' : '아이 이름이 바뀌면 앨범 이름도 따라 바뀌어요. '}소개는 ${album.kind === 'group' ? '모임' : '가족'} 탭 맨 위에 보여요.`}>
           <Field label="앨범 이름" value={albumName} onChange={(e) => { setTouched(true); setName(e.target.value); }} onBlur={() => setName((v) => spaceAmp(v))} maxLength={40} name="album" />
           <label className={s.bioRow}>
             <span className={s.bioLabel}>소개</span>
             <textarea className={s.bioBox} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={BIO_MAX} rows={4}
-              placeholder={isGroup ? '예) 2019년부터 함께한 우리 모임 사진첩이에요' : '예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요'} name="bio" />
+              placeholder={album.kind === 'group' ? '예) 2019년부터 함께한 우리 모임 사진첩이에요' : album.kind === 'family' ? '예) 우리 가족의 소중한 순간을 모아요' : '예) 12월에 만나요! 씩씩이 & 튼튼이를 기다리는 우리 가족 앨범이에요'} name="bio" />
             <small className={s.count} data-f="bio-count">{bio.length}/{BIO_MAX}</small>
           </label>
         </Group>
 
         {isGroup
-          ? <p className={s.kindNote}>친구·모임 앨범이에요. 모임 시작일은 <b>설정 → 앨범 종류</b>에서 바꿀 수 있어요.</p>
+          ? <p className={s.kindNote}>{kindInfo(album.kind).label}이에요. {sinceLabel(album.kind)}과 기념일은 <b>설정 → 앨범 설정</b>에서 바꿀 수 있어요.</p>
           : <KidsForm kids={kids} onChange={setKids} />}
       </div>
       {cover.ui}

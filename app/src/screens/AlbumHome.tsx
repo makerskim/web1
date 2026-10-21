@@ -1,5 +1,5 @@
 // 가족 탭: 인스타그램 프로필처럼 — 앨범 사진 · 아이 이름 · 소개 · 출산 예정일 · 큰 숫자 · 버튼 · 사진 그리드
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Bars';
 import { Photo } from '../components/Photo';
@@ -10,17 +10,17 @@ import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { babyAge, babyDay, babyMonths, fmtDate, nextMilestone, spanLabel, ymd } from '../lib/dates';
-import { albumSince } from '../lib/album';
-import { bornWeeks, childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, weeksText, type Child } from '../lib/kids';
+import { albumSince, upcomingDays } from '../lib/album';
+import { bornWeeks, childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weekNth, weeksText, type Child } from '../lib/kids';
 import { DatePickerSheet } from '../components/DatePicker';
 import { toast } from '../components/ui';
-import { subj } from '../lib/korean';
+import { hasBatchim, subj } from '../lib/korean';
 import { InviteSheet } from './Invite';
 import { ProfileSheet } from './Settings';
 import s from './AlbumHome.module.css';
 
 type Tab = 'all' | 'liked';
-interface Journey { f: string; icon: ReactNode; title: string; sub?: string; left: string; right: string; progress: number; marker: string }
+interface Journey { f: string; left: string; right: string; sub: string; progress: number }
 const TABS: Array<{ id: Tab; icon: IconName; label: string }> = [
   { id: 'all', icon: 'grid', label: '게시물' },
   { id: 'liked', icon: 'heart', label: '좋아요' },
@@ -52,8 +52,8 @@ export function AlbumHome() {
     return () => { live = false; };
   }, [album.id, postsVersion, reload]);
 
-  // 친구·모임 앨범: 아이 대신 모임 시작일부터 함께한 날
-  const isGroup = album.kind === 'group';
+  // 가족·모임 앨범: 아이 대신 시작일부터 함께한 날
+  const isGroup = album.kind !== 'baby';
   const kids = isGroup ? [] : album.children || [];
   const today = ymd(new Date());
   const label = (c: Child) => childName(c) || ORDER[kids.indexOf(c)] || '아이';
@@ -84,44 +84,45 @@ export function AlbumHome() {
       : born && day !== null ? { value: `${day.toLocaleString()}일`, label: '함께한 날' } : null;
   const shortDate = (v: string) => (v.slice(0, 4) === today.slice(0, 4) ? fmtDate(v, true).replace(/^\d{4}년 /, '') : fmtDate(v, true));
   const age = born && months !== null && day !== null ? (months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`) : '';
-  // 날짜 카드: 얼마나 왔고 얼마나 남았는지 막대로 (임신 → 출산 예정일 · 태어난 뒤 다음 기념일 · 모임 다음 기념일)
+  // 날짜 카드 (간단하게): 위 한 줄 '임신 28주차 · 25% 남았어요', 막대, 아래 한 줄 '12월 24일 목요일 출산 예정'
+  const nextText = (n: { label: string; daysLeft: number } | null) => (n ? (n.daysLeft ? `${n.label}까지 ${n.daysLeft.toLocaleString()}일` : `오늘은 ${n.label}이에요 🎉`) : '');
   const journey = ((): Journey | null => {
     if (isGroup) {
       if (!since || sday === null) return null;
-      const next = nextMilestone(since, 'group');
+      const next = nextMilestone(since, 'together');
       return {
-        f: 'since', icon: <Icon name="calendar" size={20} stroke={2.2} className={s.jIcon} />,
-        title: sday >= 1 ? `${fmtDate(since)}부터 함께해요` : `${fmtDate(since)}에 시작해요`,
+        f: 'since',
         left: sday >= 1 ? `함께한 지 ${spanLabel(since)}` : `시작까지 ${(1 - sday).toLocaleString()}일`,
-        right: next ? (next.daysLeft ? `${next.label}까지 ${next.daysLeft.toLocaleString()}일` : `오늘은 ${next.label}이에요 🎉`) : '',
-        progress: next?.progress ?? 0, marker: '🎈',
+        right: nextText(next),
+        sub: sday >= 1 ? `${fmtDate(since)}부터 함께해요` : `${fmtDate(since)}에 시작해요`,
+        progress: next?.progress ?? 0,
       };
     }
     if (due) {
       const dl = due.daysLeft;
+      // 하루라도 남았으면 1% 이상으로 (D-1에 '0% 남았어요'가 되지 않게)
+      const left = Math.max(1, 100 - Math.round(due.progress * 100));
       return {
-        f: 'due', icon: <Icon name="calendar" size={20} stroke={2.2} className={s.jIcon} />,
-        title: dl === 0 ? `${who}오늘이 출산 예정일이에요` : `${who}${shortDate(bday!)} 출산 예정${dl < 0 ? '일' : ''}`,
-        sub: due.custom && dl > 0 ? `임신 ${weeksText(due.dueWeek, due.dueDay)}에 만날 예정이에요` : '',
-        left: weeksLabel(due) || '임신 0주',
-        right: dl > 0 ? `${dl < 7 ? `${dl}일` : weeksText(Math.floor(dl / 7), dl % 7)} 남았어요` : dl === 0 ? '오늘 만나요' : `예정일 ${(-dl).toLocaleString()}일 지남`,
-        progress: due.progress, marker: '👶',
+        f: 'due',
+        left: `임신 ${weekNth(due.week)}`,
+        right: dl > 0 ? `${left}% 남았어요` : dl === 0 ? '오늘 출산 예정일' : `예정일 ${(-dl).toLocaleString()}일 지남`,
+        sub: `${who}${shortDate(bday!)} 출산 예정${dl < 0 ? '이었어요' : ''}${due.custom && dl > 0 ? ` · ${weeksText(due.dueWeek, due.dueDay)}` : ''}`,
+        progress: due.progress,
       };
     }
     if (born && bday) {
       const next = nextMilestone(bday, 'baby');
       const bw = focus ? bornWeeks(focus) : '';
       return {
-        f: 'birthday', icon: <span className={s.jEmoji} aria-hidden="true">🎂</span>,
-        title: `${who}${fmtDate(bday)} 태어났어요`,
-        sub: bw ? `임신 ${bw}에 만났어요` : '',
-        left: age,
-        right: next ? (next.daysLeft ? `${next.label}까지 ${next.daysLeft.toLocaleString()}일` : `오늘은 ${next.label}이에요 🎉`) : '',
-        progress: next?.progress ?? 0, marker: '👶',
+        f: 'birthday', left: age, right: nextText(next),
+        sub: `🎂 ${who}${fmtDate(bday)} 태어났어요${bw ? ` · ${bw}` : ''}`,
+        progress: next?.progress ?? 0,
       };
     }
     return null;
   })();
+  // 다가오는 기념일 (설정에서 넣은 것): 가까운 두 개
+  const upcoming = upcomingDays(album, 2);
   const pct = journey ? Math.round(journey.progress * 1000) / 10 : 0;
   // 다른 아이들(형·누나, 예정일이 다른 동생)은 작게 한 줄씩 (많으면 3줄까지)
   const otherGroups = new Map<string, Child[]>();
@@ -189,14 +190,22 @@ export function AlbumHome() {
 
         {journey && (
           <div className={s.journey} data-f={journey.f}>
-            <p className={s.jTitle}>{journey.icon}<span>{journey.title}</span></p>
-            {journey.sub && <p className={s.jSub} data-f="j-sub">{journey.sub}</p>}
+            <div className={s.jHead}><b data-f="j-left">{journey.left}</b>{journey.right && <span data-f="j-right">{journey.right}</span>}</div>
             <div className={s.jTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-label={`${journey.left}, ${journey.right}`}>
               <i className={s.jFill} style={{ width: `${pct}%` }} />
-              <span className={s.jMarker} style={{ left: `clamp(15px, ${pct}%, calc(100% - 15px))` }} aria-hidden="true">{journey.marker}</span>
             </div>
-            <div className={s.jFoot}><b data-f="j-left">{journey.left}</b>{journey.right && <span data-f="j-right">{journey.right}</span>}</div>
+            <p className={s.jSub} data-f="j-sub">{journey.sub}</p>
           </div>
+        )}
+        {upcoming.length > 0 && (
+          <ul className={s.days} data-f="upcoming">
+            {upcoming.map((u) => (
+              <li key={u.id} data-day-id={u.id}>
+                <span aria-hidden="true">{u.yearly ? '🎂' : '🎉'}</span>
+                {u.daysLeft ? <><b>{u.label}</b><small>{shortDate(u.date)} · D-{u.daysLeft.toLocaleString()}</small></> : <b>오늘은 {u.label}{hasBatchim(u.label) ? '이에요' : '예요'}</b>}
+              </li>
+            ))}
+          </ul>
         )}
         {otherLines.length > 0 && (
           <ul className={s.dates}>

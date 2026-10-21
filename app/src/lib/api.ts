@@ -4,7 +4,7 @@ import { sb } from './supabase';
 import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { remember } from './photoCache';
-import type { ActivityEvent, Album, AlbumKind, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
+import type { ActivityEvent, Album, AlbumKind, Anniversary, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
 import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -14,13 +14,18 @@ function check<T>({ data, error }: { data: T; error: unknown }): T {
   return data;
 }
 
+export const toKind = (v: unknown): AlbumKind => (v === 'group' || v === 'family' ? v : 'baby');
+// 기념일 목록 (모양이 이상한 건 빼요)
+export const toDays = (v: unknown): Anniversary[] => (Array.isArray(v) ? v : []).filter((x) => x && typeof x === 'object'
+  && typeof x.name === 'string' && typeof x.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.date))
+  .map((x) => ({ id: typeof x.id === 'string' ? x.id : uuid(), name: x.name, date: x.date, yearly: x.yearly === true }));
 const album = (r: Row, m?: Row): Album => {
   const children = kidsFrom(r.children, r.baby_name || '', r.baby_birthday || null);
   return {
   id: r.id, name: r.name, children, bio: r.bio || '',
   babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children.length ? ageBirthday(children) : r.baby_birthday ?? null, inviteCode: r.invite_code,
   storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id && !!r.drive_email, cover: r.cover || '',
-  kind: r.kind === 'group' ? 'group' : 'baby', since: typeof r.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.since) ? r.since.slice(0, 10) : null,
+  kind: toKind(r.kind), since: typeof r.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.since) ? r.since.slice(0, 10) : null, days: toDays(r.days),
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
   };
 };
@@ -96,17 +101,17 @@ export async function albums(uid: string): Promise<Album[]> {
 
 export async function createAlbum(p: { name: string; children: Child[]; bio?: string; displayName: string; avatar: string; kind?: AlbumKind; since?: string | null }) {
   const k = kidsRow(p.children);
-  const group = p.kind === 'group';
-  // 모임 앨범은 데이터베이스에 '앨범 종류' 칸이 있어야 해요 (없으면 만들기 전에 알려 줘요)
-  if (group) check(await sb.from('families').select('kind, since').limit(1));
+  const group = !!p.kind && p.kind !== 'baby';
+  // 가족·모임 앨범은 데이터베이스에 '앨범 종류' 칸이 있어야 해요 (없으면 만들기 전에 알려 줘요)
+  if (group) check(await sb.from('families').select('kind, since, days').limit(1));
   const f = check(await sb.rpc('create_family', {
     p_name: p.name, p_baby_name: k.baby_name, p_baby_birthday: k.baby_birthday, p_display_name: p.displayName, p_avatar: p.avatar,
   })) as Row;
   // 아이들(태명·이름)과 소개는 만든 뒤에 저장해요. 데이터베이스가 예전 설정이어도 앨범은 만들어져요
   await sb.from('families').update({ children: k.children, ...(p.bio ? { bio: p.bio } : {}) }).eq('id', f.id).then(() => {}, () => {});
   if (group) {
-    const r = await sb.from('families').update({ kind: 'group', since: p.since ?? null }).eq('id', f.id).select('id');
-    // 모임으로 못 바꿨으면 방금 만든 앨범을 지워요 (아기 앨범이 남지 않게)
+    const r = await sb.from('families').update({ kind: p.kind, since: p.since ?? null }).eq('id', f.id).select('id');
+    // 종류를 못 바꿨으면 방금 만든 앨범을 지워요 (아기 앨범이 남지 않게)
     if (r.error || !r.data?.length) {
       await sb.from('families').delete().eq('id', f.id).then(() => {}, () => {});
       throw new Error(r.error ? friendly(r.error) : '앨범을 만들지 못했어요. 다시 시도해 주세요.');
@@ -117,7 +122,7 @@ export async function createAlbum(p: { name: string; children: Child[]; bio?: st
 
 export async function inviteInfo(code: string) {
   const rows = check(await sb.rpc('invite_info', { p_code: code })) as Row[];
-  return rows?.[0] ? { name: rows[0].name as string, babyName: rows[0].baby_name as string, kind: (rows[0].kind === 'group' ? 'group' : 'baby') as AlbumKind } : null;
+  return rows?.[0] ? { name: rows[0].name as string, babyName: rows[0].baby_name as string, kind: toKind(rows[0].kind) } : null;
 }
 
 export async function joinAlbum(code: string, displayName: string, avatar: string) {
@@ -125,7 +130,7 @@ export async function joinAlbum(code: string, displayName: string, avatar: strin
   return f.id as string;
 }
 
-export async function updateAlbum(id: string, patch: { name?: string; children?: Child[]; bio?: string; storage?: StorageKind; cover?: string; kind?: AlbumKind; since?: string | null }) {
+export async function updateAlbum(id: string, patch: { name?: string; children?: Child[]; bio?: string; storage?: StorageKind; cover?: string; kind?: AlbumKind; since?: string | null; days?: Anniversary[] }) {
   const row: Row = {};
   if (patch.name !== undefined) row.name = patch.name;
   if (patch.children !== undefined) Object.assign(row, kidsRow(patch.children));
@@ -134,6 +139,7 @@ export async function updateAlbum(id: string, patch: { name?: string; children?:
   if (patch.cover !== undefined) row.cover = patch.cover;
   if (patch.kind !== undefined) row.kind = patch.kind;
   if (patch.since !== undefined) row.since = patch.since;
+  if (patch.days !== undefined) row.days = patch.days.map((d) => ({ id: d.id, name: d.name.trim(), date: d.date, yearly: d.yearly }));
   const rows = check(await sb.from('families').update(row).eq('id', id).select('id')) as Row[];
   if (!rows.length) throw new Error('앨범 관리자만 바꿀 수 있어요.');
 }

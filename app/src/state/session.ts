@@ -14,8 +14,9 @@ const normAlbum = (a: Album): Album => ({
   children: Array.isArray(a.children) ? a.children : kidsFrom(null, a.babyName || '', a.babyBirthday ?? null),
   bio: a.bio ?? '',
   cover: a.cover ?? '',
-  kind: a.kind === 'group' ? 'group' : 'baby',
+  kind: a.kind === 'group' || a.kind === 'family' ? a.kind : 'baby',
   since: a.since ?? null,
+  days: Array.isArray(a.days) ? a.days : [],
 });
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 

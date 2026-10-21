@@ -51,26 +51,23 @@
   @media (max-width: 390px) { html[data-text='xlarge'] .head { grid-template-areas: "cover name" "stats stats"; } }
 }
 .stats button:active { opacity: .6; }
-/* 날짜 카드: 출산 예정일(생일·모임 시작일)을 크게, 얼마나 왔고 남았는지 막대로 */
+/* 날짜 카드 (간단하게): '임신 28주차   25% 남았어요' / 막대 / '12월 24일 목요일 출산 예정' */
 .journey {
-  display: flex; flex-direction: column; gap: 6px; padding: var(--s-3) var(--s-4) var(--s-3);
+  display: flex; flex-direction: column; gap: 8px; padding: var(--s-3) var(--s-4);
   border-radius: var(--r-md); background: linear-gradient(135deg, #fff0f4 0%, #f6efff 100%);
   box-shadow: inset 0 0 0 1px rgba(176, 66, 98, .08);
 }
-.jTitle { display: flex; align-items: center; gap: 8px; font-size: var(--t-headline); font-weight: 800; letter-spacing: -0.02em; line-height: 1.35; color: var(--c-label); word-break: keep-all; }
-.jIcon { flex: none; color: #b04262; }
-.jEmoji { flex: none; font-size: 1.125rem; line-height: 1; }
-.jSub { margin: -2px 0 0 28px; font-size: var(--t-sub); font-weight: 600; color: #8c5368; }
-/* 막대: 분홍으로 차오르고, 지금 자리에 아기(모임은 풍선) */
-.jTrack { position: relative; height: 10px; margin: 12px 0 8px; border-radius: var(--r-full); background: rgba(176, 66, 98, .13); }
-.jFill { position: absolute; left: 0; top: 0; bottom: 0; min-width: 10px; border-radius: inherit; background: linear-gradient(90deg, #f6b1c5, #d2668c); }
-.jMarker {
-  position: absolute; top: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 50%;
-  display: grid; place-items: center; background: #fff; box-shadow: 0 2px 8px rgba(176, 66, 98, .28); font-size: 16px; line-height: 1;
-}
-.jFoot { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); flex-wrap: wrap; }
-.jFoot b { font-size: var(--t-callout); font-weight: 800; color: #b04262; font-variant-numeric: tabular-nums; }
-.jFoot span { margin-left: auto; font-size: var(--t-sub); font-weight: 700; color: var(--c-label-2); font-variant-numeric: tabular-nums; }
+.jHead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); flex-wrap: wrap; }
+.jHead b { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; color: #b04262; font-variant-numeric: tabular-nums; }
+.jHead span { margin-left: auto; font-size: var(--t-callout); font-weight: 700; color: var(--c-label); font-variant-numeric: tabular-nums; }
+.jTrack { position: relative; height: 8px; border-radius: var(--r-full); background: rgba(176, 66, 98, .14); overflow: hidden; }
+.jFill { position: absolute; left: 0; top: 0; bottom: 0; min-width: 8px; border-radius: inherit; background: linear-gradient(90deg, #f6b1c5, #d2668c); }
+.jSub { font-size: var(--t-callout); font-weight: 600; color: var(--c-label); word-break: keep-all; }
+/* 다가오는 기념일 */
+.days { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.days li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: var(--t-sub); color: var(--c-label); }
+.days li b { font-weight: 700; }
+.days li small { font-size: var(--t-sub); color: var(--c-label-2); font-variant-numeric: tabular-nums; }
 .dates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .dates li { font-size: var(--t-sub); font-weight: 600; color: var(--c-label-2); line-height: 1.45; }
 .bio { font-size: var(--t-callout); line-height: 1.5; color: var(--c-label); white-space: pre-wrap; margin-top: calc(var(--s-1) * -1); }
