@@ -125,6 +125,19 @@ export function babyMilestone(birthday: D, at: D = new Date()) {
   return '';
 }
 
+/** 게시물 옆 아이 나이 (올린 날 기준): '출산 D-68' · '태어난 날 🎉' · '생후 23일' · '백일 🎉' · '생후 5개월' · '첫 돌 🎉' · '만 2살' */
+export function postAge(birthday: D, at: D) {
+  const day = babyDay(birthday, at);
+  if (day === null) return '';
+  if (day < 1) return `출산 D-${1 - day}`;
+  const m = babyMilestone(birthday, at);
+  if (m) return `${m} 🎉`;
+  const months = babyMonths(birthday, at)!;
+  if (day < 100) return `생후 ${day}일`;
+  if (months < 24) return `생후 ${months}개월`;
+  return `만 ${Math.floor(months / 12)}살`;
+}
+
 // 사진 촬영 날짜 (JPEG EXIF)
 export async function readPhotoDate(file: File): Promise<Date> {
   try {

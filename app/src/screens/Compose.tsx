@@ -211,7 +211,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
       <header className={s.top}>
         <button className={s.iconBtn} onClick={askClose} aria-label="닫기" data-w="close"><Icon name="close" size={26} /></button>
         <h2>새 게시물</h2>
-        <button className={s.topPost} onClick={share} disabled={busy} data-w="post-top">공유</button>
+        <span />
       </header>
       <div className={s.body}>
         <Carousel photos={photos} onRemove={remove} />
@@ -220,10 +220,6 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
           <textarea ref={text} value={caption} onChange={(e) => useCompose.setState({ caption: e.target.value })} maxLength={2000} rows={3}
             placeholder="사진에 이야기를 남겨 보세요" aria-label="사진 이야기" data-w="caption" />
         </label>
-        <p className={s.info} data-w="orig-info">
-          <span className={s.infoIcon}><Icon name="image" size={18} /></span>
-          <span>원본 화질 그대로 저장돼요. 가족이 내려받으면 원본이 저장돼요.</span>
-        </p>
         {album.storage === 'drive' && <p className={s.note}><Icon name="shield" size={16} /> 관리자의 구글 드라이브에 저장돼요</p>}
       </div>
       <div className={s.foot}><Button size="lg" block onClick={share} disabled={busy} data-w="post">공유</Button></div>
