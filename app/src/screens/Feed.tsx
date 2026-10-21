@@ -9,9 +9,9 @@ import { usePageScroll } from '../components/Stack';
 import { AmpText } from '../components/AlbumBits';
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
-import { babyMilestone, groupMilestone, ymd } from '../lib/dates';
-import { albumSince } from '../lib/album';
-import { callName } from '../lib/korean';
+import { ymd } from '../lib/dates';
+import { celebrationsToday } from '../lib/album';
+import { hasBatchim } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import { InviteSheet } from './Invite';
 import s from './Feed.module.css';
@@ -40,9 +40,9 @@ export function Feed() {
     return () => io.disconnect();
   }, [loadMore, posts.length, root]);
 
-  const group = album.kind === 'group';
-  const since = group ? albumSince(album) : null;
-  const milestone = group ? (since ? groupMilestone(since, new Date()) : '') : album.babyBirthday ? babyMilestone(album.babyBirthday) : '';
+  // 오늘 챙길 날: 아기 기념일 · 가족/모임 1주년 · 설정한 기념일 (여럿이면 한 줄에)
+  const today = celebrationsToday(album);
+  const milestone = today.join(' · ');
   const msKey = `pm-ms-${album.id}-${ymd(new Date())}`;
   const [msHidden, setMsHidden] = useState(() => !!load(msKey, false));
 
@@ -56,7 +56,7 @@ export function Feed() {
 
       {milestone && !msHidden && (
         <div className={s.milestone}>
-          <p>오늘은 {group ? '우리 모임' : callName(album.babyName || '아이')}의 <b>{milestone}</b>이에요</p>
+          <p data-f="celebrate">오늘은 <b>{milestone}</b>{hasBatchim(milestone) ? '이에요' : '예요'} 🎉</p>
           <button onClick={() => { save(msKey, true); setMsHidden(true); }} aria-label="닫기"><Icon name="close" size={18} /></button>
         </div>
       )}

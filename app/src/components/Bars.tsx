@@ -61,7 +61,7 @@ const TABS: Array<{ to: string; icon: IconName; label: string }> = [
 export function TabBar({ onCompose, badge }: { onCompose: () => void; badge?: { activity?: number; home?: boolean } }) {
   const loc = useLocation();
   // 친구·모임 앨범이면 '가족' 대신 '모임'
-  const group = useSession((st) => st.album()?.kind === 'group');
+  const group = useSession((st) => st.album()?.kind === 'group'); // 가족·아기 앨범은 '가족'
   return (
     <nav className={s.tabs} aria-label="메뉴">
       {TABS.map((t) => (t.to === '/new' ? (

@@ -3,8 +3,18 @@ import type { Child } from './kids';
 export type StorageKind = 'supabase' | 'drive';
 export type Role = 'owner' | 'member';
 
-/** 앨범 종류: 아기·가족 앨범 / 친구·모임 앨범 */
-export type AlbumKind = 'baby' | 'group';
+/** 앨범 종류: 아기 앨범 / 가족 앨범 / 친구·모임 앨범 */
+export type AlbumKind = 'baby' | 'family' | 'group';
+
+/** 기념일: 결혼기념일(100일 · 1주년 …) 또는 생일처럼 해마다 */
+export interface Anniversary {
+  id: string;
+  name: string;
+  /** 'YYYY-MM-DD' */
+  date: string;
+  /** true: 생일처럼 해마다 그날만 · false: 100일 · 200일 · 300일 · 500일 · 1000일 · N주년 */
+  yearly: boolean;
+}
 
 export interface Album {
   id: string;
@@ -23,10 +33,12 @@ export interface Album {
   driveReady: boolean;
   /** 가족 탭 맨 위 앨범 사진: '' | 이 앨범 사진 경로 | drive:파일ID */
   cover: string;
-  /** 아기·가족 앨범(baby) / 친구·모임 앨범(group) */
+  /** 아기 앨범(baby) / 가족 앨범(family) / 친구·모임 앨범(group) */
   kind: AlbumKind;
-  /** 모임 시작일 'YYYY-MM-DD' (없으면 앨범을 만든 날) */
+  /** 가족·모임 앨범의 시작일 'YYYY-MM-DD' (없으면 앨범을 만든 날) */
   since: string | null;
+  /** 기념일 (모든 앨범) */
+  days: Anniversary[];
   createdAt: string;
   myRole: Role;
   myName: string;

@@ -12,7 +12,7 @@ export function InviteSheet({ open, onClose, welcome = false }: { open: boolean;
   if (!album) return null;
   const group = album.kind === 'group';
   const baby = album.babyName ? callName(album.babyName) : '우리 아이';
-  const text = `${group ? `‘${album.name}’` : `${baby} 사진`} 앨범에 초대해요 🤍\n카카오나 구글로 로그인한 뒤 초대 코드 ${fmt(album.inviteCode)} 를 넣어 주세요.\n${inviteLink(album.inviteCode)}`;
+  const text = `${album.kind === 'baby' ? `${baby} 사진` : `‘${album.name}’`} 앨범에 초대해요 🤍\n카카오나 구글로 로그인한 뒤 초대 코드 ${fmt(album.inviteCode)} 를 넣어 주세요.\n${inviteLink(album.inviteCode)}`;
   const share = async () => {
     if (navigator.share) {
       try { await navigator.share({ text }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }

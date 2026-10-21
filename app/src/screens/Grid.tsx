@@ -62,7 +62,7 @@ export function Grid() {
         <p className={s.msg}>조건에 맞는 사진이 없어요<br /><button className={s.reset} onClick={() => setFilter(NO_FILTER)}>거르기 풀기</button></p>
       )}
       {groups.map(([k, list]) => {
-        const m = album.kind !== 'group' && album.babyBirthday ? babyMonths(album.babyBirthday, toDate(day || `${k}-15`)) : null;
+        const m = album.kind === 'baby' && album.babyBirthday ? babyMonths(album.babyBirthday, toDate(day || `${k}-15`)) : null;
         return (
           <section key={k} id={`m-${k}`} className={s.month}>
             <h3 className={s.monthBar}>

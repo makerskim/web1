@@ -37,11 +37,26 @@ alter table public.families add column if not exists children jsonb not null def
 alter table public.families add column if not exists bio text not null default '';
 alter table public.families drop constraint if exists families_bio_check;
 alter table public.families add constraint families_bio_check check (char_length(bio) <= 150);
--- 앨범 종류: 아기·가족 앨범(baby) / 친구·모임 앨범(group). 모임은 시작일(since, 없으면 만든 날)부터 함께한 날을 세요
+-- 앨범 종류: 아기 앨범(baby) / 가족 앨범(family) / 친구·모임 앨범(group). 가족·모임은 시작일(since, 없으면 만든 날)부터 함께한 날을 세요
 alter table public.families add column if not exists kind text not null default 'baby';
 alter table public.families drop constraint if exists families_kind_check;
-alter table public.families add constraint families_kind_check check (kind in ('baby', 'group'));
+alter table public.families add constraint families_kind_check check (kind in ('baby', 'family', 'group'));
 alter table public.families add column if not exists since date;
+-- 기념일 (모든 앨범): [{id, name, date 'YYYY-MM-DD', yearly}] 10개까지
+alter table public.families add column if not exists days jsonb not null default '[]';
+create or replace function public.valid_days(d jsonb)
+returns boolean language sql immutable as $$
+  select jsonb_typeof(d) = 'array' and jsonb_array_length(d) <= 10 and pg_column_size(d) < 4000
+    and not exists (
+      select 1 from jsonb_array_elements(d) x
+      where jsonb_typeof(x) <> 'object'
+         or char_length(coalesce(x->>'id', '')) > 40
+         or jsonb_typeof(x->'name') is distinct from 'string' or char_length(x->>'name') not between 1 and 20
+         or jsonb_typeof(x->'date') is distinct from 'string' or (x->>'date') !~ '^\d{4}-\d{2}-\d{2}$'
+         or (x ? 'yearly' and jsonb_typeof(x->'yearly') <> 'boolean'))
+$$;
+alter table public.families drop constraint if exists families_days_check;
+alter table public.families add constraint families_days_check check (public.valid_days(days));
 create or replace function public.valid_children(c jsonb)
 returns boolean language sql immutable as $$
   select jsonb_typeof(c) = 'array' and jsonb_array_length(c) <= 6 and pg_column_size(c) < 4000
@@ -447,7 +462,7 @@ revoke all on public.families, public.members, public.posts, public.likes, publi
   from anon, authenticated;
 
 grant select, delete on public.families to authenticated;
-grant update (name, baby_name, baby_birthday, storage, cover, children, bio, kind, since) on public.families to authenticated;
+grant update (name, baby_name, baby_birthday, storage, cover, children, bio, kind, since, days) on public.families to authenticated;
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
 grant select, delete on public.posts to authenticated;

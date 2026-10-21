@@ -14,6 +14,7 @@ import { callName } from '../lib/korean';
 import { ymd } from '../lib/dates';
 import { DateField } from '../components/DatePicker';
 import type { AlbumKind } from '../lib/types';
+import { KINDS, sinceLabel } from '../lib/album';
 import { KidsForm } from '../components/KidsForm';
 import s from './Start.module.css';
 
@@ -58,11 +59,11 @@ export function CreateAlbum() {
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [role, setRole] = useState('');
-  // 아기·가족 앨범 / 친구·모임 앨범
+  // 아기 앨범 / 가족 앨범 / 친구·모임 앨범
   const [kind, setKind] = useState<AlbumKind>('baby');
   const [since, setSince] = useState<string | null>(null);
-  const group = kind === 'group';
-  // 앨범 이름은 아이 이름을 따라가요: '씩씩이 & 튼튼이네 앨범' (모임은 직접 써요)
+  const group = kind !== 'baby'; // 가족·모임: 아이 칸 없이 이름 · 시작일
+  // 앨범 이름은 아이 이름을 따라가요: '씩씩이 & 튼튼이네 앨범' (가족·모임은 직접 써요)
   const albumName = nameTouched || group ? name : suggestAlbumName(kids);
 
   const submit = async (e: React.FormEvent) => {
@@ -70,7 +71,7 @@ export function CreateAlbum() {
     const filled = group ? [] : kids.filter((c) => childName(c));
     if (group) {
       if (!spaceAmp(albumName.trim())) return toast('앨범 이름을 적어 주세요.');
-      if (!role.trim()) return toast('앨범에서 보일 이름을 적어 주세요.');
+      if (!role.trim()) return toast('내 이름을 적어 주세요.');
     } else {
       if (!filled.length) return toast('아이의 태명이나 이름을 적어 주세요.');
       if (filled.some((c) => c.born && c.birthday && c.birthday > ymd(new Date()))) return toast('태어난 날은 오늘이나 그 전 날짜로 골라 주세요.');
@@ -97,24 +98,24 @@ export function CreateAlbum() {
     <div className={s.formPage}>
       <TopBar back title="새 앨범" />
       <form className={s.form} onSubmit={submit} noValidate>
-        {/* 어떤 앨범인가요? 아기·가족 / 친구·모임 (나중에 설정에서 바꿀 수 있어요) */}
+        {/* 어떤 앨범인가요? 아기 · 가족 · 친구·모임 (나중에 설정에서 바꿀 수 있어요) */}
         <div className={s.kinds} role="radiogroup" aria-label="앨범 종류">
-          <button type="button" role="radio" aria-checked={!group} className={`${s.kind} ${!group ? s.kindOn : ''}`} onClick={() => setKind('baby')} data-kind="baby">
-            <span aria-hidden="true">👶</span><b>아기·가족 앨범</b><small>출산 예정일 · 아이 성장</small>
-          </button>
-          <button type="button" role="radio" aria-checked={group} className={`${s.kind} ${group ? s.kindOn : ''}`} onClick={() => { if (!group) { setKind('group'); if (!nameTouched) setName(''); } }} data-kind="group">
-            <span aria-hidden="true">🙌</span><b>친구·모임 앨범</b><small>모임 사진 · 함께한 날</small>
-          </button>
+          {KINDS.map((k) => (
+            <button key={k.v} type="button" role="radio" aria-checked={kind === k.v} className={`${s.kind} ${kind === k.v ? s.kindOn : ''}`} data-kind={k.v}
+              onClick={() => { if (kind !== k.v) { setKind(k.v); if (!nameTouched) setName(''); } }}>
+              <span aria-hidden="true">{k.icon}</span><b>{k.short}</b><small>{k.desc}</small>
+            </button>
+          ))}
         </div>
         {!group && <KidsForm kids={kids} onChange={setKids} />}
-        <Group title="앨범" footer={group ? '모임 시작일부터 함께한 날과 다음 기념일까지 남은 날을 보여 줘요. 비워 두면 오늘부터 세요.' : undefined}>
-          <Field label="앨범 이름" placeholder={group ? '우리 모임 앨범' : '튼튼이네 앨범'} value={albumName} onChange={(e) => { setNameTouched(true); setName(e.target.value); }}
+        <Group title="앨범" footer={group ? `${sinceLabel(kind)}부터 함께한 날과 다음 100일 · 1주년까지 남은 날을 보여 줘요. 비워 두면 오늘부터 세요. 결혼기념일 같은 기념일은 만든 뒤 설정에서 넣을 수 있어요.` : undefined}>
+          <Field label="앨범 이름" placeholder={kind === 'group' ? '우리 모임 앨범' : kind === 'family' ? '우리 가족 앨범' : '튼튼이네 앨범'} value={albumName} onChange={(e) => { setNameTouched(true); setName(e.target.value); }}
             onBlur={() => nameTouched && setName((v) => spaceAmp(v))} maxLength={40} autoComplete="off" name="album" />
-          {group && <DateField label="모임 시작일" title="모임 시작일" value={since} onChange={setSince} placeholder="선택" name="since" min="1950-01-01" max={ymd(new Date())} allowClear />}
+          {group && <DateField label={sinceLabel(kind)} title={sinceLabel(kind)} value={since} onChange={setSince} placeholder="선택" name="since" min="1950-01-01" max={ymd(new Date())} allowClear />}
         </Group>
-        <Group title="나" footer={group ? '멤버에게 이렇게 보여요. 나중에 바꿀 수 있어요.' : '가족에게 이렇게 보여요. 나중에 바꿀 수 있어요.'}>
+        <Group title="나" footer={kind === 'group' ? '멤버에게 이렇게 보여요. 나중에 바꿀 수 있어요.' : '가족에게 이렇게 보여요. 나중에 바꿀 수 있어요.'}>
           {group
-            ? <Field label="앨범에서 보일 이름" placeholder="민지" value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />
+            ? <Field label="내 이름" placeholder={kind === 'group' ? '민지' : '엄마'} value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />
             : <Field label="나는 아이의" placeholder="엄마" value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />}
         </Group>
         <div className={s.submit}><Button type="submit" size="lg" block>앨범 만들기</Button></div>
@@ -131,7 +132,7 @@ export function JoinAlbum() {
   const params = useParams();
   const [code, setCode] = useState(cleanCode(params.code || sessionStorage.getItem('pm-invite') || ''));
   const [info, setInfo] = useState<{ name: string; babyName: string; kind: AlbumKind } | null | undefined>(undefined);
-  const group = info?.kind === 'group';
+  const group = !!info && info.kind !== 'baby'; // 가족·모임: '내 이름'
   const [role, setRole] = useState('');
 
   useEffect(() => {
@@ -144,7 +145,7 @@ export function JoinAlbum() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (code.length !== 8) return toast('초대 코드 8자리를 넣어 주세요.');
-    if (!role.trim()) return toast(group ? '앨범에서 보일 이름을 적어 주세요.' : '아이와 어떤 사이인지 적어 주세요.');
+    if (!role.trim()) return toast(group ? '내 이름을 적어 주세요.' : '아이와 어떤 사이인지 적어 주세요.');
     const p = progress('앨범에 들어가는 중');
     try {
       const id = await api.joinAlbum(code, role.trim(), me.avatarUrl);
@@ -170,7 +171,7 @@ export function JoinAlbum() {
             <motion.div key="found" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className={s.found}>
               <Logo size={56} />
               <h2>{info.name}</h2>
-              <p>{group ? '모임 사진을 함께 볼 수 있어요' : info.babyName ? `${callName(info.babyName)}의 사진을 함께 볼 수 있어요` : '가족 사진을 함께 볼 수 있어요'}</p>
+              <p>{info.kind === 'group' ? '모임 사진을 함께 볼 수 있어요' : info.kind === 'baby' && info.babyName ? `${callName(info.babyName)}의 사진을 함께 볼 수 있어요` : '가족 사진을 함께 볼 수 있어요'}</p>
             </motion.div>
           ) : (
             <p className={s.codeHelp}>{info === null ? '코드가 맞지 않아요. 초대한 사람에게 새 코드를 받아 주세요.' : '받은 초대 코드 8자리를 넣어 주세요.'}</p>
@@ -178,9 +179,9 @@ export function JoinAlbum() {
           <input className={s.codeInput} value={fmtCode(code)} onChange={(e) => setCode(cleanCode(e.target.value))} placeholder="ABCD-EF23"
             autoCapitalize="characters" autoComplete="off" spellCheck={false} inputMode="text" maxLength={9} aria-label="초대 코드" name="code" />
         </div>
-        <Group title="나" footer={group ? '멤버에게 이렇게 보여요.' : '가족에게 이렇게 보여요.'}>
+        <Group title="나" footer={info?.kind === 'group' ? '멤버에게 이렇게 보여요.' : '가족에게 이렇게 보여요.'}>
           {group
-            ? <Field label="앨범에서 보일 이름" placeholder="민지" value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />
+            ? <Field label="내 이름" placeholder={info?.kind === 'group' ? '민지' : '할머니'} value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />
             : <Field label="나는 아이의" placeholder="할머니" value={role} onChange={(e) => setRole(e.target.value)} maxLength={20} autoComplete="off" name="role" />}
         </Group>
         <div className={s.submit}><Button type="submit" size="lg" block disabled={!info}>앨범 들어가기</Button></div>

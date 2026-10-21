@@ -53,7 +53,7 @@ async function shareText(p: Post) {
   const st = useSession.getState();
   const a = st.album();
   const who = st.member(p.authorId).displayName;
-  return `${subj(who)} ${a?.babyName && a.kind !== 'group' ? `${callName(a.babyName)} ` : ''}사진을 올렸어요\n${location.origin}${location.pathname}#/p/${p.id}`;
+  return `${subj(who)} ${a?.babyName && a.kind === 'baby' ? `${callName(a.babyName)} ` : ''}사진을 올렸어요\n${location.origin}${location.pathname}#/p/${p.id}`;
 }
 
 async function postMenu(p: Post) {
