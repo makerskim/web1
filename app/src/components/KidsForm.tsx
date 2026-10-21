@@ -1,4 +1,5 @@
 // 아이 정보 입력: 태명 · 이름 · 출산 예정일(태어나면 생일). 한 명이 기본이고, 쌍둥이·다둥이는 '아이 추가'로.
+import { useState } from 'react';
 import { Group, Field } from './Form';
 import { DateField } from './DatePicker';
 import { Icon } from './Icon';
@@ -9,6 +10,8 @@ import s from './KidsForm.module.css';
 const ORDER = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째'];
 
 export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Child[]) => void }) {
+  // 이름을 지우는 중에는 칸이 사라지지 않게 (키보드가 닫히지 않게)
+  const [editing, setEditing] = useState<string | null>(null);
   const set = (i: number, patch: Partial<Child>) => onChange(kids.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   const today = ymd(new Date());
   const dueMax = ymd(new Date(Date.now() + 300 * 86400000)); // 예정일은 열 달 안쪽
@@ -32,8 +35,9 @@ export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Chil
               <button type="button" className={born ? s.segOn : ''} aria-pressed={born} onClick={() => set(i, { born: true })} data-born-opt="yes">👶 태어났어요</button>
             </div>
             {/* 뱃속에 있으면 태명만, 태어나면 이름(그리고 태명) */}
-            {(born || !!c.name.trim()) && (
-              <Field label="이름" value={c.name} onChange={(e) => set(i, { name: e.target.value })} maxLength={20} placeholder="이름을 넣어 주세요" name={`name${i}`} autoComplete="off" />
+            {(born || !!c.name.trim() || editing === c.id) && (
+              <Field label="이름" value={c.name} onChange={(e) => set(i, { name: e.target.value })} maxLength={20} placeholder="이름을 넣어 주세요" name={`name${i}`} autoComplete="off"
+                onFocus={() => setEditing(c.id)} onBlur={() => setEditing((v) => (v === c.id ? null : v))} />
             )}
             <Field label="태명" value={c.nickname} onChange={(e) => set(i, { nickname: e.target.value })} maxLength={20} placeholder="튼튼이" name={`nick${i}`} autoComplete="off" />
             {/* 뱃속이면 '출산 예정일', 태어났으면 '생일' */}

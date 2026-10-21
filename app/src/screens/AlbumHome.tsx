@@ -129,20 +129,18 @@ export function AlbumHome() {
           {isOwner
             ? <button className={s.cover} onClick={cover.open} aria-label="앨범 사진 바꾸기" data-f="cover"><CoverFace size={88} /><span className={s.coverEdit}><Icon name="camera" size={13} stroke={2.2} /></span></button>
             : <div className={s.cover}><CoverFace size={88} /></div>}
-          <div className={s.who}>
-            {/* 인스타그램처럼: 이름 옆에 설정 */}
-            <div className={s.nameRow}>
-              <h2 className={`${s.names} ${all.length > 2 ? s.namesMany : ''}`} data-f="names"><AmpText text={names} /></h2>
-              <button className={s.gear} onClick={() => nav('/settings')} aria-label="설정" data-f="settings"><Icon name="settings" size={24} /></button>
-            </div>
-            {/* 인스타그램처럼 숫자 위, 이름 아래: 게시물 · 멤버 · D-64 */}
-            <div className={s.stats}>
-              <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="posts">
-                <b>{postCount?.toLocaleString() ?? '–'}</b><span>게시물</span>
-              </button>
-              <button onClick={() => setSheet('members')} data-stat="members"><b>{members.length}</b><span>멤버</span></button>
-              {dStat && <div className={s.dStat} data-stat="dday"><b>{dStat.value}</b><span>{dStat.label}</span></div>}
-            </div>
+          {/* 인스타그램처럼: 이름 옆에 설정 */}
+          <div className={s.nameRow}>
+            <h2 className={`${s.names} ${all.length > 2 ? s.namesMany : ''}`} data-f="names"><AmpText text={names} /></h2>
+            <button className={s.gear} onClick={() => nav('/settings')} aria-label="설정" data-f="settings"><Icon name="settings" size={24} /></button>
+          </div>
+          {/* 인스타그램처럼 숫자 위, 이름 아래: 게시물 · 멤버 · D-64 */}
+          <div className={s.stats}>
+            <button onClick={() => gridTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-stat="posts">
+              <b>{postCount?.toLocaleString() ?? '–'}</b><span>게시물</span>
+            </button>
+            <button onClick={() => setSheet('members')} data-stat="members"><b>{members.length}</b><span>멤버</span></button>
+            {dStat && <div className={s.dStat} data-stat="dday"><b>{dStat.value}</b><span>{dStat.label}</span></div>}
           </div>
         </div>
 
