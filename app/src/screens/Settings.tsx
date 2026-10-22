@@ -5,7 +5,7 @@ import { Group, Row, Field } from '../components/Form';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
-import { Sheet, confirm, copyText, menu, progress, toast } from '../components/ui';
+import { Sheet, confirm, copyText, menu, progress, toast, useOnce } from '../components/ui';
 import { CoverFace, MembersSheet, useCoverChanger } from '../components/AlbumBits';
 import { GoogleIcon, KakaoIcon, providerName } from '../components/ProviderIcon';
 import { useAlbum, useSession, type TextSize } from '../state/session';
@@ -35,6 +35,7 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [name, setName] = useState('');
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open && mine) setName(mine.displayName); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const once = useOnce();
   if (!album || !me || !mine) return null;
 
   const setPhoto = async (f: File) => {
@@ -83,7 +84,7 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
           <Field label={album.kind === 'baby' ? '나는 아이의' : '내 이름'} value={name} onChange={(e) => setName(e.target.value)} maxLength={20}
             placeholder={album.kind === 'group' ? '민지' : '엄마'} name="role" data-who="name" />
         </Group>
-        <Button size="lg" block onClick={save} data-save>저장</Button>
+        <Button size="lg" block onClick={once(save)} data-save>저장</Button>
       </div>
     </Sheet>
   );
@@ -401,6 +402,7 @@ export function AlbumInfo() {
   const [name, setName] = useState(album.name);
   const [bio, setBio] = useState(album.bio || '');
   const albumName = touched ? name : suggestAlbumName(kids) || name;
+  const once = useOnce();
   const save = async () => {
     const filled = kids.filter((c) => childName(c));
     if (!isGroup) {
@@ -430,7 +432,7 @@ export function AlbumInfo() {
   }
   return (
     <Page>
-      <TopBar back title="프로필 편집" right={<button className={s.saveBtn} onClick={save} data-save>저장</button>} />
+      <TopBar back title="프로필 편집" right={<button className={s.saveBtn} onClick={once(save)} data-save>저장</button>} />
       <div className={s.page}>
         <button className={s.coverPick} onClick={cover.open} data-f="cover-change">
           <CoverFace size={96} />

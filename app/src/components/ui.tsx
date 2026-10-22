@@ -1,7 +1,7 @@
 // 겹쳐 뜨는 것들: 알림(토스트), 확인 창, 선택 시트, 진행 표시, 바닥 시트
 // - 모두 부드러운 스프링 움직임
 // - 휴대폰 '뒤로' 버튼으로 닫혀요 (열 때 기록을 하나 쌓아요)
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useDragControls, type PanInfo } from 'motion/react';
 import { create } from 'zustand';
@@ -273,4 +273,14 @@ export function useLatest<T>(v: T) {
 export function useForceUpdate() {
   const [, set] = useState(0);
   return () => set((n) => n + 1);
+}
+
+/** 두 번 눌러도 한 번만 (저장하는 동안 다시 누르면 무시 — 저장 뒤 화면이 두 번 닫히지 않게) */
+export function useOnce() {
+  const busy = useRef(false);
+  return useCallback(<A extends unknown[]>(fn: (...a: A) => Promise<unknown>) => async (...a: A) => {
+    if (busy.current) return;
+    busy.current = true;
+    try { await fn(...a); } finally { busy.current = false; }
+  }, []);
 }

@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
 import { Group, Field } from '../components/Form';
 import { DateField } from '../components/DatePicker';
-import { confirm, toast } from '../components/ui';
+import { confirm, toast, useOnce } from '../components/ui';
 import { useAlbum, useSession } from '../state/session';
 import * as api from '../lib/api';
 import { fmtDate, ymd } from '../lib/dates';
@@ -25,6 +25,7 @@ export function DayEdit() {
   const [date, setDate] = useState<string | null>(old?.date ?? null);
   const [yearly, setYearly] = useState(old?.yearly ?? false);
   const isOwner = album.myRole === 'owner';
+  const once = useOnce();
   // 자주 쓰는 기념일: 누르면 이름(과 날짜)이 채워져요
   // 가족·모임 앨범은 시작일을 비워 두면 이미 앨범 만든 날부터 세니까 '앨범 만든 날'은 빼요 (두 번 축하하지 않게)
   const created = ymd(album.createdAt);
@@ -71,7 +72,7 @@ export function DayEdit() {
   }
   return (
     <Page>
-      <TopBar back title={old ? '기념일 고치기' : '기념일 추가'} right={<button className={s.saveBtn} onClick={save} data-save>저장</button>} />
+      <TopBar back title={old ? '기념일 고치기' : '기념일 추가'} right={<button className={s.saveBtn} onClick={once(save)} data-save>저장</button>} />
       <div className={s.page}>
         {!old && (
           <div className={s.presets} role="group" aria-label="자주 쓰는 기념일">
@@ -96,7 +97,7 @@ export function DayEdit() {
             {preview.daysLeft ? <>다음은 <b>{preview.label}</b> · {fmtDate(preview.date)} (D-{preview.daysLeft.toLocaleString()})</> : <>오늘이 <b>{preview.label}</b>{hasBatchim(preview.label) ? '이에요' : '예요'} 🎉</>}
           </p>
         )}
-        {old && <button type="button" className={s.dayRemove} onClick={remove} data-f="day-remove">이 기념일 지우기</button>}
+        {old && <button type="button" className={s.dayRemove} onClick={once(remove)} data-f="day-remove">이 기념일 지우기</button>}
       </div>
     </Page>
   );

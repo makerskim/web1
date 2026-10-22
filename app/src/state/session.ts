@@ -11,13 +11,15 @@ const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(
 // 예전 버전이 저장해 둔 앨범에는 아이들·소개가 없어요 → 같은 모양으로 맞춰요
 const normAlbum = (a: Album): Album => ({
   ...a,
-  children: Array.isArray(a.children) ? a.children : kidsFrom(null, a.babyName || '', a.babyBirthday ?? null),
+  children: kidsFrom(a.children, a.babyName || '', a.babyBirthday ?? null),
   bio: a.bio ?? '',
   cover: a.cover ?? '',
   kind: a.kind === 'group' || a.kind === 'family' ? a.kind : 'baby',
   since: a.since ?? null,
-  days: Array.isArray(a.days) ? a.days : [],
+  days: api.toDays(a.days),
 });
+// 앨범을 고칠 때마다 1씩 (고치는 사이에 받아 온 예전 목록으로 덮어쓰지 않게)
+let rev = 0;
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 
 interface Session {
@@ -41,7 +43,13 @@ interface Session {
   patchAlbum: (patch: Partial<Album>) => void;
 }
 
-const unknownMember = (uid: string): Member => ({ userId: uid, displayName: '멤버', avatar: '', role: 'member', joinedAt: '' });
+// 같은 사람이면 언제나 같은 객체 (zustand 선택자가 매번 새 객체를 돌려주면 React가 끝없이 다시 그려요)
+const unknowns = new Map<string, Member>();
+const unknownMember = (uid: string): Member => {
+  let m = unknowns.get(uid);
+  if (!m) { m = { userId: uid, displayName: '멤버', avatar: '', role: 'member', joinedAt: '' }; unknowns.set(uid, m); }
+  return m;
+};
 
 export const useSession = create<Session>((set, get) => ({
   ready: false,
@@ -75,20 +83,28 @@ export const useSession = create<Session>((set, get) => ({
   async loadAlbums() {
     const me = get().me;
     if (!me) return [];
+    const r = rev;
     const albums = await api.albums(me.id);
+    // 받아 오는 사이에 앨범을 고쳤으면(종류·이름…) 이 목록은 예전 것이에요 → 다시 받아요
+    if (r !== rev) return get().loadAlbums();
     let albumId = get().albumId;
     if (!albums.some((a) => a.id === albumId)) albumId = albums[0]?.id ?? null;
     set({ albums, albumId, albumsLoaded: true });
     save('pm-albums', albums);
     save('pm-album', albumId);
-    if (albumId) await get().loadMembers().catch(() => {});
+    // 멤버는 뒤에서 받아요 (약한 신호에서 첫 화면이 로고에 오래 멈추지 않게 — 받기 전엔 지난번 목록을 써요)
+    if (albumId) get().loadMembers().catch(() => {});
     return albums;
   },
 
   async selectAlbum(id) {
-    set({ albumId: id, members: [] });
+    if (!get().albums.some((a) => a.id === id)) return;
+    // 새 앨범의 멤버를 먼저 받아 두고 한 번에 바꿔요 (멤버 수·이름이 잠깐 비지 않게)
+    const members = await api.members(id).catch(() => null);
+    set({ albumId: id, members: members ?? [] });
     save('pm-album', id);
-    await get().loadMembers();
+    if (members) save('pm-members', members);
+    else await get().loadMembers().catch(() => {});
   },
 
   async loadMembers() {
@@ -107,6 +123,7 @@ export const useSession = create<Session>((set, get) => ({
   },
 
   patchAlbum(patch) {
+    rev++;
     const id = get().albumId;
     const albums = get().albums.map((a) => (a.id === id ? { ...a, ...patch } : a));
     set({ albums });

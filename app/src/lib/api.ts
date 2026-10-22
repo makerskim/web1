@@ -18,7 +18,8 @@ export const toKind = (v: unknown): AlbumKind => (v === 'group' || v === 'family
 // 기념일 목록 (모양이 이상한 건 빼요)
 export const toDays = (v: unknown): Anniversary[] => (Array.isArray(v) ? v : []).filter((x) => x && typeof x === 'object'
   && typeof x.name === 'string' && typeof x.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.date))
-  .map((x) => ({ id: typeof x.id === 'string' ? x.id : uuid(), name: x.name, date: x.date, yearly: x.yearly === true }));
+  // id가 없던 기념일은 늘 같은 id로 (불러올 때마다 바뀌면 고치던 기념일이 새로 추가돼요)
+  .map((x, i) => ({ id: typeof x.id === 'string' && x.id ? x.id : `d${i}-${x.date}`, name: x.name, date: x.date, yearly: x.yearly === true }));
 const album = (r: Row, m?: Row): Album => {
   const children = kidsFrom(r.children, r.baby_name || '', r.baby_birthday || null);
   return {
