@@ -16,12 +16,16 @@ async function authHeaders() {
 
 const fnUrl = (route: string) => `${config.supabaseUrl}/functions/v1/drive/${route}`;
 
+// 오류에는 서버가 보낸 이름(code)도 붙여 둬요 (연결 준비 상태를 가릴 때 써요)
+const fnError = (code: string) => Object.assign(new Error(friendly(code)), { code });
+
 export async function driveCall<T>(route: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(fnUrl(route), { ...init, headers: { ...(await authHeaders()), ...(init.headers || {}) } });
+  const headers = { ...(await authHeaders()), ...(init.headers || {}) };
+  const res = await fetch(fnUrl(route), { ...init, headers }).catch(() => { throw fnError('offline'); });
   if (!res.ok) {
     let msg = `drive_${res.status}`;
     try { msg = (await res.json()).error || msg; } catch { /* 본문 없음 */ }
-    throw new Error(friendly(msg));
+    throw fnError(msg);
   }
   const type = res.headers.get('content-type') || '';
   return (type.includes('application/json') ? res.json() : res.blob()) as Promise<T>;
