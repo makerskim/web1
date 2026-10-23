@@ -9,3 +9,9 @@ createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictM
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
+// 알림을 눌렀을 때 이미 열려 있던 앱이면 그 화면으로
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'open' && typeof e.data.url === 'string') location.hash = new URL(e.data.url).hash;
+  });
+}

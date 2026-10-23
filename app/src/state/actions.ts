@@ -22,6 +22,8 @@ export async function toggleLike(p: Post, on = !liked(p)) {
 
 export async function addComment(p: Post, body: string) {
   const c = await api.addComment(p, body);
+  // 게시물을 올린 사람과 댓글을 단 가족에게 알림
+  api.notify(p.albumId, 'comment', c.id);
   const cur = usePosts.getState().byId[p.id] || p;
   usePosts.getState().put({ ...cur, comments: [...cur.comments, c] });
   return c;

@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, type ReactNode } from 'react';
-import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { OverlayHosts } from './components/ui';
 import { TabBar } from './components/Bars';
@@ -15,9 +15,10 @@ import { Grid } from './screens/Grid';
 import { Activity, activitySeenAt } from './screens/Activity';
 import { AlbumHome } from './screens/AlbumHome';
 import { PostPage } from './screens/PostPage';
-import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, StorageSettings, Install } from './screens/Settings';
+import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, StorageSettings, MyDriveSettings, NotifySettings, Install } from './screens/Settings';
 import { DayEdit } from './screens/DayEdit';
 import { ComposeHost, startCompose } from './screens/Compose';
+import { Memories } from './screens/Memories';
 
 // 초대 링크(?invite=코드)는 로그인 뒤에 쓰려고 기억해 둬요
 const inviteFromUrl = new URLSearchParams(location.search).get('invite');
@@ -45,6 +46,22 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 
 function Splash() {
   return <div style={{ minHeight: '100dvh', display: 'grid', placeContent: 'center' }}><Logo size={72} /></div>;
+}
+
+// 알림에서 열 때: 그 앨범으로 바꾼 다음 그 화면으로 (#/open?album=…&to=/p/…)
+function Open() {
+  const [q] = useSearchParams();
+  const nav = useNavigate();
+  useEffect(() => {
+    const albumId = q.get('album') || '';
+    const raw = q.get('to') || '/home';
+    const to = /^\/[A-Za-z0-9/_-]*(\?[A-Za-z0-9=&_-]*)?$/.test(raw) ? raw : '/home';
+    (async () => {
+      if (albumId && albumId !== useSession.getState().albumId) await useSession.getState().selectAlbum(albumId).catch(() => {});
+      nav(to, { replace: true });
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <Splash />;
 }
 
 function Shell() {
@@ -97,7 +114,7 @@ function Shell() {
     return activity.filter((e) => e.userId !== me.id && e.at > seen).length;
   }, [activity, album, me.id, loc.pathname]);
 
-  const tabs = (l: Location) => !/^\/(settings|p\/|create|join)/.test(l.pathname);
+  const tabs = (l: Location) => !/^\/(settings|p\/|create|join|open|memories)/.test(l.pathname);
   // 화면마다 아래 탭을 함께 그려요 → 깊은 화면으로 갈 때 탭도 화면과 같이 밀려나요 (아이폰처럼)
   const render = (l: Location) => (
     <>
@@ -107,6 +124,8 @@ function Shell() {
         <Route path="/grid/:month" element={<Grid />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/album" element={<AlbumHome />} />
+        <Route path="/open" element={<Open />} />
+        <Route path="/memories" element={<Memories />} />
         <Route path="/p/:id" element={<PostPage />} />
         <Route path="/p/:id/:extra" element={<PostPage />} />
         <Route path="/settings" element={<Settings />} />
@@ -117,6 +136,8 @@ function Shell() {
         <Route path="/settings/album/info" element={<AlbumInfo key={album?.id} />} />
         <Route path="/settings/album/day/:id" element={<DayEdit key={album?.id} />} />
         <Route path="/settings/storage" element={<StorageSettings />} />
+        <Route path="/settings/drive" element={<MyDriveSettings />} />
+        <Route path="/settings/notify" element={<NotifySettings />} />
         <Route path="/settings/install" element={<Install />} />
         <Route path="/create" element={<CreateAlbum />} />
         <Route path="/join" element={<JoinAlbum />} />

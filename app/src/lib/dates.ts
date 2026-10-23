@@ -315,3 +315,10 @@ function parseTiff(v: DataView, start: number): Date | null {
   const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
   return isNaN(+d) || d.getFullYear() < 1990 ? null : d;
 }
+
+/** 동영상 길이 '1:05' (모르면 '') */
+export const fmtDur = (sec?: number) => {
+  if (!sec || !Number.isFinite(sec)) return '';
+  const t = Math.round(sec);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};

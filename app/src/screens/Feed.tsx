@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
 import { PostCard } from '../components/PostCard';
 import { Icon } from '../components/Icon';
@@ -13,6 +13,9 @@ import { ymd } from '../lib/dates';
 import { celebrationsToday } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
+import { memoriesToday } from './Memories';
+import { Photo } from '../components/Photo';
+import type { PhotoMeta } from '../lib/types';
 import { InviteSheet } from './Invite';
 import s from './Feed.module.css';
 
@@ -59,6 +62,23 @@ export function Feed() {
   const msKey = `pm-ms-${album.id}-${ymd(new Date())}`;
   const [msHidden, setMsHidden] = useState(() => !!load(msKey, false));
 
+  // N년 전 오늘: 지난해 같은 날 찍은 사진이 있으면 '추억 보기'
+  const nav = useNavigate();
+  const [mem, setMem] = useState<{ count: number; years: number; cover: PhotoMeta } | null>(null);
+  const memKey = `pm-mem-${album.id}-${ymd(new Date())}`;
+  const [memHidden, setMemHidden] = useState(() => !!load(memKey, false));
+  useEffect(() => {
+    let live = true;
+    setMem(null);
+    setMemHidden(!!load(memKey, false));
+    memoriesToday(album.id).then((l) => {
+      if (!live || !l.length) return;
+      const last = l[l.length - 1];
+      setMem({ count: l.length, years: new Date().getFullYear() - new Date(last.takenAt).getFullYear(), cover: last });
+    }, () => {});
+    return () => { live = false; };
+  }, [album.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Page>
       <TopBar large title={
@@ -71,6 +91,17 @@ export function Feed() {
         <div className={s.milestone}>
           <p data-f="celebrate">오늘은 <b>{milestone}</b>{hasBatchim(milestone) ? '이에요' : '예요'} 🎉</p>
           <button onClick={() => { save(msKey, true); setMsHidden(true); }} aria-label="닫기"><Icon name="close" size={18} /></button>
+        </div>
+      )}
+
+      {mem && !memHidden && (
+        <div className={s.memory} data-f="memory-card">
+          <button className={s.memoryMain} onClick={() => nav('/memories')} data-f="memory-open">
+            <Photo albumId={album.id} path={mem.cover.thumb} ph={mem.cover.ph} className={s.memoryThumb} />
+            <span className={s.memoryText}><b>{mem.years}년 전 오늘</b><small>사진 {mem.count}장 · 눌러서 추억 보기</small></span>
+            <span className={s.memoryPlay}><Icon name="play" size={16} /></span>
+          </button>
+          <button className={s.memoryClose} onClick={() => { save(memKey, true); setMemHidden(true); }} aria-label="오늘은 그만 보기"><Icon name="close" size={16} /></button>
         </div>
       )}
 

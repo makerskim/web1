@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
-import { Group, Row, Field } from '../components/Form';
+import { Group, Row, Field, Toggle } from '../components/Form';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
@@ -11,7 +11,7 @@ import { GoogleIcon, KakaoIcon, providerName } from '../components/ProviderIcon'
 import { useAlbum, useSession, type TextSize } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { connectDrive, disconnectDrive, driveSetup, popupWarning, preloadDrive, setupHelp, type DriveSetup } from '../lib/drive';
+import { connectDrive, disconnectDrive, driveFolderLink, driveSetup, loadMyDrive, popupWarning, preloadDrive, setupHelp, useMyDrive, type DriveSetup } from '../lib/drive';
 import { clearCache } from '../lib/photoCache';
 import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
@@ -22,6 +22,8 @@ import { DatePickerSheet } from '../components/DatePicker';
 import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlbumName, termDays, type Child } from '../lib/kids';
 import { KidsForm } from '../components/KidsForm';
 import { KindSheet } from '../components/KindPicker';
+import { DEFAULT_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, type PushPrefs } from '../lib/push';
+import type { StorageKind } from '../lib/types';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
@@ -116,6 +118,8 @@ export function Settings() {
   const nav = useNavigate();
   const [sheet, setSheet] = useState<'profile' | 'albums' | 'text' | 'kind' | null>(null);
   const close = () => setSheet(null);
+  const myDrive = useMyDrive();
+  useEffect(() => { loadMyDrive(); }, []);
 
   const logout = async () => {
     if (!(await confirm({ title: '로그아웃할까요?', message: '이 휴대폰에서만 로그아웃돼요. 다시 들어올 때는 같은 계정으로 로그인하면 돼요.', ok: '로그아웃' }))) return;
@@ -133,6 +137,9 @@ export function Settings() {
             onClick={() => setSheet('profile')} data-row="profile" />
           <Row icon={<LoginBadge provider={me.provider} />} label={<Two title={`${providerName(me.provider)}로 로그인`} sub={me.email || me.name || undefined} />}
             onClick={() => nav('/settings/account')} data-row="account" />
+          <Row icon={<span className={`${s.badge} ${s.google}`} style={{ width: 30, height: 30 }}><GoogleIcon size={17} /></span>}
+            label={<Two title="내 구글 드라이브" sub={myDrive.email || (myDrive.loaded ? '연결 안 됨 · 사진·동영상을 내 드라이브에' : undefined)} />}
+            onClick={() => nav('/settings/drive')} data-row="my-drive" />
         </Group>
 
         <Group title="앨범">
@@ -142,6 +149,7 @@ export function Settings() {
         </Group>
 
         <Group title="앱">
+          <Row icon={<Icon name="bell" size={22} />} label="알림" detail="새 사진 · 댓글 · 기념일" onClick={() => nav('/settings/notify')} data-row="notify" />
           <Row icon={<Icon name="text" size={22} />} label="글자 크기" detail={TEXT_SIZES.find((t) => t.value === textSize)?.label} onClick={() => setSheet('text')} data-row="text" />
           {isStandalone()
             ? <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail="추가됨" />
@@ -359,7 +367,7 @@ export function AlbumSettings() {
         </Group>
 
         <Group title="사진" footer="내려받으면 원본 화질 그대로 저장돼요.">
-          <Row icon={<Icon name="cloud" size={22} />} label="사진 저장 위치" detail={album.storage === 'drive' ? (isOwner ? '구글 드라이브' : '관리자의 구글 드라이브') : '기본 저장소'}
+          <Row icon={<Icon name="cloud" size={22} />} label="사진 저장 위치" detail={album.storage === 'drive' ? '각자 구글 드라이브' : '기본 저장소'}
             onClick={isOwner ? () => nav('/settings/storage') : undefined} />
         </Group>
 
@@ -448,14 +456,129 @@ export function AlbumInfo() {
   );
 }
 
-// ---------- 사진 저장 위치 (관리자) ----------
+// ---------- 사진 저장 위치 (관리자): 각자 구글 드라이브 · 기본 저장소 ----------
 export function StorageSettings() {
   const album = useAlbum()!;
+  const isOwner = album.myRole === 'owner';
   const posts = usePosts((st) => st.list.length);
+  const my = useMyDrive();
+  const nav = useNavigate();
   const [usage, setUsage] = useState<number | null>(null);
+  useEffect(() => { loadMyDrive(); api.storageUsage().then(setUsage, () => setUsage(null)); }, [posts]);
+
+  const choose = async (storage: StorageKind) => {
+    if (!isOwner || storage === album.storage) return;
+    try {
+      await api.updateAlbum(album.id, { storage });
+      useSession.getState().patchAlbum({ storage });
+      toast(storage === 'drive' ? '이제 각자 구글 드라이브에 저장돼요' : '이제 기본 저장소에 저장돼요');
+    } catch (e) { toast((e as Error).message); }
+  };
+  const check = <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />;
+  const pct = usage !== null ? Math.min(100, Math.round((usage / config.storageLimitBytes) * 100)) : 0;
+
+  return (
+    <Page>
+      <TopBar back title="사진 저장 위치" />
+      <div className={s.page}>
+        <Group footer="앞으로 올리는 사진이 저장될 곳이에요. 이미 올린 사진은 그 자리에 그대로 있어요.">
+          <Row label={<Two title="각자 구글 드라이브" sub="올린 사람의 드라이브 · 동영상도 올릴 수 있어요" />} onClick={isOwner ? () => choose('drive') : undefined} chevron={false} data-storage="drive">
+            {album.storage === 'drive' && check}
+          </Row>
+          <Row label={<Two title="기본 저장소 (Supabase)" sub={`${fmtBytes(config.storageLimitBytes)}까지 · 사진만`} />} onClick={isOwner ? () => choose('supabase') : undefined} chevron={false} data-storage="supabase">
+            {album.storage === 'supabase' && check}
+          </Row>
+        </Group>
+
+        {album.storage === 'drive' && (
+          <div className={s.howCard} data-f="drive-how">
+            <b>이렇게 저장돼요</b>
+            <ol>
+              <li>멤버마다 처음 한 번 <b>내 구글 드라이브</b>를 연결해요</li>
+              <li>사진·동영상은 올린 사람 드라이브의 <b>Pastel Memories › {album.name}</b> 폴더에 들어가요</li>
+              <li>그 폴더는 ‘링크가 있는 사람 보기’로 공유돼서 멤버는 앱에서 보고 내려받아요 (주소를 아는 사람만, 검색되지 않아요)</li>
+            </ol>
+          </div>
+        )}
+
+        <Group>
+          <Row icon={<GoogleIcon size={20} />} label="내 구글 드라이브" detail={my.loaded ? (my.email || '연결 안 됨') : '확인 중'} onClick={() => nav('/settings/drive')} data-row="my-drive" />
+        </Group>
+
+        <Group title="기본 저장소 사용량">
+          <div className={s.meter}>
+            <div className={s.bar}><i style={{ width: `${Math.max(2, pct)}%` }} className={pct >= 80 ? s.warn : ''} /></div>
+            <p>{usage === null ? '확인 중…' : `${fmtBytes(usage)} / ${fmtBytes(config.storageLimitBytes)} (${pct}%)`}</p>
+          </div>
+        </Group>
+        {isOwner && <OriginalCleanup />}
+      </div>
+    </Page>
+  );
+}
+
+// ---------- 알림 (이 휴대폰) ----------
+export function NotifySettings() {
+  const nav = useNavigate();
+  const support = pushSupport();
+  const [st, setSt] = useState<{ on: boolean; prefs: PushPrefs; denied: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (support === 'ok') pushState().then(setSt, () => setSt({ on: false, prefs: DEFAULT_PREFS, denied: false })); }, [support]);
+
+  const toggle = async (on: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (on) { await enablePush(st?.prefs || DEFAULT_PREFS); toast('알림을 켰어요'); }
+      else { await disablePush(); toast('알림을 껐어요'); }
+      setSt(await pushState());
+    } catch (e) { toast((e as Error).message); setSt(await pushState().catch(() => st)); } finally { setBusy(false); }
+  };
+  const setPref = async (k: keyof PushPrefs, v: boolean) => {
+    if (!st) return;
+    const prefs = { ...st.prefs, [k]: v };
+    setSt({ ...st, prefs });
+    try { await savePushPrefs(prefs); } catch (e) { toast((e as Error).message); }
+  };
+
+  return (
+    <Page>
+      <TopBar back title="알림" />
+      <div className={s.page}>
+        {support === 'ios-home' && (
+          <div className={s.install} data-f="notify-ios">
+            <Icon name="bell" size={34} />
+            <p>아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요.<br />홈 화면에 추가한 뒤, 그 앱에서 여기를 다시 열어 주세요.</p>
+            <Button variant="secondary" onClick={() => nav('/settings/install')}>홈 화면에 추가하는 방법</Button>
+          </div>
+        )}
+        {support === 'no' && <p className={s.ownerOnly}>이 브라우저는 알림을 받을 수 없어요. 크롬·사파리에서 열어 주세요.</p>}
+        {support === 'ok' && (
+          <>
+            <Group footer={st?.denied ? '알림이 막혀 있어요. 휴대폰 설정 → 알림에서 이 앱(또는 브라우저)을 허용해 주세요.' : '이 휴대폰에서만 켜져요. 다른 휴대폰은 거기서 따로 켜 주세요.'}>
+              <Row label="이 휴대폰에서 알림 받기" chevron={false} data-row="push-on">
+                <Toggle checked={!!st?.on} onChange={toggle} label="알림 받기" disabled={!st || busy} data-f="push-toggle" />
+              </Row>
+            </Group>
+            {st?.on && (
+              <Group title="받을 알림" footer="기념일·추억 알림은 매일 아침 9시쯤, 챙길 날이나 N년 전 오늘 사진이 있을 때만 와요.">
+                <Row label={<Two title="새 사진·동영상" sub="가족이 올리면" />} chevron={false}><Toggle checked={st.prefs.post} onChange={(v) => setPref('post', v)} label="새 사진 알림" data-pref="post" /></Row>
+                <Row label={<Two title="댓글" sub="내 게시물이나 내가 댓글 단 게시물에" />} chevron={false}><Toggle checked={st.prefs.comment} onChange={(v) => setPref('comment', v)} label="댓글 알림" data-pref="comment" /></Row>
+                <Row label={<Two title="기념일 · 추억" sub="백일·돌·기념일, N년 전 오늘" />} chevron={false}><Toggle checked={st.prefs.daily} onChange={(v) => setPref('daily', v)} label="기념일 알림" data-pref="daily" /></Row>
+              </Group>
+            )}
+          </>
+        )}
+      </div>
+    </Page>
+  );
+}
+
+// ---------- 내 구글 드라이브 (누구나): 연결 · 폴더 열기 · 다른 계정 · 끊기 ----------
+export function MyDriveSettings() {
+  const my = useMyDrive();
   const [setup, setSetup] = useState<DriveSetup | null>(null);
-  useEffect(() => { preloadDrive(); api.storageUsage().then(setUsage, () => setUsage(null)); }, [posts]);
-  useEffect(() => { driveSetup().then(setSetup); }, []);
+  useEffect(() => { preloadDrive(); loadMyDrive(); driveSetup().then(setSetup); }, []);
   const recheck = () => { setSetup(null); driveSetup(true).then(setSetup); };
   const warn = popupWarning();
 
@@ -465,60 +588,40 @@ export function StorageSettings() {
     cancelled.catch(() => {});
     const p = progress('구글 창에서 계정을 골라 주세요', () => cancel());
     try {
-      const email = await connectDrive(album.id, { cancelled, onCode: () => { p.cancelable(false); p.set(0.6, '드라이브에 앨범 폴더를 만드는 중'); } });
-      useSession.getState().patchAlbum({ storage: 'drive', driveEmail: email, driveReady: true });
+      await connectDrive({ cancelled, onCode: () => { p.cancelable(false); p.set(0.6, '드라이브에 Pastel Memories 폴더를 만드는 중'); } });
       p.close();
       toast('구글 드라이브에 연결했어요');
     } catch (e) { p.close(); toast((e as Error).message); }
   };
-  // 같은 계정을 고르면 그대로 이어지고, 다른 계정이면 예전 드라이브 사진이 안 보여요
+  // 다른 계정으로 바꿔도 이미 올린 사진은 그 계정 드라이브에 남아서 가족은 계속 볼 수 있어요
   const reconnect = async () => {
-    if (!(await confirm({ title: '다른 계정으로 다시 연결할까요?', message: '같은 구글 계정을 고르면 그대로 이어져요.\n다른 계정을 고르면 지금 드라이브에 있는 사진은 앱에서 보이지 않게 돼요. (드라이브에는 그대로 남아요)', ok: '다시 연결' }))) return;
+    if (!(await confirm({ title: '다른 계정으로 다시 연결할까요?', message: '이미 올린 사진은 지금 계정의 드라이브에 그대로 있고, 가족도 계속 볼 수 있어요.\n앞으로 올리는 사진만 새 계정에 저장돼요.', ok: '다시 연결' }))) return;
     connect();
   };
   const disconnect = async () => {
-    if (!(await confirm({ title: '드라이브 연결을 끊을까요?', message: '앞으로 올리는 사진은 기본 저장소에 저장돼요.\n이미 드라이브에 있는 사진은 앱에서 보이지 않게 돼요. (드라이브에는 그대로 남아요)', ok: '연결 끊기', danger: true }))) return;
+    if (!(await confirm({ title: '구글 드라이브 연결을 끊을까요?', message: '이미 올린 사진은 드라이브에 그대로 있고 가족도 계속 볼 수 있어요.\n‘각자 구글 드라이브’ 앨범에 새 사진을 올리려면 다시 연결해야 해요.', ok: '연결 끊기', danger: true }))) return;
     try {
-      await disconnectDrive(album.id);
-      useSession.getState().patchAlbum({ storage: 'supabase', driveEmail: null, driveReady: false });
+      await disconnectDrive();
       toast('연결을 끊었어요');
     } catch (e) { toast((e as Error).message); }
   };
-  const useDefault = async () => {
-    try {
-      await api.updateAlbum(album.id, { storage: 'supabase' });
-      useSession.getState().patchAlbum({ storage: 'supabase' });
-    } catch (e) { toast((e as Error).message); }
-  };
-  const useDrive = async () => {
-    if (!album.driveReady) return connect();
-    try {
-      await api.updateAlbum(album.id, { storage: 'drive' });
-      useSession.getState().patchAlbum({ storage: 'drive' });
-    } catch (e) { toast((e as Error).message); }
-  };
-  const pct = usage !== null ? Math.min(100, Math.round((usage / config.storageLimitBytes) * 100)) : 0;
 
   return (
     <Page>
-      <TopBar back title="사진 저장 위치" />
+      <TopBar back title="내 구글 드라이브" />
       <div className={s.page}>
-        <Group footer="앞으로 올리는 사진이 저장될 곳이에요. 이미 올린 사진은 그 자리에 그대로 있어요.">
-          <Row label="기본 저장소 (Supabase)" onClick={useDefault} chevron={false}>{album.storage === 'supabase' && <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />}</Row>
-          <Row label="내 구글 드라이브" detail={album.driveEmail || undefined} onClick={useDrive} chevron={false}>{album.storage === 'drive' && <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />}</Row>
-        </Group>
-
-        {album.storage === 'drive' || album.driveReady ? (
-          <Group title="구글 드라이브" footer="사진은 드라이브의 ‘Pastel Memories’ 폴더에 비공개로 저장돼요. 멤버는 앱 안에서만 볼 수 있어요.">
-            <Row label="연결된 계정" detail={album.driveEmail || '확인 중'} />
+        {my.email ? (
+          <Group title="연결된 계정" footer="사진·동영상은 이 계정 드라이브의 ‘Pastel Memories’ 폴더에 앨범별로 저장돼요. 내 드라이브 공간(무료 15GB)을 써요.">
+            <Row icon={<GoogleIcon size={20} />} label={my.email} chevron={false} data-f="drive-email" />
+            {my.root && <Row icon={<Icon name="link" size={20} />} label="드라이브에서 폴더 열기" onClick={() => window.open(driveFolderLink(my.root!), '_blank', 'noopener')} data-row="open-folder" />}
             <Row label="다른 계정으로 다시 연결" onClick={reconnect} />
-            <Row label="연결 끊기" onClick={disconnect} danger chevron={false} />
+            <Row label="연결 끊기" onClick={disconnect} danger chevron={false} data-row="disconnect" />
           </Group>
         ) : (
           <div className={s.driveCard} data-drive={setup?.state ?? 'loading'}>
             <Icon name="shield" size={28} />
-            <b>내 구글 드라이브에 저장하기</b>
-            <p>멤버가 올린 사진이 관리자의 드라이브 폴더에 비공개로 모여요. 드라이브 공간(무료 15GB)을 쓰니 더 많이 저장할 수 있어요.</p>
+            <b>내 구글 드라이브 연결하기</b>
+            <p>내가 올리는 사진·동영상이 내 드라이브 폴더에 저장되고, 앨범 멤버와 함께 봐요. 비용은 들지 않아요.</p>
             <ol className={s.driveSteps}>
               <li>아래 버튼을 눌러 <b>구글 계정</b>을 골라요</li>
               <li><b>‘Google Drive 파일’</b> 항목에 체크하고 <b>계속</b></li>
@@ -526,22 +629,14 @@ export function StorageSettings() {
             {setup && setup.state !== 'ready' ? (
               <>
                 <Button variant="secondary" disabled>아직 준비 중이에요</Button>
-                <p className={s.driveHelp} data-f="drive-help">{setupHelp[setup.state]} <button type="button" onClick={recheck}>다시 확인</button></p>
+                <p className={s.driveHelp} data-f="drive-help">{setupHelp(setup)} <button type="button" onClick={recheck}>다시 확인</button></p>
               </>
             ) : (
-              <Button onClick={connect} disabled={!setup} className={s.googleBtn}><GoogleIcon size={18} />{setup ? '구글 계정으로 연결' : '확인 중…'}</Button>
+              <Button onClick={connect} disabled={!setup} className={s.googleBtn} data-f="drive-connect"><GoogleIcon size={18} />{setup ? '구글 계정으로 연결' : '확인 중…'}</Button>
             )}
             {warn && <p className={s.driveHelp} data-f="drive-warn">{warn}</p>}
           </div>
         )}
-
-        <Group title="기본 저장소 사용량">
-          <div className={s.meter}>
-            <div className={s.bar}><i style={{ width: `${Math.max(2, pct)}%` }} className={pct >= 80 ? s.warn : ''} /></div>
-            <p>{usage === null ? '확인 중…' : `${fmtBytes(usage)} / ${fmtBytes(config.storageLimitBytes)} (${pct}%)`}</p>
-          </div>
-        </Group>
-        <OriginalCleanup />
       </div>
     </Page>
   );
@@ -557,7 +652,8 @@ function OriginalCleanup() {
     const now = Date.now();
     const options = ([[3, '3개월'], [6, '6개월'], [12, '1년']] as const).map(([m, label]) => {
       const before = new Date(now - m * 30.4 * 86400000).toISOString();
-      const olds = list.filter((it) => it.orig && it.createdAt < before && (it.orig.startsWith('drive:') || it.orig.startsWith(`${album.id}/${it.postId}/`)));
+      // 기본 저장소의 원본만 (구글 드라이브 원본은 각자 드라이브에 그대로)
+      const olds = list.filter((it) => it.orig && it.createdAt < before && it.orig.startsWith(`${album.id}/${it.postId}/`));
       return { m, label, count: olds.length, bytes: olds.reduce((n, it) => n + (it.origSize || 0), 0), paths: olds.map((it) => it.orig!) };
     });
     const v = await menu(options.map((o) => ({ label: `${o.label} 지난 원본 ${o.count}장${o.count ? ` · ${fmtBytes(o.bytes)}` : ''}`, value: o.count ? o.m : null })), '오래된 원본 정리');

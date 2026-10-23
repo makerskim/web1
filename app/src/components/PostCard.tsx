@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Avatar } from './Avatar';
 import { Photo } from './Photo';
+import { VideoSlide, isVideo } from './Video';
 import { Icon } from './Icon';
 import { FaceStack } from './People';
 import { useSession } from '../state/session';
@@ -81,7 +82,9 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
       <div className={s.media} style={{ aspectRatio: `1 / ${ratio}` }}>
         <div className={s.track} ref={track} onScroll={(e) => setIdx(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))} onClick={onTap} data-act="media">
           {/* 사진은 자르지 않고 칸에 맞게 줄여서 전체를 보여 줘요 (남는 자리는 같은 사진을 흐리게) */}
-          {post.photos.map((p, i) => <Photo key={p.path} albumId={post.albumId} path={p.path} ph={p.ph} className={`${s.slide} ${s.fitted}`} fit="contain" eager={i === 0} />)}
+          {post.photos.map((p, i) => (isVideo(p)
+            ? <VideoSlide key={p.path} albumId={post.albumId} item={p} className={s.slide} />
+            : <Photo key={p.path} albumId={post.albumId} path={p.path} ph={p.ph} className={`${s.slide} ${s.fitted}`} fit="contain" eager={i === 0} />))}
         </div>
         {post.photos.length > 1 && <span className={s.count}>{idx + 1}/{post.photos.length}</span>}
         {post.photos.length > 1 && idx > 0 && <button className={`${s.arrow} ${s.prev}`} onClick={() => go(-1)} aria-label="이전 사진"><Icon name="back" size={16} stroke={2.6} /></button>}

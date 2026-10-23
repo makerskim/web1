@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Bars';
 import { Photo } from '../components/Photo';
+import { VideoMark } from '../components/Video';
 import { Icon, type IconName } from '../components/Icon';
 import { FilterChips, NO_FILTER, matches, type Filter } from '../components/Filters';
 import { AmpText, CoverFace, MembersSheet, useCoverChanger } from '../components/AlbumBits';
@@ -269,6 +270,7 @@ export function AlbumHome() {
             <button key={t.id} className={s.tile} onClick={() => nav(`/p/${t.id}`)} aria-label="게시물 보기" data-tile={t.id}>
               <Photo albumId={album.id} path={t.first.thumb} ph={t.first.ph} className={s.tileImg} />
               {t.count > 1 && <Icon name="layers" size={18} className={s.multi} />}
+              <VideoMark item={t.first} />
             </button>
           ))}
         </div>

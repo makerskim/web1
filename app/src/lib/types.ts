@@ -28,10 +28,9 @@ export interface Album {
   /** 나이·디데이 기준: 첫째 아이의 생일(예정일) */
   babyBirthday: string | null;
   inviteCode: string;
+  /** 사진 저장 위치: 'drive' = 각자(올린 사람)의 구글 드라이브 · 'supabase' = 기본 저장소 */
   storage: StorageKind;
-  driveEmail: string | null;
-  driveReady: boolean;
-  /** 가족 탭 맨 위 앨범 사진: '' | 이 앨범 사진 경로 | drive:파일ID */
+  /** 가족 탭 맨 위 앨범 사진: '' | 이 앨범 사진 경로 | gd:파일ID */
   cover: string;
   /** 아기 앨범(baby) / 가족 앨범(family) / 친구·모임 앨범(group) */
   kind: AlbumKind;
@@ -54,8 +53,10 @@ export interface Member {
 }
 
 export interface PhotoMeta {
+  /** 화면용 사진 (동영상이면 첫 장면) */
   path: string;
   thumb: string;
+  /** 원본 사진 · 동영상 파일 */
   orig?: string;
   origName?: string;
   origSize?: number;
@@ -63,6 +64,12 @@ export interface PhotoMeta {
   h: number;
   ph: string;
   dec?: boolean;
+  /** 동영상이면 'video' (orig가 동영상, 구글 드라이브에만) */
+  kind?: 'video';
+  /** 동영상 길이(초) */
+  dur?: number;
+  /** 동영상 형식 (video/mp4 …) */
+  mime?: string;
 }
 
 export interface Like { userId: string; createdAt: string }

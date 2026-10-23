@@ -31,7 +31,7 @@ alter table public.families drop constraint if exists families_cover_check;
 alter table public.families add constraint families_cover_check check (
   cover = ''
   or cover ~ ('^' || id::text || '/(cover/[0-9]+|[0-9a-f-]{36}/[0-9]+_t)\.jpg$')
-  or cover ~ '^drive:[A-Za-z0-9_-]{10,200}$');
+  or cover ~ '^(drive|gd):[A-Za-z0-9_-]{10,200}$');
 -- 아이들(태명·이름·생일)과 앨범 소개 — 한 명이 기본, 쌍둥이·다둥이는 여러 명
 alter table public.families add column if not exists children jsonb not null default '[]';
 alter table public.families add column if not exists bio text not null default '';
@@ -121,8 +121,9 @@ create table if not exists public.posts (
   author_id  uuid not null default auth.uid(),
   caption    text not null default '' check (char_length(caption) <= 2000),
   taken_at   timestamptz not null default now(),
-  -- [{ "path", "thumb", "orig"?, "w", "h", "ph", "dec", "origName"?, "origSize"? }]
-  -- 경로: Supabase 저장소면 '가족ID/게시물ID/0.jpg', 구글 드라이브면 'drive:파일ID'
+  -- [{ "path", "thumb", "orig"?, "w", "h", "ph", "dec", "origName"?, "origSize"?, "kind"?: "video", "dur"? }]
+  -- 경로: Supabase 저장소면 '가족ID/게시물ID/0.jpg', 올린 사람의 구글 드라이브면 'gd:파일ID'
+  -- 동영상은 path·thumb가 첫 장면 사진, orig가 동영상 파일이에요 (구글 드라이브에만)
   photos     jsonb not null check (jsonb_typeof(photos) = 'array'
                                    and jsonb_array_length(photos) between 1 and 10
                                    and pg_column_size(photos) < 20000),
@@ -150,7 +151,7 @@ create table if not exists public.comments (
 create index if not exists comments_post_idx on public.comments (post_id, created_at);
 create index if not exists comments_family_created_idx on public.comments (family_id, created_at desc);
 
--- 구글 드라이브 연결 정보 (앱에서는 절대 못 읽어요. 서버 기능(Edge Function)만 사용)
+-- (예전) 앨범 하나를 관리자 드라이브에 연결하던 정보. 지금은 각자 드라이브(user_drives)를 써요
 create table if not exists public.drive_tokens (
   family_id     uuid primary key references public.families(id) on delete cascade,
   refresh_token text not null,
@@ -223,7 +224,7 @@ create or replace function public.check_post_photos()
 returns trigger language plpgsql set search_path = public as $$
 declare
   pre text := new.family_id::text || '/' || new.id::text || '/';
-  drv text := '^drive:[A-Za-z0-9_-]{10,200}$';
+  drv text := '^(drive|gd):[A-Za-z0-9_-]{10,200}$';
 begin
   if exists (
     select 1 from jsonb_array_elements(new.photos) x
@@ -232,6 +233,9 @@ begin
        or not (coalesce(x->>'thumb', '') ~ ('^' || pre || '[0-9]+_t\.jpg$') or coalesce(x->>'thumb', '') ~ drv)
        or (x ? 'orig' and not (coalesce(x->>'orig', '') ~ ('^' || pre || '[0-9]+_o\.(jpg|png|webp|heic|heif)$')
                               or coalesce(x->>'orig', '') ~ drv))
+       -- 동영상: 파일은 구글 드라이브에만, 길이는 숫자로
+       or (x ? 'kind' and (x->>'kind' <> 'video' or coalesce(x->>'orig', '') !~ '^gd:[A-Za-z0-9_-]{10,200}$'))
+       or (x ? 'dur' and jsonb_typeof(x->'dur') <> 'number')
   ) then
     raise exception 'bad_photo_path';
   end if;
@@ -449,6 +453,73 @@ begin
   delete from auth.users where id = auth.uid();
 end $$;
 
+-- ---------- 각자 구글 드라이브 ----------
+-- 사진·동영상은 올린 사람의 구글 드라이브 'Pastel Memories/앨범이름' 폴더에 앱이 바로 올려요 (게시물에는 'gd:파일ID')
+-- 연결 정보(갱신 토큰)는 서버 기능(Edge Function)만 읽어요. folders: { 앨범ID: { "id": 폴더, "small": 앱용 작은 사진 폴더 } }
+create table if not exists public.user_drives (
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  refresh_token text not null,
+  email         text,
+  root_folder   text,
+  folders       jsonb not null default '{}',
+  updated_at    timestamptz not null default now()
+);
+
+-- 내 드라이브 연결 상태 (토큰은 빼고): 연결 안 했으면 빈 결과
+create or replace function public.my_drive()
+returns table (email text, root_folder text) language sql stable security definer set search_path = public as $$
+  select d.email, d.root_folder from user_drives d where d.user_id = auth.uid()
+$$;
+
+-- ---------- 알림 ----------
+-- 휴대폰마다 하나 (같은 휴대폰에서 다른 계정으로 바꾸면 새 계정으로 옮겨요). prefs: 새 사진 · 댓글 · 기념일·추억
+create table if not exists public.push_subs (
+  endpoint   text primary key check (endpoint ~ '^https://' and char_length(endpoint) < 1000),
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  p256dh     text not null check (char_length(p256dh) < 200),
+  auth       text not null check (char_length(auth) < 100),
+  prefs      jsonb not null default '{"post": true, "comment": true, "daily": true}',
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subs_user_idx on public.push_subs (user_id);
+
+create or replace function public.save_push(p_endpoint text, p_p256dh text, p_auth text, p_prefs jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'not_signed_in'; end if;
+  if jsonb_typeof(p_prefs) <> 'object' or pg_column_size(p_prefs) > 400 then raise exception 'bad_prefs'; end if;
+  delete from push_subs where endpoint = p_endpoint and user_id <> auth.uid();
+  insert into push_subs (endpoint, user_id, p256dh, auth, prefs) values (p_endpoint, auth.uid(), p_p256dh, p_auth, p_prefs)
+  on conflict (endpoint) do update set p256dh = excluded.p256dh, auth = excluded.auth, prefs = excluded.prefs;
+end $$;
+
+create or replace function public.drop_push(p_endpoint text)
+returns void language sql security definer set search_path = public as $$
+  delete from push_subs where endpoint = p_endpoint and user_id = auth.uid();
+$$;
+
+create or replace function public.my_push(p_endpoint text)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select prefs from push_subs where endpoint = p_endpoint and user_id = auth.uid();
+$$;
+
+-- 서버 기능이 쓰는 열쇠(알림 서명 키, 매일 알림 비밀값)와 보낸 기록 — 앱에서는 못 읽어요
+create table if not exists public.app_keys (name text primary key, value jsonb not null);
+insert into public.app_keys (name, value) values ('cron', to_jsonb(replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')))
+  on conflict (name) do nothing;
+create table if not exists public.push_sent (key text primary key, at timestamptz not null default now());
+
+-- N년 전 오늘 (찍은 날 기준, 오늘 이전 해들)
+create or replace function public.on_this_day(p_family uuid, p_month int, p_day int, p_tz text default 'Asia/Seoul')
+returns setof public.posts language sql stable set search_path = public as $$
+  select p.* from posts p
+  where p.family_id = p_family
+    and extract(month from p.taken_at at time zone p_tz) = p_month
+    and extract(day from p.taken_at at time zone p_tz) = p_day
+    and (p.taken_at at time zone p_tz)::date < (now() at time zone p_tz)::date
+  order by p.taken_at desc limit 200
+$$;
+
 -- ---------- 접근 권한 ----------
 
 alter table public.families     enable row level security;
@@ -457,8 +528,13 @@ alter table public.posts        enable row level security;
 alter table public.likes        enable row level security;
 alter table public.comments     enable row level security;
 alter table public.drive_tokens enable row level security;
+alter table public.user_drives  enable row level security;
+alter table public.push_subs    enable row level security;
+alter table public.app_keys     enable row level security;
+alter table public.push_sent    enable row level security;
 
-revoke all on public.families, public.members, public.posts, public.likes, public.comments, public.drive_tokens
+revoke all on public.families, public.members, public.posts, public.likes, public.comments, public.drive_tokens,
+  public.user_drives, public.push_subs, public.app_keys, public.push_sent
   from anon, authenticated;
 
 grant select, delete on public.families to authenticated;
@@ -470,7 +546,7 @@ grant insert (id, family_id, caption, taken_at, photos) on public.posts to authe
 grant update (caption, taken_at) on public.posts to authenticated;
 grant select, insert, delete on public.likes to authenticated;
 grant select, insert, delete on public.comments to authenticated;
--- drive_tokens: 앱(authenticated)에는 아무 권한도 주지 않아요
+-- drive_tokens · user_drives · push_subs · app_keys · push_sent: 앱은 표를 직접 못 써요 (위의 기능으로만)
 
 revoke execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
@@ -478,14 +554,18 @@ revoke execute on function
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
   public.family_files(uuid), public.check_post_photos(), public.clear_cover_on_post_delete(), public.keep_an_owner(),
-  public.delete_account_check(), public.drive_links_to_release(), public.delete_account()
+  public.delete_account_check(), public.drive_links_to_release(), public.delete_account(),
+  public.my_drive(), public.save_push(text, text, text, jsonb), public.drop_push(text), public.my_push(text),
+  public.on_this_day(uuid, int, int, text)
   from public, anon;
 grant execute on function
   public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
-  public.family_files(uuid), public.delete_account_check(), public.drive_links_to_release(), public.delete_account()
+  public.family_files(uuid), public.delete_account_check(), public.drive_links_to_release(), public.delete_account(),
+  public.my_drive(), public.save_push(text, text, text, jsonb), public.drop_push(text), public.my_push(text),
+  public.on_this_day(uuid, int, int, text)
   to authenticated;
 
 drop policy if exists families_select on public.families;

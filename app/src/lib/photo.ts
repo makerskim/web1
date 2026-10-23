@@ -1,5 +1,6 @@
-// 올릴 사진 준비: 고를 때는 열리는지·크기만 확인하고, 올릴 때 한 장씩 줄여서 만들어요
+// 올릴 사진·동영상 준비: 고를 때는 열리는지·크기만 확인하고, 올릴 때 한 장씩 줄여서 만들어요
 // (사진을 미리 다 풀어 두지 않아서 여러 장이어도 휴대폰 메모리가 넉넉해요)
+// 동영상은 파일을 그대로 올리고, 첫 장면을 사진으로 만들어 미리보기에 써요
 import { readPhotoDate } from './dates';
 import { uuid } from './uuid';
 
@@ -16,6 +17,8 @@ export interface PickedPhoto {
   w: number;
   h: number;
   takenAt: Date;
+  /** 동영상이면 길이(초) */
+  video?: { dur: number };
 }
 
 export interface ExportedPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string }
@@ -63,8 +66,44 @@ const toBlob = (c: HTMLCanvasElement, q: number) => new Promise<Blob>((resolve, 
   (b) => (b ? resolve(b) : reject(new Error('사진을 만들지 못했어요. 사진 수를 줄여 다시 해 보세요.'))), 'image/jpeg', q,
 ));
 
-/** 고른 사진 확인: 열리는지, 크기, 찍은 날 */
+export const isVideoFile = (f: File) => f.type.startsWith('video/') || /\.(mp4|m4v|mov|webm|3gp)$/i.test(f.name || '');
+
+// 동영상 요소가 준비될 때까지 (못 열면 null)
+function waitFor(v: HTMLVideoElement, ev: string, ms: number) {
+  return new Promise<boolean>((resolve) => {
+    const done = (ok: boolean) => { clearTimeout(t); v.removeEventListener(ev, yes); v.removeEventListener('error', no); resolve(ok); };
+    const yes = () => done(true);
+    const no = () => done(false);
+    const t = setTimeout(() => done(false), ms);
+    v.addEventListener(ev, yes);
+    v.addEventListener('error', no);
+  });
+}
+function videoEl(url: string) {
+  const v = document.createElement('video');
+  v.muted = true;
+  v.playsInline = true;
+  v.setAttribute('playsinline', '');
+  v.preload = 'auto';
+  v.src = url;
+  return v;
+}
+const dropVideo = (v: HTMLVideoElement) => { v.removeAttribute('src'); v.load(); };
+
+async function loadVideo(file: File): Promise<PickedPhoto> {
+  const url = URL.createObjectURL(file);
+  const v = videoEl(url);
+  // 이 브라우저가 못 여는 형식(예: 일부 아이폰 동영상)이어도 올릴 수 있어요 → 크기·길이만 모를 뿐
+  const ok = await waitFor(v, 'loadedmetadata', 10000);
+  const w = ok ? v.videoWidth : 0, h = ok ? v.videoHeight : 0;
+  const dur = ok && Number.isFinite(v.duration) ? v.duration : 0;
+  dropVideo(v);
+  return { id: uuid(), file, url, w: w || 1080, h: h || 1920, takenAt: new Date(file.lastModified || Date.now()), video: { dur } };
+}
+
+/** 고른 사진 확인: 열리는지, 크기, 찍은 날 (동영상은 크기·길이) */
 export async function loadPhoto(file: File): Promise<PickedPhoto> {
+  if (isVideoFile(file)) return loadVideo(file);
   const url = URL.createObjectURL(file);
   try {
     const img = await loadImg(url).catch((e: Error) => {
@@ -82,12 +121,54 @@ export async function loadPhoto(file: File): Promise<PickedPhoto> {
   }
 }
 
-/** 올릴 사진 만들기: 본 사진(긴 변 1440px), 작은 사진(400px), 아주 작은 자리표시 */
+// 동영상 첫 장면 (1초쯤, 짧으면 가운데). 못 그리면 null
+async function videoFrame(p: PickedPhoto): Promise<HTMLCanvasElement | null> {
+  const v = videoEl(p.url);
+  try {
+    if (!(await waitFor(v, 'loadeddata', 10000)) || !v.videoWidth) return null;
+    const dur = Number.isFinite(v.duration) ? v.duration : 0;
+    v.currentTime = Math.min(1, dur / 2 || 0.1);
+    await waitFor(v, 'seeked', 6000);
+    return drawScaled(v, v.videoWidth, v.videoHeight, OUT_MAX);
+  } catch {
+    return null;
+  } finally {
+    dropVideo(v);
+  }
+}
+// 장면을 못 그리는 동영상: 파스텔 바탕에 ▶
+function videoPlaceholder(w: number, h: number) {
+  const k = Math.min(1, OUT_MAX / Math.max(w, h));
+  const c = makeCanvas(w * k, h * k);
+  const x = c.getContext('2d')!;
+  const g = x.createLinearGradient(0, 0, c.width, c.height);
+  g.addColorStop(0, '#ffe3ea');
+  g.addColorStop(1, '#ece4fb');
+  x.fillStyle = g;
+  x.fillRect(0, 0, c.width, c.height);
+  const r = Math.min(c.width, c.height) * 0.12;
+  x.fillStyle = 'rgba(255,255,255,0.9)';
+  x.beginPath(); x.arc(c.width / 2, c.height / 2, r, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#d4688b';
+  x.beginPath();
+  x.moveTo(c.width / 2 - r * 0.32, c.height / 2 - r * 0.45);
+  x.lineTo(c.width / 2 + r * 0.5, c.height / 2);
+  x.lineTo(c.width / 2 - r * 0.32, c.height / 2 + r * 0.45);
+  x.closePath(); x.fill();
+  return c;
+}
+
+/** 올릴 사진 만들기: 본 사진(긴 변 1440px), 작은 사진(400px), 아주 작은 자리표시 (동영상은 첫 장면으로) */
 export async function exportPhoto(p: PickedPhoto): Promise<ExportedPhoto> {
-  const img = await loadImg(p.url).catch(() => { throw new Error(isHeif(p.file) ? HEIF_MSG : BAD_MSG); });
-  try { await img.decode?.(); } catch { /* onload로 충분해요 */ }
-  const main = drawScaled(img, img.naturalWidth, img.naturalHeight, OUT_MAX);
-  img.src = '';
+  let main: HTMLCanvasElement;
+  if (p.video) {
+    main = (await videoFrame(p)) || videoPlaceholder(p.w, p.h);
+  } else {
+    const img = await loadImg(p.url).catch(() => { throw new Error(isHeif(p.file) ? HEIF_MSG : BAD_MSG); });
+    try { await img.decode?.(); } catch { /* onload로 충분해요 */ }
+    main = drawScaled(img, img.naturalWidth, img.naturalHeight, OUT_MAX);
+    img.src = '';
+  }
   let small: HTMLCanvasElement | null = null;
   let tiny: HTMLCanvasElement | null = null;
   try {

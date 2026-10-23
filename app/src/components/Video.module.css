@@ -1,0 +1,17 @@
+.box { position: relative; overflow: hidden; background: #000; }
+.box.on { background: #000; }
+.poster { position: absolute; inset: 0; }
+.play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 50%;
+  display: grid; place-items: center; padding-left: 4px; color: #fff; background: rgba(20, 10, 16, .45);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 2px 12px rgba(0, 0, 0, .25);
+  transition: transform var(--dur-1) var(--ease);
+}
+.play:active { transform: translate(-50%, -50%) scale(.92); }
+.dur { position: absolute; right: var(--s-3); bottom: var(--s-3); padding: 2px 8px; border-radius: var(--r-full); background: rgba(20, 10, 16, .6); color: #fff; font-size: var(--t-caption); font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; }
+.video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.spin { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .25); border-top-color: #fff; animation: spin .8s linear infinite; }
+.fail { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); padding: var(--s-4); text-align: center; color: #fff; font-size: var(--t-sub); }
+.fail a { color: #ffb3c6; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.mark { position: absolute; right: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px 1px 4px; border-radius: var(--r-full); background: rgba(20, 10, 16, .55); color: #fff; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
