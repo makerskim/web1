@@ -13,3 +13,16 @@
 .empty h2 { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; }
 .empty p { color: var(--c-label-2); font-size: var(--t-sub); line-height: 1.6; }
 .plusHint { display: inline-grid; place-items: center; width: 22px; height: 22px; margin: 0 2px; border-radius: 7px; background: var(--c-accent-gradient); color: #fff; vertical-align: -5px; }
+
+/* 처음 불러오는 동안 보이는 사진 자리 */
+.skel { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-3) var(--gutter) var(--s-6); }
+.skelHead { display: flex; align-items: center; gap: var(--s-3); }
+.skel i { display: block; border-radius: 8px; background: linear-gradient(100deg, var(--c-fill) 30%, var(--c-surface-2) 50%, var(--c-fill) 70%) 0 0 / 300% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+.skel .skelAvatar { width: 32px; height: 32px; border-radius: 50%; }
+.skelLine { width: 38%; height: 12px; }
+.skelShort { width: 56%; }
+.skelMedia { width: calc(100% + var(--gutter) * 2); margin: 0 calc(var(--gutter) * -1); aspect-ratio: 4 / 5; max-height: 62vh; border-radius: 0 !important; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.appear > article { animation: rise .32s cubic-bezier(.32, .72, 0, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .skel i, .appear > article { animation: none; } }

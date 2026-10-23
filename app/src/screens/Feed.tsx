@@ -19,6 +19,16 @@ import s from './Feed.module.css';
 const load = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 
+function SkeletonPost() {
+  return (
+    <div className={s.skel} aria-hidden="true" data-f="skeleton">
+      <div className={s.skelHead}><i className={s.skelAvatar} /><i className={s.skelLine} /></div>
+      <i className={s.skelMedia} />
+      <i className={`${s.skelLine} ${s.skelShort}`} />
+    </div>
+  );
+}
+
 export function Feed() {
   const album = useAlbum()!;
   const { list, byId, loading, done, error, loadFirst, loadMore, reset } = usePosts();
@@ -30,6 +40,9 @@ export function Feed() {
   const end = useRef<HTMLDivElement>(null);
   const handlers = usePostHandlers();
   const root = usePageScroll();
+  // 비어 있다가 처음 불러온 사진만 살며시 나타나요 (뒤로 와서 다시 그릴 때는 그대로)
+  const appear = useRef(posts.length === 0);
+  if (posts.length === 0) appear.current = true;
 
   useEffect(() => { reset(album.id); if (!usePosts.getState().list.length) loadFirst(); }, [album.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -61,12 +74,14 @@ export function Feed() {
         </div>
       )}
 
-      <div className={s.posts}>
+      <div className={`${s.posts} ${appear.current ? s.appear : ''}`}>
         {posts.map((p) => <PostCard key={p.id} post={p} h={handlers} />)}
+        {/* 처음 불러오는 동안: 빈 화면 대신 사진 자리 */}
+        {loading && posts.length === 0 && [0, 1].map((i) => <SkeletonPost key={i} />)}
       </div>
 
       <div ref={end} className={s.end}>
-        {loading && <span className={s.spinner} />}
+        {loading && posts.length > 0 && <span className={s.spinner} />}
         {!loading && error && <Button variant="secondary" onClick={() => loadFirst()}>다시 불러오기</Button>}
         {!loading && !error && done && posts.length > 0 && <p className={s.endNote}>처음 사진까지 다 봤어요</p>}
         {!loading && !error && done && posts.length === 0 && (

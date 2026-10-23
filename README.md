@@ -98,20 +98,29 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 
 앨범 관리자의 구글 드라이브(무료 15GB)에 사진을 모을 수 있어요. 앨범마다 **설정 → 앨범 설정 → 사진 저장 위치**에서 고를 수 있고, 사진은 드라이브의 `Pastel Memories · 앨범이름` 폴더에 **비공개**로 저장돼요. 가족은 앱 안에서만 볼 수 있고, 내려받으면 각자 휴대폰에 저장돼요.
 
+> **누가 무엇을 하나요?**
+> - 아래 1~5번은 **앱을 만든 분이 딱 한 번만** 해요. 앱 코드는 고치지 않아요 (클라이언트 ID는 앱이 서버에서 받아 가요).
+> - 다른 앨범의 관리자들은 아무것도 몰라도 돼요. 앱에서 **구글 계정으로 연결** 버튼 → 자기 구글 계정 고르기 → 허용, 이걸로 끝이에요. 각자 **자기 드라이브**에 저장돼요.
+
 1. Google Cloud Console(4번과 같은 프로젝트) → **API 및 서비스 → 라이브러리** → `Google Drive API` 검색 → **사용**
 2. **Google 인증 플랫폼 → 데이터 액세스 → 범위 추가 또는 삭제** → `.../auth/drive.file` 체크 (목록에 없으면 아래 '직접 범위 추가' 칸에 `https://www.googleapis.com/auth/drive.file` 붙여넣고 **테이블에 추가**) → **업데이트** → **저장**
-   - `drive.file`은 앱이 만든 파일만 다루는 권한이라 구글 심사가 필요 없어요. 앱은 꼭 **게시(프로덕션)** 상태여야 해요 (테스트 상태면 7일마다 연결이 끊겨요).
-   - 리디렉션 URI는 더 넣을 필요 없어요. 4-3의 **승인된 JavaScript 원본** `https://makerskim.github.io` 만 있으면 돼요.
+   - `drive.file`은 앱이 만든 파일만 다루는 권한(구글 분류: 민감하지 않음)이라 구글 심사가 필요 없어요.
+   - **대상 → 게시 상태가 '프로덕션 단계'** 인지 꼭 확인하세요 (4-4번). '테스트' 상태면 내가 등록한 테스트 사용자만 연결할 수 있고, 연결도 **7일마다 끊겨요**.
+   - 4-3에서 만든 클라이언트를 그대로 써요. **승인된 JavaScript 원본** `https://makerskim.github.io` 만 있으면 되고, 리디렉션 URI는 더 넣지 않아요.
 3. Supabase → **Edge Functions → Deploy a new function → Via Editor**
    - 편집기의 내용을 모두 지우고 [`supabase/functions/drive/index.ts`](supabase/functions/drive/index.ts) 내용을 전부 붙여넣기
-   - **Function name**: `drive` → **Deploy function**
+   - **Function name** 칸에 미리 들어 있는 임의 이름을 지우고 `drive` (다른 이름이면 앱이 찾지 못해요) → **Deploy function**
+   - 이미 `drive`가 있으면: **Edge Functions → drive → Code** → 내용을 모두 지우고 새로 붙여넣기 → **Deploy updates**
 4. **Edge Functions → drive → Settings** → **Verify JWT with legacy secret** 끄기 → **Save changes**
    - 함수 안에서 로그인한 가족인지 직접 확인해요
-5. **Edge Functions → Secrets → Add new secrets**
-   - `GOOGLE_CLIENT_ID` = 4-3의 클라이언트 ID → **Add another**
-   - `GOOGLE_CLIENT_SECRET` = 4-3의 보안 비밀번호 → **Bulk save**
-6. `app/src/lib/config.ts` 의 `googleClientId: ''` 에 클라이언트 ID가 들어가야 해요. **master에서 직접 고치지 말고** 저에게 클라이언트 ID를 알려 주시면 브랜치에 넣어 드릴게요 (직접 고치면 다음 합치기에서 충돌이 날 수 있어요).
-7. 합치고 배포가 끝나면, 앱(크롬·사파리에서. 카카오톡 안 브라우저는 안 돼요) → **가족 → ⚙ 설정 → 앨범 설정 → 사진 저장 위치 → 구글 드라이브 연결** → 구글 계정 고르기 → 허용
+5. **Edge Functions → Secrets → Add or replace secrets**
+   - `GOOGLE_CLIENT_ID` = 4-3의 클라이언트 ID (`...apps.googleusercontent.com` 으로 끝나는 값) → **Add another**
+   - `GOOGLE_CLIENT_SECRET` = 4-3의 보안 비밀번호 (`GOCSPX-` 로 시작) → **Bulk save**
+   - 비밀값은 저장하면 바로 적용돼요 (함수를 다시 배포할 필요 없어요)
+   - 보안 비밀번호를 잊었으면: Google 인증 플랫폼 → 클라이언트 → 그 클라이언트 → **Add secret** 으로 새로 만들어 넣으면 돼요
+6. 앱(크롬·사파리에서. 카카오톡 안 브라우저는 안 돼요) → **설정 → 앨범 설정 → 사진 저장 위치**
+   - 카드 아래에 '아직 준비 중이에요'와 몇 번을 하라는 안내가 보이면 그 단계를 확인하고 **다시 확인**을 누르세요
+   - **구글 계정으로 연결** → 구글 계정 고르기 → **‘Google Drive 파일’ 항목에 체크** → **계속** → '구글 드라이브에 연결했어요'가 나오면 끝
 
 ## 무료로 얼마나?
 
@@ -134,9 +143,14 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
 | “새 데이터베이스 설정이 필요해요” · “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 (최신 `schema.sql` 전체를 붙여넣기) |
-| 드라이브 연결 버튼이 회색이에요 | 6-6번 `googleClientId` 확인 |
-| “구글 드라이브 기능이 아직 설정되지 않았어요” | 6-3 ~ 6-5번 확인 |
+| 드라이브 카드에 ‘아직 준비 중이에요’ | 카드 아래 안내에 적힌 6번의 단계를 하고 **다시 확인** |
+| “서버 기능(drive)에 닿지 않아요” | 6-3 함수 이름이 정확히 `drive` 인지, 6-4 Verify JWT를 껐는지 |
+| “GOOGLE_CLIENT_SECRET이 클라이언트 ID와 맞지 않아요” | 6-5 두 값이 **같은 클라이언트**의 것인지 (앞뒤 빈칸 없이) |
+| “Google Drive API가 아직 꺼져 있어요” | 6-1번 (켠 뒤 몇 분 걸릴 수 있어요) |
+| “‘Google Drive 파일’ 항목에 체크한 뒤…” | 구글 화면에서 드라이브 항목의 체크를 풀었어요. 다시 눌러서 체크하고 계속 |
+| 드라이브 연결이 일주일쯤 뒤에 끊겨요 · 다른 사람은 연결이 안 돼요 | 4-4 게시 상태를 **프로덕션 단계**로 바꾼 뒤 다시 연결 |
 | 드라이브 연결 창에 **origin_mismatch** | 4-3 승인된 JavaScript 원본이 `https://makerskim.github.io` (경로·끝 / 없이) 인지 |
+| 아이폰 홈 화면 앱에서 구글 창이 안 열려요 | Safari에서 앱 주소를 열고 한 번만 연결하면 돼요 |
 
 ## 개발
 

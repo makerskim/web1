@@ -7,8 +7,6 @@ const raw = {
   supabaseUrl: 'https://nontwyuhvjizyuconxej.supabase.co',
   // Supabase → Project Settings → API Keys: Publishable key (공개돼도 괜찮은 키)
   supabaseKey: 'sb_publishable_2tY66N_caUEo3oMDMY6sWQ_KFY5rIdw',
-  // (선택) 구글 드라이브 저장: Google Cloud의 '웹 애플리케이션' OAuth 클라이언트 ID
-  googleClientId: '',
   // 저장공간 한도(GB): Supabase 무료 1, Pro 100
   storageLimitGB: 1,
 };

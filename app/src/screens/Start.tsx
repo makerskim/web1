@@ -14,7 +14,8 @@ import { callName } from '../lib/korean';
 import { ymd } from '../lib/dates';
 import { DateField } from '../components/DatePicker';
 import type { AlbumKind } from '../lib/types';
-import { KINDS, sinceLabel } from '../lib/album';
+import { sinceLabel } from '../lib/album';
+import { KindPicker } from '../components/KindPicker';
 import { KidsForm } from '../components/KidsForm';
 import s from './Start.module.css';
 
@@ -99,14 +100,7 @@ export function CreateAlbum() {
       <TopBar back title="새 앨범" />
       <form className={s.form} onSubmit={submit} noValidate>
         {/* 어떤 앨범인가요? 아기 · 가족 · 친구·모임 (나중에 설정에서 바꿀 수 있어요) */}
-        <div className={s.kinds} role="radiogroup" aria-label="앨범 종류">
-          {KINDS.map((k) => (
-            <button key={k.v} type="button" role="radio" aria-checked={kind === k.v} className={`${s.kind} ${kind === k.v ? s.kindOn : ''}`} data-kind={k.v}
-              onClick={() => { if (kind !== k.v) { setKind(k.v); if (!nameTouched) setName(''); } }}>
-              <span aria-hidden="true">{k.icon}</span><b>{k.short}</b><small>{k.desc}</small>
-            </button>
-          ))}
-        </div>
+        <KindPicker value={kind} onChange={(k) => { if (kind !== k) { setKind(k); if (!nameTouched) setName(''); } }} />
         {!group && <KidsForm kids={kids} onChange={setKids} />}
         <Group title="앨범" footer={group ? `${sinceLabel(kind)}부터 함께한 날과 다음 100일 · 1주년까지 남은 날을 보여 줘요. 비워 두면 오늘부터 세요. 결혼기념일 같은 기념일은 만든 뒤 설정에서 넣을 수 있어요.` : undefined}>
           <Field label="앨범 이름" placeholder={kind === 'group' ? '우리 모임 앨범' : kind === 'family' ? '우리 가족 앨범' : '튼튼이네 앨범'} value={albumName} onChange={(e) => { setNameTouched(true); setName(e.target.value); }}

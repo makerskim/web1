@@ -5,23 +5,23 @@ import { Group, Row, Field } from '../components/Form';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
-import { Sheet, confirm, copyText, menu, progress, toast } from '../components/ui';
+import { Sheet, confirm, copyText, menu, progress, toast, useOnce } from '../components/ui';
 import { CoverFace, MembersSheet, useCoverChanger } from '../components/AlbumBits';
 import { GoogleIcon, KakaoIcon, providerName } from '../components/ProviderIcon';
 import { useAlbum, useSession, type TextSize } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { connectDrive, disconnectDrive, driveConfigured, preloadDrive } from '../lib/drive';
+import { connectDrive, disconnectDrive, driveSetup, popupWarning, preloadDrive, setupHelp, type DriveSetup } from '../lib/drive';
 import { clearCache } from '../lib/photoCache';
 import { config } from '../lib/config';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
 import { fmtDate, ymd } from '../lib/dates';
-import { KINDS, albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
+import { albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
 import { DatePickerSheet } from '../components/DatePicker';
 import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlbumName, termDays, type Child } from '../lib/kids';
-import type { AlbumKind } from '../lib/types';
 import { KidsForm } from '../components/KidsForm';
+import { KindSheet } from '../components/KindPicker';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
@@ -35,6 +35,7 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [name, setName] = useState('');
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open && mine) setName(mine.displayName); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const once = useOnce();
   if (!album || !me || !mine) return null;
 
   const setPhoto = async (f: File) => {
@@ -83,7 +84,7 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
           <Field label={album.kind === 'baby' ? '나는 아이의' : '내 이름'} value={name} onChange={(e) => setName(e.target.value)} maxLength={20}
             placeholder={album.kind === 'group' ? '민지' : '엄마'} name="role" data-who="name" />
         </Group>
-        <Button size="lg" block onClick={save} data-save>저장</Button>
+        <Button size="lg" block onClick={once(save)} data-save>저장</Button>
       </div>
     </Sheet>
   );
@@ -103,6 +104,8 @@ function LoginBadge({ provider, size = 30 }: { provider: string; size?: number }
   );
 }
 const Two = ({ title, sub }: { title: string; sub?: string }) => <span className={s.two}><b>{title}</b>{sub && <small>{sub}</small>}</span>;
+/** 줄 아이콘과 크기를 맞춘 이모지 (연한 네모 안에) */
+const Emoji = ({ e }: { e: string }) => <span className={s.tile} aria-hidden="true">{e}</span>;
 
 export function Settings() {
   const album = useAlbum()!;
@@ -111,7 +114,7 @@ export function Settings() {
   const albums = useSession((st) => st.albums);
   const textSize = useSession((st) => st.textSize);
   const nav = useNavigate();
-  const [sheet, setSheet] = useState<'profile' | 'albums' | 'text' | null>(null);
+  const [sheet, setSheet] = useState<'profile' | 'albums' | 'text' | 'kind' | null>(null);
   const close = () => setSheet(null);
 
   const logout = async () => {
@@ -134,7 +137,7 @@ export function Settings() {
 
         <Group title="앨범">
           <Row icon={<CoverFace size={30} />} label="앨범 설정" detail={album.name} onClick={() => nav('/settings/album')} data-row="album" />
-          <Row icon={<span aria-hidden="true">{kindInfo(album.kind).icon}</span>} label="앨범 종류" detail={kindInfo(album.kind).short} onClick={() => nav('/settings/album')} data-row="kind" />
+          <Row icon={<Emoji e={kindInfo(album.kind).icon} />} label="앨범 종류" detail={kindInfo(album.kind).short} onClick={album.myRole === 'owner' ? () => setSheet('kind') : undefined} data-row="kind" />
           <Row icon={<Icon name="swap" size={22} />} label="다른 앨범" detail={`${albums.length}개`} onClick={() => setSheet('albums')} data-row="albums" />
         </Group>
 
@@ -156,6 +159,7 @@ export function Settings() {
       <ProfileSheet open={sheet === 'profile'} onClose={close} />
       <AlbumSwitcher open={sheet === 'albums'} onClose={close} />
       <TextSizeSheet open={sheet === 'text'} onClose={close} />
+      <KindSheet open={sheet === 'kind'} onClose={close} />
     </Page>
   );
 }
@@ -275,21 +279,12 @@ export function AlbumSettings() {
   const members = useSession((st) => st.members);
   const isOwner = album.myRole === 'owner';
   const nav = useNavigate();
-  const [sheet, setSheet] = useState<'members' | 'since' | null>(null);
+  const [sheet, setSheet] = useState<'members' | 'since' | 'kind' | null>(null);
   const code = `${album.inviteCode.slice(0, 4)}-${album.inviteCode.slice(4)}`;
   const alone = members.length <= 1;
   const isBaby = album.kind === 'baby';
   const since = albumSince(album);
 
-  // 앨범 종류: 아기 · 가족 · 친구·모임 (아이 정보는 지우지 않고 그대로 둬요)
-  const setKind = async (kind: AlbumKind) => {
-    if (kind === album.kind) return;
-    try {
-      await api.updateAlbum(album.id, { kind });
-      useSession.getState().patchAlbum({ kind });
-      toast(`${kindInfo(kind).label}으로 바꿨어요`);
-    } catch (e) { toast((e as Error).message); }
-  };
   const setSince = async (v: string | null) => {
     try {
       await api.updateAlbum(album.id, { since: v });
@@ -298,7 +293,6 @@ export function AlbumSettings() {
     } catch (e) { toast((e as Error).message); }
   };
   const upcoming = new Map(upcomingDays(album, 10).map((u) => [u.id, u]));
-  const check = <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />;
 
   const newCode = async () => {
     if (!(await confirm({ title: '초대 코드를 새로 만들까요?', message: '지금 코드는 더 이상 쓸 수 없어요. 이미 들어온 멤버는 그대로예요.', ok: '새로 만들기' }))) return;
@@ -334,15 +328,11 @@ export function AlbumSettings() {
     <Page>
       <TopBar back title="앨범 설정" />
       <div className={s.page}>
-        {/* 앨범 종류와 기준 날짜 (아기: 아이·예정일·임신 시작일은 '프로필 편집'에서 · 가족/모임: 시작일은 여기서) */}
-        <Group title="앨범 종류" footer={isBaby
-          ? '아기 앨범은 출산 예정일까지 남은 날과 임신 주수, 태어난 뒤엔 아이 나이를 보여 줘요.'
-          : `${album.kind === 'family' ? '가족' : '친구·모임'} 앨범은 시작일부터 함께한 날과 다음 100일 · 1주년까지 남은 날을 보여 줘요.${album.kind === 'family' ? ' 예) 결혼한 날, 앨범을 시작한 날' : ' 예) 처음 모인 날'}`}>
-          {KINDS.map((k) => (
-            <Row key={k.v} icon={<span aria-hidden="true">{k.icon}</span>} label={k.label} onClick={isOwner ? () => setKind(k.v) : undefined} chevron={false} data-kind={k.v}>
-              {album.kind === k.v && check}
-            </Row>
-          ))}
+        {/* 앨범 종류(누르면 고르는 창)와 기준 날짜 (아기: 아이·예정일·임신 시작일은 '프로필 편집'에서 · 가족/모임: 시작일은 여기서) */}
+        <Group footer={isBaby
+          ? '출산 예정일까지 남은 날과 임신 주수, 태어난 뒤엔 아이 나이를 보여 줘요.'
+          : `${sinceLabel(album.kind)}부터 함께한 날과 다음 100일 · 1주년을 보여 줘요.${album.kind === 'family' ? ' 예) 결혼한 날, 앨범을 시작한 날' : ' 예) 처음 모인 날'}`}>
+          <Row icon={<Emoji e={kindInfo(album.kind).icon} />} label="앨범 종류" detail={kindInfo(album.kind).label} onClick={isOwner ? () => setSheet('kind') : undefined} data-row="kind" />
           {isBaby
             ? <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isOwner ? () => nav('/settings/album/info') : undefined} data-row="kids" />
             : <Row icon={<Icon name="calendar" size={22} />} label={sinceLabel(album.kind)} detail={since ? fmtDate(since) : '고르기'} onClick={isOwner ? () => setSheet('since') : undefined} data-row="since" />}
@@ -353,7 +343,7 @@ export function AlbumSettings() {
           {album.days.map((d) => {
             const u = upcoming.get(d.id);
             return (
-              <Row key={d.id} icon={<span aria-hidden="true">{d.yearly ? '🎂' : '🎉'}</span>} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
+              <Row key={d.id} icon={<Emoji e={d.yearly ? '🎂' : '🎉'} />} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
                 detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
                 onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
             );
@@ -379,6 +369,7 @@ export function AlbumSettings() {
         </Group>
       </div>
       <MembersSheet open={sheet === 'members'} onClose={() => setSheet(null)} />
+      {isOwner && <KindSheet open={sheet === 'kind'} onClose={() => setSheet(null)} />}
       {isOwner && !isBaby && (
         <DatePickerSheet open={sheet === 'since'} onClose={() => setSheet(null)} title={sinceLabel(album.kind)} value={since} min="1950-01-01" max={ymd(new Date())}
           onChange={(v) => { if (v) setSince(v); }} />
@@ -401,6 +392,7 @@ export function AlbumInfo() {
   const [name, setName] = useState(album.name);
   const [bio, setBio] = useState(album.bio || '');
   const albumName = touched ? name : suggestAlbumName(kids) || name;
+  const once = useOnce();
   const save = async () => {
     const filled = kids.filter((c) => childName(c));
     if (!isGroup) {
@@ -430,7 +422,7 @@ export function AlbumInfo() {
   }
   return (
     <Page>
-      <TopBar back title="프로필 편집" right={<button className={s.saveBtn} onClick={save} data-save>저장</button>} />
+      <TopBar back title="프로필 편집" right={<button className={s.saveBtn} onClick={once(save)} data-save>저장</button>} />
       <div className={s.page}>
         <button className={s.coverPick} onClick={cover.open} data-f="cover-change">
           <CoverFace size={96} />
@@ -461,16 +453,28 @@ export function StorageSettings() {
   const album = useAlbum()!;
   const posts = usePosts((st) => st.list.length);
   const [usage, setUsage] = useState<number | null>(null);
+  const [setup, setSetup] = useState<DriveSetup | null>(null);
   useEffect(() => { preloadDrive(); api.storageUsage().then(setUsage, () => setUsage(null)); }, [posts]);
+  useEffect(() => { driveSetup().then(setSetup); }, []);
+  const recheck = () => { setSetup(null); driveSetup(true).then(setSetup); };
+  const warn = popupWarning();
 
   const connect = async () => {
-    const p = progress('구글 드라이브에 연결하는 중');
+    let cancel = () => {};
+    const cancelled = new Promise<never>((_, reject) => { cancel = () => reject(new Error('연결을 취소했어요.')); });
+    cancelled.catch(() => {});
+    const p = progress('구글 창에서 계정을 골라 주세요', () => cancel());
     try {
-      const email = await connectDrive(album.id);
+      const email = await connectDrive(album.id, { cancelled, onCode: () => { p.cancelable(false); p.set(0.6, '드라이브에 앨범 폴더를 만드는 중'); } });
       useSession.getState().patchAlbum({ storage: 'drive', driveEmail: email, driveReady: true });
       p.close();
       toast('구글 드라이브에 연결했어요');
     } catch (e) { p.close(); toast((e as Error).message); }
+  };
+  // 같은 계정을 고르면 그대로 이어지고, 다른 계정이면 예전 드라이브 사진이 안 보여요
+  const reconnect = async () => {
+    if (!(await confirm({ title: '다른 계정으로 다시 연결할까요?', message: '같은 구글 계정을 고르면 그대로 이어져요.\n다른 계정을 고르면 지금 드라이브에 있는 사진은 앱에서 보이지 않게 돼요. (드라이브에는 그대로 남아요)', ok: '다시 연결' }))) return;
+    connect();
   };
   const disconnect = async () => {
     if (!(await confirm({ title: '드라이브 연결을 끊을까요?', message: '앞으로 올리는 사진은 기본 저장소에 저장돼요.\n이미 드라이브에 있는 사진은 앱에서 보이지 않게 돼요. (드라이브에는 그대로 남아요)', ok: '연결 끊기', danger: true }))) return;
@@ -507,15 +511,27 @@ export function StorageSettings() {
         {album.storage === 'drive' || album.driveReady ? (
           <Group title="구글 드라이브" footer="사진은 드라이브의 ‘Pastel Memories’ 폴더에 비공개로 저장돼요. 멤버는 앱 안에서만 볼 수 있어요.">
             <Row label="연결된 계정" detail={album.driveEmail || '확인 중'} />
-            <Row label="다른 계정으로 다시 연결" onClick={connect} />
+            <Row label="다른 계정으로 다시 연결" onClick={reconnect} />
             <Row label="연결 끊기" onClick={disconnect} danger chevron={false} />
           </Group>
         ) : (
-          <div className={s.driveCard}>
+          <div className={s.driveCard} data-drive={setup?.state ?? 'loading'}>
             <Icon name="shield" size={28} />
             <b>내 구글 드라이브에 저장하기</b>
             <p>멤버가 올린 사진이 관리자의 드라이브 폴더에 비공개로 모여요. 드라이브 공간(무료 15GB)을 쓰니 더 많이 저장할 수 있어요.</p>
-            <Button onClick={connect} disabled={!driveConfigured()}>{driveConfigured() ? '구글 드라이브 연결' : '설정이 필요해요 (설명서 참고)'}</Button>
+            <ol className={s.driveSteps}>
+              <li>아래 버튼을 눌러 <b>구글 계정</b>을 골라요</li>
+              <li><b>‘Google Drive 파일’</b> 항목에 체크하고 <b>계속</b></li>
+            </ol>
+            {setup && setup.state !== 'ready' ? (
+              <>
+                <Button variant="secondary" disabled>아직 준비 중이에요</Button>
+                <p className={s.driveHelp} data-f="drive-help">{setupHelp[setup.state]} <button type="button" onClick={recheck}>다시 확인</button></p>
+              </>
+            ) : (
+              <Button onClick={connect} disabled={!setup} className={s.googleBtn}><GoogleIcon size={18} />{setup ? '구글 계정으로 연결' : '확인 중…'}</Button>
+            )}
+            {warn && <p className={s.driveHelp} data-f="drive-warn">{warn}</p>}
           </div>
         )}
 

@@ -1,7 +1,7 @@
 // 겹쳐 뜨는 것들: 알림(토스트), 확인 창, 선택 시트, 진행 표시, 바닥 시트
 // - 모두 부드러운 스프링 움직임
 // - 휴대폰 '뒤로' 버튼으로 닫혀요 (열 때 기록을 하나 쌓아요)
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useDragControls, type PanInfo } from 'motion/react';
 import { create } from 'zustand';
@@ -88,17 +88,34 @@ const useToasts = create<{ list: ToastItem[] }>(() => ({ list: [] }));
 export function toast(msg: string, opts: { ms?: number; action?: string; onAction?: () => void } = {}) {
   const id = ++seq;
   useToasts.setState((st) => ({ list: [...st.list.slice(-1), { id, msg, action: opts.action, onAction: opts.onAction }] }));
-  setTimeout(() => useToasts.setState((st) => ({ list: st.list.filter((t) => t.id !== id) })), Math.max(3500, opts.ms || 0));
+  // 짧은 말은 금방, 긴 안내는 읽을 만큼 (2.5~6초)
+  const ms = opts.ms || Math.min(6000, Math.max(2500, msg.length * 70));
+  setTimeout(() => useToasts.setState((st) => ({ list: st.list.filter((t) => t.id !== id) })), ms);
+}
+
+// 키보드가 올라와 있으면 (글을 쓰는 중) 아래 알림이 가려져요 → 그동안만 위쪽 막대 밑에
+function useKeyboardTop() {
+  const [top, setTop] = useState<number | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const on = () => setTop(window.innerHeight - vv.height > 120 ? vv.offsetTop : null);
+    vv.addEventListener('resize', on);
+    vv.addEventListener('scroll', on);
+    return () => { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); };
+  }, []);
+  return top;
 }
 
 function ToastHost() {
   const list = useToasts((st) => st.list);
+  const kbTop = useKeyboardTop();
   return (
-    <div className={s.toasts} aria-live="polite">
+    <div className={s.toasts} aria-live="polite" style={kbTop === null ? undefined : { top: `calc(${kbTop}px + var(--safe-t) + var(--bar-h) + 8px)`, bottom: 'auto' }}>
       <AnimatePresence>
         {list.map((t) => (
           <motion.div key={t.id} className={s.toast} role="status"
-            initial={{ opacity: 0, y: -16, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }}
+            initial={{ opacity: 0, y: 16, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={spring}>
             <span>{t.msg}</span>
             {t.action && (
@@ -181,17 +198,19 @@ function MenuHost() {
 }
 
 // ---------- 진행 표시 ----------
-const useProg = create<{ text: string | null; value: number }>(() => ({ text: null, value: 0 }));
-export function progress(text: string) {
-  useProg.setState({ text, value: 0 });
+const useProg = create<{ text: string | null; value: number; cancel: (() => void) | null }>(() => ({ text: null, value: 0, cancel: null }));
+/** 진행 표시. onCancel을 주면 '취소' 버튼이 보여요 (cancelable(false)로 숨겨요) */
+export function progress(text: string, onCancel?: () => void) {
+  useProg.setState({ text, value: 0, cancel: onCancel ?? null });
   return {
     set: (value: number, t?: string) => useProg.setState((st) => ({ value, text: t ?? st.text })),
-    close: () => useProg.setState({ text: null, value: 0 }),
+    cancelable: (on: boolean) => useProg.setState({ cancel: on ? onCancel ?? null : null }),
+    close: () => useProg.setState({ text: null, value: 0, cancel: null }),
   };
 }
 
 function ProgressHost() {
-  const { text, value } = useProg();
+  const { text, value, cancel } = useProg();
   return createPortal(
     <AnimatePresence>
       {text !== null && (
@@ -200,6 +219,7 @@ function ProgressHost() {
             <div className={s.spinner} />
             <p>{text}</p>
             <div className={s.bar}><motion.i animate={{ width: `${Math.round(value * 100)}%` }} transition={{ ease: 'easeOut', duration: 0.25 }} /></div>
+            {cancel && <button type="button" className={s.progCancel} onClick={cancel} data-f="progress-cancel">취소</button>}
           </motion.div>
         </motion.div>
       )}
@@ -273,4 +293,14 @@ export function useLatest<T>(v: T) {
 export function useForceUpdate() {
   const [, set] = useState(0);
   return () => set((n) => n + 1);
+}
+
+/** 두 번 눌러도 한 번만 (저장하는 동안 다시 누르면 무시 — 저장 뒤 화면이 두 번 닫히지 않게) */
+export function useOnce() {
+  const busy = useRef(false);
+  return useCallback(<A extends unknown[]>(fn: (...a: A) => Promise<unknown>) => async (...a: A) => {
+    if (busy.current) return;
+    busy.current = true;
+    try { await fn(...a); } finally { busy.current = false; }
+  }, []);
 }

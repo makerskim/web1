@@ -1,9 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { Component, useEffect, useMemo, type ReactNode } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { OverlayHosts } from './components/ui';
 import { TabBar } from './components/Bars';
-import { Stack } from './components/Stack';
+import { Stack, forgetScroll } from './components/Stack';
 import { PostHubOverlays } from './components/PostHub';
 import { Logo } from './components/Logo';
 import { useSession } from './state/session';
@@ -26,6 +26,23 @@ if (inviteFromUrl) {
   history.replaceState(null, '', location.pathname + location.hash);
 }
 
+// 화면을 그리다 문제가 생겨도 하얀 화면 대신 다시 열 수 있게
+class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(e: unknown) { console.error('[pm] render error', e); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div style={{ minHeight: '100dvh', display: 'grid', placeContent: 'center', justifyItems: 'center', gap: 16, padding: 24, textAlign: 'center' }} data-f="crash">
+        <Logo size={64} />
+        <p style={{ margin: 0 }}>화면을 여는 중에 문제가 생겼어요.</p>
+        <button onClick={() => { location.hash = '#/home'; location.reload(); }} style={{ padding: '12px 20px', borderRadius: 12, border: 0, background: 'var(--c-accent, #f19bb4)', color: '#fff', fontSize: 16 }}>다시 열기</button>
+      </div>
+    );
+  }
+}
+
 function Splash() {
   return <div style={{ minHeight: '100dvh', display: 'grid', placeContent: 'center' }}><Logo size={72} /></div>;
 }
@@ -37,8 +54,16 @@ function Shell() {
   const loc = useLocation();
   const nav = useNavigate();
 
-  // 앨범이 바뀌면 피드 새로
-  useEffect(() => { if (album) usePosts.getState().reset(album.id); }, [album?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const albums = useSession((st) => st.albums);
+  // 앨범이 바뀌면 피드 새로 · 탭 화면은 맨 위부터 (이전 앨범의 스크롤 위치를 쓰지 않게)
+  useEffect(() => {
+    if (!album) return;
+    usePosts.getState().reset(album.id);
+    ['/home', '/grid', '/activity', '/album'].forEach(forgetScroll);
+  }, [album?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 고른 앨범이 목록에 없으면(지워졌거나 나갔으면) 첫 앨범으로 (새 목록을 받은 다음에만)
+  const albumsLoaded = useSession((st) => st.albumsLoaded);
+  useEffect(() => { if (!album && albums.length && albumsLoaded) useSession.getState().selectAlbum(albums[0].id).catch(() => {}); }, [album, albums, albumsLoaded]);
 
   // 새 소식 확인 (1분마다, 앱으로 돌아올 때)
   useEffect(() => {
@@ -88,8 +113,9 @@ function Shell() {
         <Route path="/settings/account" element={<AccountSettings />} />
         <Route path="/settings/account/delete" element={<DeleteAccount />} />
         <Route path="/settings/album" element={<AlbumSettings />} />
-        <Route path="/settings/album/info" element={<AlbumInfo />} />
-        <Route path="/settings/album/day/:id" element={<DayEdit />} />
+        {/* 고치는 화면은 앨범마다 새로 (다른 앨범으로 바뀌면 이전 앨범 값을 저장하지 않게) */}
+        <Route path="/settings/album/info" element={<AlbumInfo key={album?.id} />} />
+        <Route path="/settings/album/day/:id" element={<DayEdit key={album?.id} />} />
         <Route path="/settings/storage" element={<StorageSettings />} />
         <Route path="/settings/install" element={<Install />} />
         <Route path="/create" element={<CreateAlbum />} />
@@ -100,6 +126,7 @@ function Shell() {
       {tabs(l) && <TabBar onCompose={startCompose} badge={{ activity: l.pathname === '/activity' ? 0 : badge }} />}
     </>
   );
+  if (!album) return <Splash />;
   return (
     <>
       <Stack render={render} />
@@ -135,7 +162,7 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <HashRouter>
-        <Gate />
+        <Boundary><Gate /></Boundary>
       </HashRouter>
       <OverlayHosts />
     </MotionConfig>

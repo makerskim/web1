@@ -9,9 +9,9 @@ import { AmpText, CoverFace, MembersSheet, useCoverChanger } from '../components
 import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
-import { babyAge, babyDay, babyMonths, fmtDate, nextMilestone, spanLabel, ymd } from '../lib/dates';
+import { ageLabel, babyDay, fmtDate, nextMilestone, spanLabel, ymd } from '../lib/dates';
 import { albumSince, upcomingDays } from '../lib/album';
-import { bornWeeks, childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weekNth, weeksText, type Child } from '../lib/kids';
+import { bornWeeks, childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, weeksText, type Child } from '../lib/kids';
 import { DatePickerSheet } from '../components/DatePicker';
 import { toast } from '../components/ui';
 import { hasBatchim, subj } from '../lib/korean';
@@ -69,7 +69,6 @@ export function AlbumHome() {
   const born = !!focus && !!bday && isBorn(focus);
   const due = focus ? dueInfo(focus) : null;
   const day = bday ? babyDay(bday) : null;
-  const months = bday ? babyMonths(bday) : null;
   // 묶음이 아이들 전부가 아니면 누구 이야기인지 이름을 붙여요 ('튼튼이 만나기까지 90일')
   const groupName = group.map(label).join(' & ');
   const who = all.length > 1 && group.length < all.length ? `${groupName} ` : '';
@@ -83,8 +82,9 @@ export function AlbumHome() {
         : due.daysLeft === 0 ? { value: 'D-day', label: '오늘 예정일' } : { value: `D+${(-due.daysLeft).toLocaleString()}`, label: '예정일 지남' })
       : born && day !== null ? { value: `${day.toLocaleString()}일`, label: '함께한 날' } : null;
   const shortDate = (v: string) => (v.slice(0, 4) === today.slice(0, 4) ? fmtDate(v, true).replace(/^\d{4}년 /, '') : fmtDate(v, true));
-  const age = born && months !== null && day !== null ? (months >= 24 ? babyAge(bday!) : months >= 1 ? `생후 ${months}개월` : `생후 ${day}일`) : '';
-  // 날짜 카드 (간단하게): 위 한 줄 '임신 28주차 · 25% 남았어요', 막대, 아래 한 줄 '12월 24일 목요일 출산 예정'
+  // 나이는 날까지 정확하게 ('생후 4개월 22일')
+  const age = born && bday ? ageLabel(bday) : '';
+  // 날짜 카드 (간단하게): 위 한 줄 '임신 27주 6일 · 25% 남았어요', 막대, 아래 한 줄 '12월 24일 목요일 출산 예정'
   const nextText = (n: { label: string; daysLeft: number } | null) => (n ? (n.daysLeft ? `${n.label}까지 ${n.daysLeft.toLocaleString()}일` : `오늘은 ${n.label}이에요 🎉`) : '');
   const journey = ((): Journey | null => {
     if (isGroup) {
@@ -104,7 +104,8 @@ export function AlbumHome() {
       const left = Math.max(1, 100 - Math.round(due.progress * 100));
       return {
         f: 'due',
-        left: `임신 ${weekNth(due.week)}`,
+        // '임신 27주 6일' (병원에서 말하는 주수 그대로)
+        left: `임신 ${weeksText(due.week, due.day)}`,
         right: dl > 0 ? `${left}% 남았어요` : dl === 0 ? '오늘 출산 예정일' : `예정일 ${(-dl).toLocaleString()}일 지남`,
         sub: `${who}${shortDate(bday!)} 출산 예정${dl < 0 ? '이었어요' : ''}${due.custom && dl > 0 ? ` · ${weeksText(due.dueWeek, due.dueDay)}` : ''}`,
         progress: due.progress,
@@ -135,9 +136,11 @@ export function AlbumHome() {
     const c = cs[0];
     const n = cs.map(label).join(' & ');
     const i = dueInfo(c);
-    return { key: k, text: i ? `👶 ${n} · ${dueStatus(i)} (${shortDate(c.birthday!)} 예정)` : `🎂 ${n} · ${babyAge(c.birthday!)}` };
+    return { key: k, text: i ? `👶 ${n} · ${[weeksLabel(i), dueStatus(i)].filter(Boolean).join(' · ')} (${shortDate(c.birthday!)} 예정)` : `🎂 ${n} · ${ageLabel(c.birthday!)}` };
   });
   const unnamed = isOwner ? kids.find(needsName) : undefined;
+  // 아기 앨범인데 날짜가 하나도 없으면 (예: 가족 앨범에서 바꾼 직후) 넣어 달라고 해요
+  const noBabyInfo = isOwner && !isGroup && !all.some((c) => c.birthday);
   const postCount = tiles?.length;
   const base = useMemo(() => (tiles || []).filter((t) => tab === 'all' || t.likedBy.includes(me.id)), [tiles, tab, me.id]);
   const shown = useMemo(() => base.filter((t) => matches(filter, t)), [base, filter]);
@@ -219,6 +222,11 @@ export function AlbumHome() {
         {isOwner && due && due.daysLeft <= 0 && (
           <button className={s.banner} onClick={() => openDp('born')} data-f="born-set">
             <span aria-hidden="true">👶</span><b>{who ? subj(groupName) : '아기가'} 태어났나요? 생일 넣기</b><Icon name="right" size={16} stroke={2.4} />
+          </button>
+        )}
+        {noBabyInfo && (
+          <button className={s.banner} onClick={editProfile} data-f="baby-info">
+            <span aria-hidden="true">👶</span><b>아기 정보를 넣어 주세요 · 태명과 출산 예정일</b><Icon name="right" size={16} stroke={2.4} />
           </button>
         )}
         {unnamed && (
