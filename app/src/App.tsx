@@ -61,8 +61,9 @@ function Shell() {
     usePosts.getState().reset(album.id);
     ['/home', '/grid', '/activity', '/album'].forEach(forgetScroll);
   }, [album?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 고른 앨범이 목록에 없으면(지워졌거나 나갔으면) 첫 앨범으로
-  useEffect(() => { if (!album && albums.length) useSession.getState().selectAlbum(albums[0].id).catch(() => {}); }, [album, albums]);
+  // 고른 앨범이 목록에 없으면(지워졌거나 나갔으면) 첫 앨범으로 (새 목록을 받은 다음에만)
+  const albumsLoaded = useSession((st) => st.albumsLoaded);
+  useEffect(() => { if (!album && albums.length && albumsLoaded) useSession.getState().selectAlbum(albums[0].id).catch(() => {}); }, [album, albums, albumsLoaded]);
 
   // 새 소식 확인 (1분마다, 앱으로 돌아올 때)
   useEffect(() => {

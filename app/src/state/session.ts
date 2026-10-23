@@ -76,7 +76,17 @@ export const useSession = create<Session>((set, get) => ({
         ['pm-albums', 'pm-album', 'pm-members'].forEach((k) => localStorage.removeItem(k));
       }
     });
-    if (get().me) await get().loadAlbums().catch(() => {});
+    if (get().me) {
+      const fresh = get().loadAlbums().catch(() => {});
+      // 지난번 앨범이 목록에 있으면 바로 열고 새 목록은 뒤에서 받아요 (약한 신호에서 로고에 오래 멈추지 않게)
+      // (새로 만들었거나 들어간 앨범처럼 목록에 없으면 새 목록을 기다려요 — 엉뚱한 앨범이 열리지 않게)
+      const has = () => get().albums.some((a) => a.id === get().albumId);
+      if (!has()) {
+        await fresh;
+        // 인터넷이 안 돼서 새 목록을 못 받았으면 지난번 목록의 첫 앨범으로
+        if (!has() && get().albums.length) set({ albumId: get().albums[0].id });
+      }
+    }
     set({ ready: true });
   },
 

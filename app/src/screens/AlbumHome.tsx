@@ -139,6 +139,8 @@ export function AlbumHome() {
     return { key: k, text: i ? `👶 ${n} · ${[weeksLabel(i), dueStatus(i)].filter(Boolean).join(' · ')} (${shortDate(c.birthday!)} 예정)` : `🎂 ${n} · ${ageLabel(c.birthday!)}` };
   });
   const unnamed = isOwner ? kids.find(needsName) : undefined;
+  // 아기 앨범인데 날짜가 하나도 없으면 (예: 가족 앨범에서 바꾼 직후) 넣어 달라고 해요
+  const noBabyInfo = isOwner && !isGroup && !all.some((c) => c.birthday);
   const postCount = tiles?.length;
   const base = useMemo(() => (tiles || []).filter((t) => tab === 'all' || t.likedBy.includes(me.id)), [tiles, tab, me.id]);
   const shown = useMemo(() => base.filter((t) => matches(filter, t)), [base, filter]);
@@ -220,6 +222,11 @@ export function AlbumHome() {
         {isOwner && due && due.daysLeft <= 0 && (
           <button className={s.banner} onClick={() => openDp('born')} data-f="born-set">
             <span aria-hidden="true">👶</span><b>{who ? subj(groupName) : '아기가'} 태어났나요? 생일 넣기</b><Icon name="right" size={16} stroke={2.4} />
+          </button>
+        )}
+        {noBabyInfo && (
+          <button className={s.banner} onClick={editProfile} data-f="baby-info">
+            <span aria-hidden="true">👶</span><b>아기 정보를 넣어 주세요 · 태명과 출산 예정일</b><Icon name="right" size={16} stroke={2.4} />
           </button>
         )}
         {unnamed && (

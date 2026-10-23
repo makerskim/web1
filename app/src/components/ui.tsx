@@ -88,17 +88,34 @@ const useToasts = create<{ list: ToastItem[] }>(() => ({ list: [] }));
 export function toast(msg: string, opts: { ms?: number; action?: string; onAction?: () => void } = {}) {
   const id = ++seq;
   useToasts.setState((st) => ({ list: [...st.list.slice(-1), { id, msg, action: opts.action, onAction: opts.onAction }] }));
-  setTimeout(() => useToasts.setState((st) => ({ list: st.list.filter((t) => t.id !== id) })), Math.max(3500, opts.ms || 0));
+  // 짧은 말은 금방, 긴 안내는 읽을 만큼 (2.5~6초)
+  const ms = opts.ms || Math.min(6000, Math.max(2500, msg.length * 70));
+  setTimeout(() => useToasts.setState((st) => ({ list: st.list.filter((t) => t.id !== id) })), ms);
+}
+
+// 키보드가 올라와 있으면 (글을 쓰는 중) 아래 알림이 가려져요 → 그동안만 위쪽 막대 밑에
+function useKeyboardTop() {
+  const [top, setTop] = useState<number | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const on = () => setTop(window.innerHeight - vv.height > 120 ? vv.offsetTop : null);
+    vv.addEventListener('resize', on);
+    vv.addEventListener('scroll', on);
+    return () => { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); };
+  }, []);
+  return top;
 }
 
 function ToastHost() {
   const list = useToasts((st) => st.list);
+  const kbTop = useKeyboardTop();
   return (
-    <div className={s.toasts} aria-live="polite">
+    <div className={s.toasts} aria-live="polite" style={kbTop === null ? undefined : { top: `calc(${kbTop}px + var(--safe-t) + var(--bar-h) + 8px)`, bottom: 'auto' }}>
       <AnimatePresence>
         {list.map((t) => (
           <motion.div key={t.id} className={s.toast} role="status"
-            initial={{ opacity: 0, y: -16, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }}
+            initial={{ opacity: 0, y: 16, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={spring}>
             <span>{t.msg}</span>
             {t.action && (

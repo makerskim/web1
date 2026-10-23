@@ -1,6 +1,6 @@
 // 화면 넘김 (아이폰처럼)
 // - 더 깊은 화면으로 갈 때: 새 화면이 오른쪽에서 밀려 들어오고, 뒤 화면은 살짝 왼쪽으로 물러나며 어두워져요
-// - 돌아갈 때: 반대로 / 아래 탭끼리: 부드럽게 겹쳐 바뀌어요
+// - 돌아갈 때: 반대로 / 아래 탭끼리: 새 화면이 살며시 나타나요
 // - 깊은 화면에서는 왼쪽 가장자리를 오른쪽으로 밀면 뒤로 가요 (뒤 화면이 함께 보여요)
 // - 화면마다 스크롤이 따로라서, 뒤로 오면 보던 자리 그대로예요
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -88,10 +88,11 @@ export function Stack({ render }: { render: (loc: Location) => ReactNode }) {
 
 const variants: Variants = {
   init: (d: Dir) => (d === 'push' ? { x: width(), opacity: 1 } : d === 'pop' ? { x: -width() * BACK_SHIFT, opacity: 1 } : d === 'fade' ? { x: 0, opacity: 0 } : { x: 0, opacity: 1 }),
-  in: (d: Dir) => ({ x: 0, opacity: 1, transition: d === 'fade' ? { duration: 0.2, ease: 'easeOut' as const } : d === 'none' ? { duration: 0 } : { duration: SLIDE, ease: EASE } }),
+  in: (d: Dir) => ({ x: 0, opacity: 1, transition: d === 'fade' ? { duration: 0.18, ease: 'easeOut' as const } : d === 'none' ? { duration: 0 } : { duration: SLIDE, ease: EASE } }),
   out: (d: Dir) => (d === 'push' ? { x: -width() * BACK_SHIFT, zIndex: 1, transition: { duration: SLIDE, ease: EASE } }
     : d === 'pop' ? { x: width(), zIndex: 3, transition: { duration: SLIDE, ease: EASE } }
-    : d === 'fade' ? { opacity: 0, zIndex: 1, transition: { duration: 0.16, ease: 'easeIn' as const } }
+    // 아래 탭끼리: 나가는 화면은 그대로 아래에 두고 새 화면만 살며시 (둘 다 반투명하게 겹치지 않게)
+    : d === 'fade' ? { opacity: 0.999, zIndex: 1, transition: { duration: 0.2 } }
     : { opacity: 0, zIndex: 1, transition: { duration: 0 } }),
 };
 

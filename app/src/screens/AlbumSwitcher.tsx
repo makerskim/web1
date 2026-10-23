@@ -2,9 +2,11 @@ import { useNavigate } from 'react-router-dom';
 import { Sheet, afterBack, toast } from '../components/ui';
 import { Row, Group } from '../components/Form';
 import { Icon } from '../components/Icon';
-import { Logo } from '../components/Logo';
+import { CoverFace } from '../components/AlbumBits';
 import { useSession } from '../state/session';
 import { spaceAmp } from '../lib/kids';
+import { kindInfo } from '../lib/album';
+import s from './Settings.module.css';
 
 export function AlbumSwitcher({ open, onClose }: { open: boolean; onClose: () => void }) {
   const albums = useSession((st) => st.albums);
@@ -27,7 +29,8 @@ export function AlbumSwitcher({ open, onClose }: { open: boolean; onClose: () =>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-6)' }}>
         <Group>
           {albums.map((a) => (
-            <Row key={a.id} icon={<Logo size={30} />} label={spaceAmp(a.name)} detail={a.myRole === 'owner' ? '관리자' : undefined} onClick={() => pick(a.id)} chevron={false}>
+            <Row key={a.id} icon={<CoverFace size={40} album={a} />} label={<span className={s.two}><b>{spaceAmp(a.name)}</b><small>{kindInfo(a.kind).label}{a.myRole === 'owner' ? ' · 관리자' : ''}</small></span>}
+              onClick={() => pick(a.id)} chevron={false} data-album={a.id}>
               {a.id === albumId && <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />}
             </Row>
           ))}

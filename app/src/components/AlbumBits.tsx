@@ -6,6 +6,7 @@ import { Photo } from './Photo';
 import { usePhotoURL } from '../hooks/usePhoto';
 import { Icon } from './Icon';
 import { useAlbum, useSession } from '../state/session';
+import type { Album } from '../lib/types';
 import * as api from '../lib/api';
 import { squarePhoto } from '../lib/image';
 import { obj } from '../lib/korean';
@@ -70,8 +71,9 @@ export function AmpText({ text, className = '' }: { text: string; className?: st
 }
 
 // ---------- 앨범 사진 ----------
-export function CoverFace({ size = 88 }: { size?: number }) {
-  const album = useAlbum()!;
+export function CoverFace({ size = 88, album: given }: { size?: number; album?: Album }) {
+  const current = useAlbum();
+  const album = given || current!;
   // 지워진 사진이면 첫 글자로 (사진이 없다는 글씨가 동그라미 안에 뜨지 않게)
   const { failed } = usePhotoURL(album.id, album.cover || null);
   return (
