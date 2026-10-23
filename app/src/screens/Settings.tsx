@@ -470,9 +470,12 @@ export function StorageSettings() {
   const warn = popupWarning();
 
   const connect = async () => {
-    const p = progress('구글 드라이브에 연결하는 중');
+    let cancel = () => {};
+    const cancelled = new Promise<never>((_, reject) => { cancel = () => reject(new Error('연결을 취소했어요.')); });
+    cancelled.catch(() => {});
+    const p = progress('구글 창에서 계정을 골라 주세요', () => cancel());
     try {
-      const email = await connectDrive(album.id);
+      const email = await connectDrive(album.id, { cancelled, onCode: () => { p.cancelable(false); p.set(0.6, '드라이브에 앨범 폴더를 만드는 중'); } });
       useSession.getState().patchAlbum({ storage: 'drive', driveEmail: email, driveReady: true });
       p.close();
       toast('구글 드라이브에 연결했어요');

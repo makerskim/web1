@@ -73,11 +73,12 @@ export function popupWarning() {
   return '';
 }
 
-export async function connectDrive(albumId: string): Promise<string | null> {
+/** cancelled: 사용자가 '취소'를 누르면 끝나는 약속 · onCode: 구글 창에서 허용한 다음 (이제는 취소 못 해요) */
+export async function connectDrive(albumId: string, hooks: { cancelled?: Promise<never>; onCode?: () => void } = {}): Promise<string | null> {
   const st = await driveSetup();
   if (st.state !== 'ready') throw new Error(setupHelp[st.state]);
   await loadGis();
-  const code = await new Promise<string>((resolve, reject) => {
+  const asked = new Promise<string>((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initCodeClient({
       client_id: st.clientId,
       scope: SCOPE,
@@ -96,6 +97,9 @@ export async function connectDrive(albumId: string): Promise<string | null> {
     });
     client.requestCode();
   });
+  // 홈 화면 앱에서는 구글 창이 답을 안 줄 때가 있어서 취소할 수 있게 해요
+  const code = await (hooks.cancelled ? Promise.race([asked, hooks.cancelled]) : asked);
+  hooks.onCode?.();
   const r = await driveCall<{ email: string | null }>('connect', {
     method: 'POST', body: JSON.stringify({ album: albumId, code }), headers: { 'Content-Type': 'application/json' },
   });

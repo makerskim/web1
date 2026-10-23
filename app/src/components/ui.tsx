@@ -181,17 +181,19 @@ function MenuHost() {
 }
 
 // ---------- 진행 표시 ----------
-const useProg = create<{ text: string | null; value: number }>(() => ({ text: null, value: 0 }));
-export function progress(text: string) {
-  useProg.setState({ text, value: 0 });
+const useProg = create<{ text: string | null; value: number; cancel: (() => void) | null }>(() => ({ text: null, value: 0, cancel: null }));
+/** 진행 표시. onCancel을 주면 '취소' 버튼이 보여요 (cancelable(false)로 숨겨요) */
+export function progress(text: string, onCancel?: () => void) {
+  useProg.setState({ text, value: 0, cancel: onCancel ?? null });
   return {
     set: (value: number, t?: string) => useProg.setState((st) => ({ value, text: t ?? st.text })),
-    close: () => useProg.setState({ text: null, value: 0 }),
+    cancelable: (on: boolean) => useProg.setState({ cancel: on ? onCancel ?? null : null }),
+    close: () => useProg.setState({ text: null, value: 0, cancel: null }),
   };
 }
 
 function ProgressHost() {
-  const { text, value } = useProg();
+  const { text, value, cancel } = useProg();
   return createPortal(
     <AnimatePresence>
       {text !== null && (
@@ -200,6 +202,7 @@ function ProgressHost() {
             <div className={s.spinner} />
             <p>{text}</p>
             <div className={s.bar}><motion.i animate={{ width: `${Math.round(value * 100)}%` }} transition={{ ease: 'easeOut', duration: 0.25 }} /></div>
+            {cancel && <button type="button" className={s.progCancel} onClick={cancel} data-f="progress-cancel">취소</button>}
           </motion.div>
         </motion.div>
       )}

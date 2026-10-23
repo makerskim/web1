@@ -109,13 +109,14 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
    - 4-3에서 만든 클라이언트를 그대로 써요. **승인된 JavaScript 원본** `https://makerskim.github.io` 만 있으면 되고, 리디렉션 URI는 더 넣지 않아요.
 3. Supabase → **Edge Functions → Deploy a new function → Via Editor**
    - 편집기의 내용을 모두 지우고 [`supabase/functions/drive/index.ts`](supabase/functions/drive/index.ts) 내용을 전부 붙여넣기
-   - **Function name**: `drive` (다른 이름이면 앱이 찾지 못해요) → **Deploy function**
+   - **Function name** 칸에 미리 들어 있는 임의 이름을 지우고 `drive` (다른 이름이면 앱이 찾지 못해요) → **Deploy function**
    - 이미 `drive`가 있으면: **Edge Functions → drive → Code** → 내용을 모두 지우고 새로 붙여넣기 → **Deploy updates**
-4. **Edge Functions → drive → Details(또는 Settings)** → **Verify JWT with legacy secret** 끄기 → **Save changes**
+4. **Edge Functions → drive → Settings** → **Verify JWT with legacy secret** 끄기 → **Save changes**
    - 함수 안에서 로그인한 가족인지 직접 확인해요
 5. **Edge Functions → Secrets → Add or replace secrets**
    - `GOOGLE_CLIENT_ID` = 4-3의 클라이언트 ID (`...apps.googleusercontent.com` 으로 끝나는 값) → **Add another**
-   - `GOOGLE_CLIENT_SECRET` = 4-3의 보안 비밀번호 (`GOCSPX-` 로 시작) → **Save**
+   - `GOOGLE_CLIENT_SECRET` = 4-3의 보안 비밀번호 (`GOCSPX-` 로 시작) → **Bulk save**
+   - 비밀값은 저장하면 바로 적용돼요 (함수를 다시 배포할 필요 없어요)
    - 보안 비밀번호를 잊었으면: Google 인증 플랫폼 → 클라이언트 → 그 클라이언트 → **Add secret** 으로 새로 만들어 넣으면 돼요
 6. 앱(크롬·사파리에서. 카카오톡 안 브라우저는 안 돼요) → **설정 → 앨범 설정 → 사진 저장 위치**
    - 카드 아래에 '아직 준비 중이에요'와 몇 번을 하라는 안내가 보이면 그 단계를 확인하고 **다시 확인**을 누르세요

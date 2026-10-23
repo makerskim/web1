@@ -61,10 +61,21 @@ async function googleToken(params: Record<string, string>) {
 }
 
 // 구글에 연결 정보 돌려주기 (끊을 때 · 다른 계정으로 바꿀 때). 실패해도 괜찮아요
-async function revoke(token: string) {
+// 돌려주면 그 구글 계정의 연결이 통째로 풀려요. 같은 계정을 쓰는 다른 앨범이 있으면 그대로 둬요
+async function revoke(token: string, email: string | null, albumId: string) {
+  if (email && (await sameAccountToken(email, albumId))) return;
   await fetch('https://oauth2.googleapis.com/revoke', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token }),
   }).catch(() => {});
+}
+
+// 같은 구글 계정으로 연결된 다른 앨범의 연결 정보
+async function sameAccountToken(email: string, albumId: string) {
+  const { data: fams } = await admin.from('families').select('id').eq('drive_email', email).neq('id', albumId);
+  const ids = (fams || []).map((f: { id: string }) => f.id);
+  if (!ids.length) return null;
+  const { data } = await admin.from('drive_tokens').select('refresh_token').in('family_id', ids).limit(1);
+  return (data?.[0]?.refresh_token as string | undefined) || null;
 }
 
 // 구글 드라이브 API가 꺼져 있으면 알려 줘요
@@ -127,7 +138,7 @@ Deno.serve(async (req) => {
 
     const { data: me } = await admin.from('members').select('role').eq('family_id', albumId).eq('user_id', user.id).maybeSingle();
     if (!me) return fail('not_member', 403);
-    const { data: fam } = await admin.from('families').select('name, drive_folder_id').eq('id', albumId).single();
+    const { data: fam } = await admin.from('families').select('name, drive_folder_id, drive_email').eq('id', albumId).single();
 
     // 관리자: 드라이브 연결 (브라우저의 구글 로그인 창에서 받은 인증 코드를 토큰으로 바꿔 보관)
     if (route === 'connect') {
@@ -136,12 +147,14 @@ Deno.serve(async (req) => {
       if (typeof body.code !== 'string' || !body.code) return fail('drive_code_expired');
       const t = await googleToken({ grant_type: 'authorization_code', code: body.code, redirect_uri: 'postmessage' });
       // 구글 화면에서 드라이브 권한 체크를 풀면 사진을 저장할 수 없어요
-      if (t.scope && !t.scope.split(' ').includes(SCOPE)) { await revoke(t.access_token); return fail('drive_scope_missing'); }
-      if (!t.refresh_token) return fail('drive_no_refresh_token');
+      if (t.scope && !t.scope.split(' ').includes(SCOPE)) return fail('drive_scope_missing');
       // 폴더까지 만들어진 다음에 연결 정보를 저장해요 (중간에 실패하면 예전 연결 그대로)
       const aboutRes = await gfetch(albumId, `${DRIVE}/about?fields=user(emailAddress)`, {}, t.access_token);
       if (!aboutRes.ok) return fail(await driveError(aboutRes, 'drive_folder_failed'), 502);
       const email = ((await aboutRes.json())?.user?.emailAddress as string | undefined) || null;
+      // 같은 구글 계정으로 다른 앨범을 이미 연결했으면 구글이 연결 정보를 다시 주지 않아요 → 그걸 같이 써요
+      const refresh = t.refresh_token || (email ? await sameAccountToken(email, albumId) : null);
+      if (!refresh) return fail('drive_no_refresh_token');
       let folder = fam?.drive_folder_id as string | null;
       if (!folder || !(await gfetch(albumId, `${DRIVE}/files/${folder}?fields=id,trashed`, {}, t.access_token)).ok) {
         const created = await gfetch(albumId, `${DRIVE}/files?fields=id`, {
@@ -153,11 +166,13 @@ Deno.serve(async (req) => {
         folder = (await created.json()).id;
       }
       const { data: old } = await admin.from('drive_tokens').select('refresh_token').eq('family_id', albumId).maybeSingle();
-      const { error: saveErr } = await admin.from('drive_tokens').upsert({ family_id: albumId, refresh_token: t.refresh_token, connected_by: user.id, updated_at: new Date().toISOString() });
+      const { error: saveErr } = await admin.from('drive_tokens').upsert({ family_id: albumId, refresh_token: refresh, connected_by: user.id, updated_at: new Date().toISOString() });
       if (saveErr) throw new Error(saveErr.message);
       tokenCache.set(albumId, { token: t.access_token, exp: Date.now() + t.expires_in * 1000 });
       await admin.from('families').update({ drive_folder_id: folder, drive_email: email, storage: 'drive' }).eq('id', albumId);
-      if (old?.refresh_token && old.refresh_token !== t.refresh_token) await revoke(old.refresh_token);
+      // 다른 계정으로 바꿨으면 예전 계정의 연결은 돌려줘요 (같은 계정이면 지금 연결까지 풀리니 그대로)
+      const oldEmail = (fam?.drive_email as string | null) || null;
+      if (old?.refresh_token && oldEmail && oldEmail !== email) await revoke(old.refresh_token, oldEmail, albumId);
       return json({ email });
     }
 
@@ -165,7 +180,7 @@ Deno.serve(async (req) => {
       if (me.role !== 'owner') return fail('not_owner', 403);
       const { data: old } = await admin.from('drive_tokens').select('refresh_token').eq('family_id', albumId).maybeSingle();
       await admin.from('drive_tokens').delete().eq('family_id', albumId);
-      if (old?.refresh_token) await revoke(old.refresh_token);
+      if (old?.refresh_token) await revoke(old.refresh_token, (fam?.drive_email as string | null) || null, albumId);
       await admin.from('families').update({ storage: 'supabase', drive_email: null }).eq('id', albumId);
       tokenCache.delete(albumId);
       return json({ ok: true });
