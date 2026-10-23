@@ -5,6 +5,8 @@
 //    'Pastel Memories/앨범이름' 폴더에 바로 올리고, 그 폴더는 '링크가 있는 사람 보기'로 공유돼서
 //    가족은 앱 안에서 구글 드라이브의 파일을 바로 봐요. (Supabase 저장공간·전송량을 쓰지 않아요)
 //    이 기능은 연결 정보(갱신 토큰)를 보관하고, 올릴 때 잠깐 쓰는 출입증(액세스 토큰)과 폴더를 만들어 줘요.
+//    연결: 앱의 '구글 로그인' 창(카카오로 로그인한 분도) · 또는 구글로 앱에 로그인할 때 드라이브도 허락하면 저절로
+//    (Supabase 구글 로그인에도 아래와 같은 클라이언트 ID·보안 비밀번호를 넣어야 저절로 연결돼요)
 // 2) 알림
 //    새 사진·댓글 알림을 보내고, 매일 아침(daily) 기념일·'N년 전 오늘' 알림을 보내요.
 //    알림 서명 키(VAPID)는 처음 한 번 스스로 만들어 데이터베이스(app_keys)에 보관해요.
@@ -142,6 +144,13 @@ async function shareByLink(token: string, id: string) {
   if (!res.ok) throw new Error(await driveError(res, 'drive_share_failed'));
 }
 const folderName = (v: string) => v.replace(/[\\/\u0000-\u001f]/g, ' ').trim().slice(0, 60) || '앨범';
+// 앨범 폴더 'Pastel Memories › 앨범이름'(링크 공유) + 그 안의 '앱용 작은 사진' (old: 예전에 만든 폴더가 남아 있으면 이어 써요)
+async function albumFolder(token: string, root: string, albumId: string, name: string, old?: { id: string; small: string }) {
+  const id = old && (await exists(token, old.id)) ? old.id : await folder(token, folderName(name), root, { pmAlbum: albumId });
+  await shareByLink(token, id);
+  const small = await folder(token, SMALL_NAME, id, { pmSmall: albumId });
+  return { id, small };
+}
 
 // ================================================================
 //  알림 (Web Push: VAPID 서명 + aes128gcm 암호화)
@@ -360,11 +369,15 @@ Deno.serve(async (req) => {
       return json({ clientId: CLIENT_ID, apiKey: API_KEY, ready: !need.length, need, vapid: v?.publicKey || null });
     }
 
-    // ---------- 내 구글 드라이브 연결 (구글 로그인 창에서 받은 인증 코드) ----------
+    // ---------- 내 구글 드라이브 연결 ----------
+    // code: 앱의 '구글 로그인' 창에서 받은 인증 코드 · refresh_token: 구글로 앱에 로그인할 때 드라이브도 허락했으면 (auto)
     if (route === 'connect') {
       if (!CLIENT_ID || !CLIENT_SECRET) return fail('drive_not_configured', 500);
-      if (typeof body.code !== 'string' || !body.code) return fail('drive_code_expired');
-      const t = await googleToken({ grant_type: 'authorization_code', code: body.code, redirect_uri: 'postmessage' });
+      const auto = typeof body.refresh_token === 'string' && !!body.refresh_token;
+      if (!auto && (typeof body.code !== 'string' || !body.code)) return fail('drive_code_expired');
+      const t = auto
+        ? await googleToken({ grant_type: 'refresh_token', refresh_token: body.refresh_token })
+        : await googleToken({ grant_type: 'authorization_code', code: body.code, redirect_uri: 'postmessage' });
       // 구글 화면에서 드라이브 항목 체크를 풀면 사진을 저장할 수 없어요
       if (t.scope && !t.scope.split(' ').includes(SCOPE)) return fail('drive_scope_missing');
       const aboutRes = await gget(t.access_token, `${DRIVE}/about?fields=user(emailAddress)`);
@@ -372,8 +385,10 @@ Deno.serve(async (req) => {
       const email = ((await aboutRes.json())?.user?.emailAddress as string | undefined) || null;
       const { data: old } = await admin.from('user_drives').select('*').eq('user_id', user.id).maybeSingle() as { data: DriveRow | null };
       const same = !!old && old.email === email;
+      // 로그인하면서 저절로 연결할 때는, 이미 다른 계정으로 연결해 둔 걸 바꾸지 않아요
+      if (auto && old && !same) return json({ email: old.email, root: old.root_folder, kept: true });
       // 이미 허락한 계정이면 구글이 갱신 토큰을 다시 안 줄 수 있어요 → 같은 계정의 연결 정보를 이어 써요
-      let refresh = t.refresh_token || (same ? old!.refresh_token : null);
+      let refresh: string | null = auto ? body.refresh_token : t.refresh_token || (same ? old!.refresh_token : null);
       if (!refresh && email) {
         const { data: other } = await admin.from('user_drives').select('refresh_token').eq('email', email).limit(1);
         refresh = other?.[0]?.refresh_token || null;
@@ -381,14 +396,24 @@ Deno.serve(async (req) => {
       if (!refresh) return fail('drive_no_refresh_token');
       // 'Pastel Memories' 폴더 (내 드라이브 맨 위)
       const root = same && (await exists(t.access_token, old!.root_folder)) ? old!.root_folder! : await folder(t.access_token, ROOT_NAME, null, { pm: 'root' });
+      // 그 안에 내가 들어 있는 앨범마다 폴더를 바로 만들어요 (나중에 들어간 앨범은 처음 올릴 때 만들어요)
+      const folders: DriveRow['folders'] = { ...(same ? old!.folders || {} : {}) };
+      const { data: mine } = await admin.from('members').select('family_id, families(name)').eq('user_id', user.id).order('joined_at').limit(30);
+      for (const m of (mine || []) as unknown as { family_id: string; families: { name: string } | null }[]) {
+        const f = folders[m.family_id];
+        try {
+          if (f && (await exists(t.access_token, f.id)) && (await exists(t.access_token, f.small))) continue;
+          folders[m.family_id] = await albumFolder(t.access_token, root, m.family_id, m.families?.name || '앨범', f);
+        } catch { /* 처음 올릴 때 다시 만들어요 */ }
+      }
       const { error } = await admin.from('user_drives').upsert({
-        user_id: user.id, refresh_token: refresh, email, root_folder: root, folders: same ? old!.folders || {} : {}, updated_at: new Date().toISOString(),
+        user_id: user.id, refresh_token: refresh, email, root_folder: root, folders, updated_at: new Date().toISOString(),
       });
       if (error) throw new Error(error.message);
       tokenCache.set(user.id, { token: t.access_token, exp: Date.now() + t.expires_in * 1000 });
       // 다른 계정으로 바꿨으면 예전 계정의 연결은 돌려줘요
       if (old && !same && old.refresh_token !== refresh) await revoke(old.refresh_token, old.email, user.id);
-      return json({ email, root });
+      return json({ email, root, albums: Object.keys(folders).length });
     }
 
     if (route === 'disconnect') {
@@ -418,10 +443,7 @@ Deno.serve(async (req) => {
         // 처음이거나, 폴더를 지웠거나 휴지통에 넣었으면 (다시) 만들어요
         if (!f || !(await exists(t.token, f.id)) || !(await exists(t.token, f.small))) {
           const root = (await exists(t.token, row.root_folder)) ? row.root_folder! : await folder(t.token, ROOT_NAME, null, { pm: 'root' });
-          const id = f && (await exists(t.token, f.id)) ? f.id : await folder(t.token, folderName(fam?.name || '앨범'), root, { pmAlbum: albumId });
-          await shareByLink(t.token, id);
-          const small = await folder(t.token, SMALL_NAME, id, { pmSmall: albumId });
-          f = { id, small };
+          f = await albumFolder(t.token, root, albumId, fam?.name || '앨범', f);
           await admin.from('user_drives').update({ root_folder: root, folders: { ...(row.folders || {}), [albumId]: f }, updated_at: new Date().toISOString() }).eq('user_id', user.id);
         }
         return { t, f };

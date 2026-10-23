@@ -9,6 +9,7 @@ import { useAlbum, useSession } from '../state/session';
 import type { Album } from '../lib/types';
 import * as api from '../lib/api';
 import { useMyDrive } from '../lib/drive';
+import { loginThenPick } from '../state/actions';
 import { squarePhoto } from '../lib/image';
 import { obj } from '../lib/korean';
 import { spaceAmp } from '../lib/kids';
@@ -119,7 +120,8 @@ export function useCoverChanger() {
       ...(album.cover ? [{ label: '앨범 사진 지우기', value: 'none', icon: 'trash' as const, danger: true }] : []),
     ], '앨범 사진 바꾸기');
     if (v === 'album') setPicking(true);
-    if (v === 'phone' && !useMyDrive.getState().email) { toast('휴대폰 사진을 올리려면 설정 → 내 구글 드라이브를 먼저 연결해 주세요'); return; }
+    // 휴대폰 사진은 내 구글 드라이브에 올려요 (구글 로그인한 사람만)
+    if (v === 'phone' && !useMyDrive.getState().email) { await loginThenPick(() => file.current?.click()); return; }
     if (v === 'phone') file.current?.click();
     if (v === 'none') save('');
   };
