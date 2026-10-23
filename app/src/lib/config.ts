@@ -7,8 +7,6 @@ const raw = {
   supabaseUrl: 'https://nontwyuhvjizyuconxej.supabase.co',
   // Supabase → Project Settings → API Keys: Publishable key (공개돼도 괜찮은 키)
   supabaseKey: 'sb_publishable_2tY66N_caUEo3oMDMY6sWQ_KFY5rIdw',
-  // 저장공간 한도(GB): Supabase 무료 1, Pro 100
-  storageLimitGB: 1,
 };
 
 function normalizeUrl(v: string) {
@@ -26,5 +24,4 @@ const merged = { ...raw, ...override };
 export const config = {
   ...merged,
   supabaseUrl: normalizeUrl(merged.supabaseUrl),
-  storageLimitBytes: (Number(merged.storageLimitGB) > 0 ? Number(merged.storageLimitGB) : 1) * 1024 ** 3,
 };

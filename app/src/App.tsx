@@ -1,7 +1,8 @@
 import { Component, useEffect, useMemo, type ReactNode } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
-import { OverlayHosts } from './components/ui';
+import { OverlayHosts, afterBack, confirm } from './components/ui';
+import { loadMyDrive, useMyDrive } from './lib/drive';
 import { TabBar } from './components/Bars';
 import { Stack, forgetScroll } from './components/Stack';
 import { PostHubOverlays } from './components/PostHub';
@@ -15,7 +16,7 @@ import { Grid } from './screens/Grid';
 import { Activity, activitySeenAt } from './screens/Activity';
 import { AlbumHome } from './screens/AlbumHome';
 import { PostPage } from './screens/PostPage';
-import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, StorageSettings, MyDriveSettings, NotifySettings, Install } from './screens/Settings';
+import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, MyDriveSettings, NotifySettings, Install } from './screens/Settings';
 import { DayEdit } from './screens/DayEdit';
 import { ComposeHost, startCompose } from './screens/Compose';
 import { Memories } from './screens/Memories';
@@ -101,6 +102,25 @@ function Shell() {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', check); };
   }, [album?.id]);
 
+  // 내 구글 드라이브 연결 상태 (+ 버튼을 누를 때 써요)
+  useEffect(() => { loadMyDrive(); }, [me.id]);
+  // 사진·동영상은 구글 드라이브를 연결한 사람만 올려요 (카카오만 쓰는 분은 보기·좋아요·댓글)
+  const compose = async () => {
+    const d = useMyDrive.getState();
+    if (d.loaded && !d.email) {
+      const ok = await confirm({
+        title: '내 구글 드라이브를 연결하면 올릴 수 있어요',
+        message: me.provider === 'kakao'
+          ? '사진·동영상은 올린 사람의 구글 드라이브에 저장돼요.\n카카오로 로그인한 분은 보기·좋아요·댓글을 할 수 있어요. 구글 계정이 있으면 연결해서 올릴 수도 있어요.'
+          : '사진·동영상은 올린 사람의 구글 드라이브에 저장돼요.\n처음 한 번만 연결하면 돼요.',
+        ok: '연결하러 가기',
+      });
+      if (ok) { await afterBack(); nav('/settings/drive'); }
+      return;
+    }
+    startCompose();
+  };
+
   // 초대 코드를 들고 왔으면 들어가기 화면으로
   useEffect(() => {
     const code = sessionStorage.getItem('pm-invite');
@@ -135,7 +155,7 @@ function Shell() {
         {/* 고치는 화면은 앨범마다 새로 (다른 앨범으로 바뀌면 이전 앨범 값을 저장하지 않게) */}
         <Route path="/settings/album/info" element={<AlbumInfo key={album?.id} />} />
         <Route path="/settings/album/day/:id" element={<DayEdit key={album?.id} />} />
-        <Route path="/settings/storage" element={<StorageSettings />} />
+        <Route path="/settings/storage" element={<Navigate to="/settings/drive" replace />} />
         <Route path="/settings/drive" element={<MyDriveSettings />} />
         <Route path="/settings/notify" element={<NotifySettings />} />
         <Route path="/settings/install" element={<Install />} />
@@ -144,7 +164,7 @@ function Shell() {
         <Route path="/join/:code" element={<JoinAlbum />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
-      {tabs(l) && <TabBar onCompose={startCompose} badge={{ activity: l.pathname === '/activity' ? 0 : badge }} />}
+      {tabs(l) && <TabBar onCompose={compose} badge={{ activity: l.pathname === '/activity' ? 0 : badge }} />}
     </>
   );
   if (!album) return <Splash />;

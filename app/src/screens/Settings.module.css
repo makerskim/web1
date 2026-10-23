@@ -89,3 +89,4 @@
 .howCard > b { display: block; margin-bottom: var(--s-1); color: var(--c-label); font-size: var(--t-callout); }
 .howCard ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; }
 .howCard li b { color: var(--c-label); font-weight: 600; }
+.kakaoNote { margin: 0 var(--s-2); font-size: var(--t-footnote); color: var(--c-label-2); line-height: 1.6; text-align: center; }

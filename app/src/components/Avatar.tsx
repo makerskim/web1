@@ -3,13 +3,13 @@ import { useAlbum } from '../state/session';
 import { usePhotoURL } from '../hooks/usePhoto';
 import s from './Avatar.module.css';
 
-// 얼굴: 카카오·구글 사진 / 내가 올린 사진(sb:경로) / 없으면 이름 첫 글자
+// 얼굴: 카카오·구글 사진 / 내가 올린 사진(gd:드라이브 파일, 예전 sb:경로) / 없으면 이름 첫 글자
 export function Avatar({ src, name = '', size = 32, ring = false, seen = false, className = '' }: {
   src?: string; name?: string; size?: number; ring?: boolean; seen?: boolean; className?: string;
 }) {
   const album = useAlbum();
-  const isStored = !!src && src.startsWith('sb:');
-  const { url } = usePhotoURL(album?.id, isStored ? src!.slice(3) : null);
+  const isStored = !!src && (src.startsWith('sb:') || src.startsWith('gd:'));
+  const { url } = usePhotoURL(album?.id, isStored ? (src!.startsWith('sb:') ? src!.slice(3) : src!) : null);
   const [broken, setBroken] = useState<string | null>(null);
   const img0 = isStored ? url : src && src.startsWith('https://') ? src : null;
   const img = img0 && img0 !== broken ? img0 : null;

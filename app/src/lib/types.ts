@@ -28,7 +28,7 @@ export interface Album {
   /** 나이·디데이 기준: 첫째 아이의 생일(예정일) */
   babyBirthday: string | null;
   inviteCode: string;
-  /** 사진 저장 위치: 'drive' = 각자(올린 사람)의 구글 드라이브 · 'supabase' = 기본 저장소 */
+  /** (예전 값) 이제 사진은 언제나 올린 사람의 구글 드라이브에 저장돼요 */
   storage: StorageKind;
   /** 가족 탭 맨 위 앨범 사진: '' | 이 앨범 사진 경로 | gd:파일ID */
   cover: string;
