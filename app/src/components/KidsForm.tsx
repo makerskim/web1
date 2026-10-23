@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Group, Field, Row } from './Form';
 import { DateField } from './DatePicker';
 import { Icon } from './Icon';
-import { FULL_TERM, MAX_KIDS, TERM_MAX, dueInfo, isBorn, newChild, termDays, weekNth, weeksIs, weeksText, type Child } from '../lib/kids';
+import { FULL_TERM, MAX_KIDS, TERM_MAX, dueInfo, isBorn, newChild, termDays, weeksIs, weeksText, type Child } from '../lib/kids';
 import { addDays, ymd } from '../lib/dates';
 import s from './KidsForm.module.css';
 
@@ -68,7 +68,7 @@ export function KidsForm({ kids, onChange }: { kids: Child[]; onChange: (k: Chil
                 <DateField label="임신 시작일" title="임신 시작일 (마지막 생리 시작일)" value={c.start ?? null} onChange={(v) => pickStart(i, v)} placeholder="선택"
                   name={`start${i}`} min={c.birthday ? addDays(c.birthday, -TERM_MAX) : '2000-01-01'} max={today} allowClear />
                 <Row label="오늘 임신 주수" chevron={false} data-row={`weeks${i}`}
-                  detail={due ? `${weeksText(due.week, due.day)} · ${weekNth(due.week)}` : '예정일을 넣어 주세요'} />
+                  detail={due ? weeksText(due.week, due.day) : '예정일을 넣어 주세요'} />
               </>
             )}
             {kids.length > 1 && (

@@ -125,8 +125,6 @@ export function bornWeeks(c: Pick<Child, 'birthday' | 'start'>) {
 
 /** '33주 2일' (0일이면 '33주') */
 export const weeksText = (w: number, d: number) => `${w}주${d ? ` ${d}일` : ''}`;
-/** 몇 주차: 27주 6일은 28주차 (0주 0일 ~ 0주 6일이 1주차) */
-export const weekNth = (w: number) => `${w + 1}주차`;
 /** '33주 2일이에요' · '37주예요' */
 export const weeksIs = (w: number, d: number) => `${weeksText(w, d)}${d ? '이에요' : '예요'}`;
 

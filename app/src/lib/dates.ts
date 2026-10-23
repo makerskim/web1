@@ -92,7 +92,9 @@ export function babyMonths(birthday: D, at: D = new Date()) {
   const d = toDate(at);
   if (!b || !d) return null;
   let m = (d.getFullYear() - b.getFullYear()) * 12 + (d.getMonth() - b.getMonth());
-  if (d.getDate() < b.getDate()) m -= 1;
+  // 31일생은 30일까지인 달엔 마지막 날에 한 달을 채워요 (2월 29일생 돌은 2월 28일)
+  const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  if (d.getDate() < b.getDate() && d.getDate() < monthEnd) m -= 1;
   return m;
 }
 
@@ -143,10 +145,8 @@ export function postAge(birthday: D, at: D) {
   if (day < 1) return `출산 D-${1 - day}`;
   const m = babyMilestone(birthday, at);
   if (m) return `${m} 🎉`;
-  const months = babyMonths(birthday, at)!;
-  if (day < 100) return `생후 ${day}일`;
-  if (months < 24) return `생후 ${months}개월`;
-  return `만 ${Math.floor(months / 12)}살`;
+  // 백일 전에는 날로, 그다음은 날까지 ('생후 4개월 22일' · '만 2살 3개월 5일')
+  return day < 100 ? `생후 ${day}일` : ageLabel(birthday, at);
 }
 
 /** 'YYYY-MM-DD'에 며칠 더하기 */
@@ -224,14 +224,35 @@ export function nextYearly(date: D, at: D = new Date()) {
   return { date: ymd(next), daysLeft: Math.round((+next - +today) / DAY) };
 }
 
-/** '1년 6개월' · '5개월' · '23일' (첫날을 1일로) */
+/** 시작한 날부터 몇 년 · 몇 개월 · 며칠 (달이 바뀐 날부터 남은 날을 세요). 시작 전이면 null */
+export function ymdSpan(start: D, at: D = new Date()) {
+  const b = toDate(start), now = toDate(at);
+  const m = babyMonths(start, at);
+  if (!b || !now || m === null || m < 0) return null;
+  // 지난 '같은 날'(달 끝은 그달 마지막 날)부터 며칠 지났는지
+  const last = new Date(b.getFullYear(), b.getMonth() + m + 1, 0).getDate();
+  const mark = new Date(b.getFullYear(), b.getMonth() + m, Math.min(b.getDate(), last));
+  const d = Math.round((+startOfDay(now) - +mark) / DAY);
+  return { y: Math.floor(m / 12), m: m % 12, d };
+}
+
+/** '2년 7개월 15일' · '5개월 3일' · '23일' (한 달이 안 되면 첫날을 1일로 세요) */
 export function spanLabel(start: D, at: D = new Date()) {
   const day = babyDay(start, at);
-  const m = babyMonths(start, at);
-  if (day === null || m === null || day < 1) return '';
-  if (m < 1) return `${day}일`;
-  const y = Math.floor(m / 12), r = m % 12;
-  return y ? `${y}년${r ? ` ${r}개월` : ''}` : `${r}개월`;
+  const s = ymdSpan(start, at);
+  if (day === null || !s || day < 1) return '';
+  if (!s.y && !s.m) return `${day}일`;
+  return [s.y && `${s.y}년`, s.m && `${s.m}개월`, s.d && `${s.d}일`].filter(Boolean).join(' ');
+}
+
+/** 아기 나이를 날까지: '생후 23일' · '생후 4개월 22일' · '만 2살 3개월 5일' */
+export function ageLabel(birthday: D, at: D = new Date()) {
+  const day = babyDay(birthday, at);
+  const s = ymdSpan(birthday, at);
+  if (day === null || !s || day < 1) return '';
+  if (!s.y && !s.m) return `생후 ${day}일`;
+  if (s.y < 2) return `생후 ${s.y * 12 + s.m}개월${s.d ? ` ${s.d}일` : ''}`;
+  return `만 ${s.y}살${s.m ? ` ${s.m}개월` : ''}${s.d ? ` ${s.d}일` : ''}`;
 }
 
 // 사진 촬영 날짜 (JPEG EXIF)
