@@ -187,15 +187,51 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 2. **Verify JWT with legacy secret** 스위치 끄기 → **Save changes**
    - 로그인한 가족인지는 서버 기능 안에서 직접 확인해요.
 
-### 6-6. 비밀값 넣기
-1. **Edge Functions → Secrets** (또는 **Manage secrets**) → **Add or replace secrets**
-2. 아래 세 줄을 넣어요 (Name / Value). 한 줄을 넣고 **Add another**로 다음 줄을 넣어요.
-   - `GOOGLE_CLIENT_ID` = 4-3의 클라이언트 ID (`...apps.googleusercontent.com` 으로 끝나요) — 4-6에 넣은 것과 **같은 값**
-   - `GOOGLE_CLIENT_SECRET` = 4-3의 보안 비밀번호 (`GOCSPX-` 로 시작해요) — 4-6에 넣은 것과 **같은 값**
-   - `GOOGLE_API_KEY` = 6-3의 API 키 (`AIza` 로 시작해요)
-3. **Bulk save** (또는 **Save**)
+### 6-6. 비밀값 넣기 (값 3개를 구해서 Supabase에 넣어요)
+
+'비밀값'은 서버 기능(drive)만 볼 수 있는 메모예요. 앱 코드에는 들어가지 않아서 다른 사람에게 보이지 않아요.
+먼저 **메모장**(휴대폰 메모 앱도 OK)을 하나 열어 두고, 아래 ①②③ 값을 차례로 복사해 붙여 두세요.
+
+**① `GOOGLE_CLIENT_ID` (클라이언트 ID) 구하기**
+1. [console.cloud.google.com/auth/clients](https://console.cloud.google.com/auth/clients) 열기 (맨 위 프로젝트가 `Pastel Memories` 인지 확인)
+2. 목록의 `Pastel Memories 웹`(4-3에서 만든 것) 이름을 눌러요.
+3. 오른쪽(또는 위쪽)의 **클라이언트 ID** 옆 **복사 아이콘(겹친 네모)** → 메모장에 붙여넣기
+   - 모양: `123456789012-abc...xyz.apps.googleusercontent.com` (숫자-글자 뒤에 `.apps.googleusercontent.com`)
+
+**② `GOOGLE_CLIENT_SECRET` (클라이언트 보안 비밀번호) 구하기**
+- 4-3에서 클라이언트를 만들 때 복사해 둔 `GOCSPX-` 로 시작하는 값이에요.
+- 복사해 둔 게 없으면 (구글은 만든 뒤에 다시 보여 주지 않아요):
+  1. ①의 같은 클라이언트 화면에서 **클라이언트 보안 비밀번호** 칸 → **+ Add secret** (보안 비밀번호 추가)
+  2. 새로 생긴 `GOCSPX-...` 옆 **복사 아이콘** → 메모장에 붙여넣기
+  3. 새로 만들었으면 **4-6(Supabase → Google)의 Client Secret 칸도 이 새 값으로** 바꾸고 Save 해요. 두 곳을 같은 값으로 맞춰 두면 헷갈리지 않아요.
+
+**③ `GOOGLE_API_KEY` (API 키) 구하기**
+1. [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials) 열기
+2. **API 키** 칸에서 6-3에서 만든 키 줄의 **키 표시**(Show key)를 누르거나, 줄 끝 복사 아이콘을 눌러요.
+3. `AIza` 로 시작하는 39글자 → 메모장에 붙여넣기
+   - 키가 없으면 6-3을 먼저 해요.
+
+**④ Supabase에 넣기**
+1. [supabase.com/dashboard](https://supabase.com/dashboard) → 내 프로젝트 → 왼쪽 메뉴 **Edge Functions** → **Secrets**
+   - 바로가기: `https://supabase.com/dashboard/project/nontwyuhvjizyuconxej/functions/secrets`
+2. 위쪽 **Add or replace secrets** 칸 (화면에 따라 버튼 이름이 조금 다를 수 있어요)
+   - 첫 줄 **Name**: `GOOGLE_CLIENT_ID` · **Value**: ①의 값
+   - **Add another** → **Name**: `GOOGLE_CLIENT_SECRET` · **Value**: ②의 값
+   - **Add another** → **Name**: `GOOGLE_API_KEY` · **Value**: ③의 값
+3. **Save** (또는 **Bulk save**)
+4. 아래 목록에 세 이름이 보이면 끝이에요. 값은 보안 때문에 다시 보이지 않고 이상한 글자(요약값)로 보여요. 정상이에요.
    - 저장하면 바로 적용돼요. 함수를 다시 배포할 필요 없어요.
-   - 보안 비밀번호를 잊었으면: **Google 인증 플랫폼 → 클라이언트 → 그 클라이언트 → Add secret**으로 새로 만들어 넣으면 돼요.
+   - 목록에 원래 있던 `SUPABASE_...` 들은 Supabase가 넣은 거예요. 건드리지 마세요.
+
+**자주 하는 실수**
+- 이름은 **대문자와 밑줄(_)** 그대로: `GOOGLE_CLIENT_ID` (띄어쓰기·소문자 안 돼요). 복사해서 붙여넣는 게 가장 안전해요.
+- 값 앞뒤에 **빈칸이나 따옴표**가 들어가지 않게 해요.
+- ①과 ②는 **같은 클라이언트**(`Pastel Memories 웹`)의 값이어야 하고, 4-6에 넣은 것과 같아야 해요.
+- 잘못 넣었으면 같은 이름으로 다시 넣고 Save 하면 바뀌어요.
+
+**제대로 됐는지 확인**: 앱 → 가족 탭 → ⚙ 설정 → **내 구글 드라이브**
+- **구글 로그인** 버튼이 보이면 OK예요.
+- '아직 준비 중이에요 · 비밀값 ○○이 아직 없어요'가 보이면 그 이름을 다시 확인하고 **다시 확인**을 눌러요.
 
 ### 6-7. 1번(데이터베이스 설정)을 한 번 더
 이번 업데이트에서 `schema.sql`이 바뀌었어요. **SQL Editor**에서 최신 파일 전체를 다시 실행해요.
