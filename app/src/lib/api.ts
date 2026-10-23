@@ -5,7 +5,6 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { fnCall } from './fn';
 import { ymd } from './dates';
-import { remember } from './photoCache';
 import type { ActivityEvent, Album, AlbumKind, Anniversary, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
 import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
@@ -147,21 +146,19 @@ export async function updateAlbum(id: string, patch: { name?: string; children?:
   if (!rows.length) throw new Error('앨범 관리자만 바꿀 수 있어요.');
 }
 
-// 앨범 사진 (관리자): 앨범의 사진 하나를 고르거나, 휴대폰 사진을 올려요. 예전에 올린 앨범 사진 파일은 지워요
+// 앨범 사진 (관리자): 앨범의 사진 하나를 고르거나, 휴대폰 사진을 내 구글 드라이브에 올려요
+// 예전에 Supabase에 올린 앨범 사진 파일은 지워요 (드라이브 사진은 게시물 사진일 수 있어서 그대로)
 const isCoverFile = (albumId: string, path: string) => path.startsWith(`${albumId}/cover/`);
 export async function setCover(albumId: string, path: string, old: string) {
   await updateAlbum(albumId, { cover: path });
   if (old && old !== path && isCoverFile(albumId, old)) await sb.storage.from('photos').remove([old]).catch(() => {});
 }
 export async function uploadCover(albumId: string, blob: Blob, old: string) {
-  const path = `${albumId}/cover/${Date.now()}.jpg`;
-  const { error } = await sb.storage.from('photos').upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
-  if (error) throw new Error(friendly(error));
-  remember(path, blob);
+  const path = await uploadFile({ albumId, storage: 'drive', postId: 'cover' }, `${Date.now()}.jpg`, blob, 'image/jpeg', true, { small: true, driveName: `앨범 사진 ${ymd(new Date())}.jpg` });
   try {
     await setCover(albumId, path, old);
   } catch (e) {
-    await sb.storage.from('photos').remove([path]).catch(() => {});
+    await removeFiles(albumId, [path]).catch(() => {});
     throw e;
   }
   return path;
@@ -200,19 +197,18 @@ export async function updateMe(albumId: string, uid: string, p: { displayName?: 
   check(await sb.from('members').update(row).eq('family_id', albumId).eq('user_id', uid));
 }
 
-// 내가 고른 프로필 사진: 앨범 폴더/avatars/내아이디-시각.jpg
+// 내가 고른 프로필 사진: 내 구글 드라이브(앨범 폴더의 앱용 작은 사진)에 올려요 → 'gd:파일ID'
 export async function setAvatarPhoto(albumId: string, uid: string, blob: Blob, old: string) {
-  const path = `${albumId}/avatars/${uid}-${Date.now()}.jpg`;
-  const { error } = await sb.storage.from('photos').upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
-  if (error) throw new Error(friendly(error));
-  remember(path, blob);
+  const path = await uploadFile({ albumId, storage: 'drive', postId: 'avatar' }, `${Date.now()}.jpg`, blob, 'image/jpeg', true, { small: true, driveName: `프로필 사진 ${ymd(new Date())}.jpg` });
   try {
-    await updateMe(albumId, uid, { avatar: `sb:${path}` });
+    await updateMe(albumId, uid, { avatar: path });
   } catch (e) {
-    await sb.storage.from('photos').remove([path]);
+    await removeFiles(albumId, [path]).catch(() => {});
     throw e;
   }
-  if (old.startsWith(`sb:${albumId}/avatars/${uid}-`)) await sb.storage.from('photos').remove([old.slice(3)]);
+  // 예전 프로필 사진 파일 정리 (Supabase에 있던 것 · 내 드라이브에 있던 것)
+  if (old.startsWith(`sb:${albumId}/avatars/${uid}-`)) await sb.storage.from('photos').remove([old.slice(3)]).catch(() => {});
+  else if (isDrive(old)) await removeFiles(albumId, [old]).catch(() => {});
 }
 
 export async function leaveAlbum(albumId: string, uid: string) {
@@ -300,7 +296,8 @@ export async function createPost(
   a: Album, p: { caption: string; takenAt: string; photos: NewPhoto[] }, onProgress?: (f: number) => void,
 ): Promise<{ post: Post; skippedOriginals: number }> {
   const id = uuid();
-  const target = { albumId: a.id, storage: a.storage, postId: id };
+  // 사진·동영상은 언제나 올린 사람의 구글 드라이브에
+  const target = { albumId: a.id, storage: 'drive' as const, postId: id };
   const total = p.photos.reduce((n, ph) => n + ph.blob.size + ph.thumb.size + (ph.orig?.size || 0), 0) || 1;
   let done = 0;
   const step = (n: number) => { done += n; onProgress?.(Math.min(1, done / total)); };
@@ -329,7 +326,7 @@ export async function createPost(
       if (!ph.orig) continue;
       if (ph.video) {
         const info = videoInfo(ph.orig);
-        if (a.storage !== 'drive' || !info) throw new Error('동영상은 사진 저장 위치가 ‘각자 구글 드라이브’인 앨범에서 올릴 수 있어요.');
+        if (!info) throw new Error('이 동영상 형식은 올릴 수 없어요. (mp4 · mov · webm)');
         const path = await put(`${i}_v.${info.ext}`, ph.orig, info.type, false, { driveName: driveOrigName(ph.orig, p.takenAt) });
         Object.assign(metas[i], { orig: path, origName: ph.orig.name.slice(-80), origSize: ph.orig.size, kind: 'video', dur: Math.round(ph.video.dur * 10) / 10, mime: info.type });
         continue;
@@ -424,10 +421,4 @@ export async function activity(albumId: string): Promise<ActivityEvent[]> {
   return ev.filter((e) => e.type === 'join' || e.post).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 80);
 }
 
-// ---------- 저장공간 ----------
-export async function storageUsage() { return Number(check(await sb.rpc('storage_usage'))) || 0; }
 
-export async function dropOriginals(albumId: string, paths: string[]) {
-  await removeFiles(albumId, paths);
-  return ((check(await sb.rpc('forget_originals', { p_family: albumId, p_paths: paths })) as string[]) || []).length;
-}

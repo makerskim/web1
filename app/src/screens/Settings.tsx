@@ -9,12 +9,10 @@ import { Sheet, confirm, copyText, menu, progress, toast, useOnce } from '../com
 import { CoverFace, MembersSheet, useCoverChanger } from '../components/AlbumBits';
 import { GoogleIcon, KakaoIcon, providerName } from '../components/ProviderIcon';
 import { useAlbum, useSession, type TextSize } from '../state/session';
-import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { connectDrive, disconnectDrive, driveFolderLink, driveSetup, loadMyDrive, popupWarning, preloadDrive, setupHelp, useMyDrive, type DriveSetup } from '../lib/drive';
 import { clearCache } from '../lib/photoCache';
-import { config } from '../lib/config';
-import { fmtBytes, squarePhoto } from '../lib/image';
+import { squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
 import { fmtDate, ymd } from '../lib/dates';
 import { albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
@@ -23,7 +21,6 @@ import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlb
 import { KidsForm } from '../components/KidsForm';
 import { KindSheet } from '../components/KindPicker';
 import { DEFAULT_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, type PushPrefs } from '../lib/push';
-import type { StorageKind } from '../lib/types';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
@@ -57,6 +54,8 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
     ];
     const v = await menu(items, '프로필 사진');
     try {
+      // 사진은 내 구글 드라이브에 올려요 (연결한 사람만)
+      if (v === 'pick' && !useMyDrive.getState().email) { toast('사진을 올리려면 설정 → 내 구글 드라이브를 먼저 연결해 주세요'); return; }
       if (v === 'pick') file.current?.click();
       if (v === 'provider' || v === 'none') {
         await api.updateMe(album.id, me.id, { avatar: v === 'provider' ? me.avatarUrl : '' });
@@ -366,9 +365,8 @@ export function AlbumSettings() {
           {isOwner && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
         </Group>
 
-        <Group title="사진" footer="내려받으면 원본 화질 그대로 저장돼요.">
-          <Row icon={<Icon name="cloud" size={22} />} label="사진 저장 위치" detail={album.storage === 'drive' ? '각자 구글 드라이브' : '기본 저장소'}
-            onClick={isOwner ? () => nav('/settings/storage') : undefined} />
+        <Group title="사진" footer="사진·동영상은 올린 사람의 구글 드라이브에 저장돼요. 내려받으면 원본 화질 그대로예요.">
+          <Row icon={<Icon name="cloud" size={22} />} label="사진 저장" detail="각자 구글 드라이브" onClick={() => nav('/settings/drive')} data-row="storage" />
         </Group>
 
         <Group footer={isOwner ? '앨범을 지우면 모든 멤버에게서 사라져요.' : undefined}>
@@ -456,67 +454,6 @@ export function AlbumInfo() {
   );
 }
 
-// ---------- 사진 저장 위치 (관리자): 각자 구글 드라이브 · 기본 저장소 ----------
-export function StorageSettings() {
-  const album = useAlbum()!;
-  const isOwner = album.myRole === 'owner';
-  const posts = usePosts((st) => st.list.length);
-  const my = useMyDrive();
-  const nav = useNavigate();
-  const [usage, setUsage] = useState<number | null>(null);
-  useEffect(() => { loadMyDrive(); api.storageUsage().then(setUsage, () => setUsage(null)); }, [posts]);
-
-  const choose = async (storage: StorageKind) => {
-    if (!isOwner || storage === album.storage) return;
-    try {
-      await api.updateAlbum(album.id, { storage });
-      useSession.getState().patchAlbum({ storage });
-      toast(storage === 'drive' ? '이제 각자 구글 드라이브에 저장돼요' : '이제 기본 저장소에 저장돼요');
-    } catch (e) { toast((e as Error).message); }
-  };
-  const check = <Icon name="check" size={20} style={{ color: 'var(--c-accent-strong)' }} />;
-  const pct = usage !== null ? Math.min(100, Math.round((usage / config.storageLimitBytes) * 100)) : 0;
-
-  return (
-    <Page>
-      <TopBar back title="사진 저장 위치" />
-      <div className={s.page}>
-        <Group footer="앞으로 올리는 사진이 저장될 곳이에요. 이미 올린 사진은 그 자리에 그대로 있어요.">
-          <Row label={<Two title="각자 구글 드라이브" sub="올린 사람의 드라이브 · 동영상도 올릴 수 있어요" />} onClick={isOwner ? () => choose('drive') : undefined} chevron={false} data-storage="drive">
-            {album.storage === 'drive' && check}
-          </Row>
-          <Row label={<Two title="기본 저장소 (Supabase)" sub={`${fmtBytes(config.storageLimitBytes)}까지 · 사진만`} />} onClick={isOwner ? () => choose('supabase') : undefined} chevron={false} data-storage="supabase">
-            {album.storage === 'supabase' && check}
-          </Row>
-        </Group>
-
-        {album.storage === 'drive' && (
-          <div className={s.howCard} data-f="drive-how">
-            <b>이렇게 저장돼요</b>
-            <ol>
-              <li>멤버마다 처음 한 번 <b>내 구글 드라이브</b>를 연결해요</li>
-              <li>사진·동영상은 올린 사람 드라이브의 <b>Pastel Memories › {album.name}</b> 폴더에 들어가요</li>
-              <li>그 폴더는 ‘링크가 있는 사람 보기’로 공유돼서 멤버는 앱에서 보고 내려받아요 (주소를 아는 사람만, 검색되지 않아요)</li>
-            </ol>
-          </div>
-        )}
-
-        <Group>
-          <Row icon={<GoogleIcon size={20} />} label="내 구글 드라이브" detail={my.loaded ? (my.email || '연결 안 됨') : '확인 중'} onClick={() => nav('/settings/drive')} data-row="my-drive" />
-        </Group>
-
-        <Group title="기본 저장소 사용량">
-          <div className={s.meter}>
-            <div className={s.bar}><i style={{ width: `${Math.max(2, pct)}%` }} className={pct >= 80 ? s.warn : ''} /></div>
-            <p>{usage === null ? '확인 중…' : `${fmtBytes(usage)} / ${fmtBytes(config.storageLimitBytes)} (${pct}%)`}</p>
-          </div>
-        </Group>
-        {isOwner && <OriginalCleanup />}
-      </div>
-    </Page>
-  );
-}
-
 // ---------- 알림 (이 휴대폰) ----------
 export function NotifySettings() {
   const nav = useNavigate();
@@ -577,6 +514,7 @@ export function NotifySettings() {
 // ---------- 내 구글 드라이브 (누구나): 연결 · 폴더 열기 · 다른 계정 · 끊기 ----------
 export function MyDriveSettings() {
   const my = useMyDrive();
+  const me = useSession((st) => st.me);
   const [setup, setSetup] = useState<DriveSetup | null>(null);
   useEffect(() => { preloadDrive(); loadMyDrive(); driveSetup().then(setSetup); }, []);
   const recheck = () => { setSetup(null); driveSetup(true).then(setSetup); };
@@ -618,6 +556,7 @@ export function MyDriveSettings() {
             <Row label="연결 끊기" onClick={disconnect} danger chevron={false} data-row="disconnect" />
           </Group>
         ) : (
+          <>
           <div className={s.driveCard} data-drive={setup?.state ?? 'loading'}>
             <Icon name="shield" size={28} />
             <b>내 구글 드라이브 연결하기</b>
@@ -636,45 +575,26 @@ export function MyDriveSettings() {
             )}
             {warn && <p className={s.driveHelp} data-f="drive-warn">{warn}</p>}
           </div>
+          {me?.provider === 'kakao' && (
+            <p className={s.kakaoNote} data-f="kakao-note">카카오로 로그인한 분은 연결하지 않아도 사진·동영상을 보고, 좋아요·댓글을 할 수 있어요. 올리려면 구글 계정으로 연결해 주세요.</p>
+          )}
+          </>
         )}
+        {/* 어디에 어떻게 저장되는지 */}
+        <div className={s.howCard} data-f="drive-how">
+          <b>이렇게 저장돼요</b>
+          <ol>
+            <li>사진·동영상은 올린 사람 드라이브의 <b>Pastel Memories › 앨범 이름</b> 폴더에 들어가요 (원본 그대로)</li>
+            <li>앨범 폴더만 ‘링크가 있는 사람 보기’로 공유돼서, 앨범 멤버는 앱에서 보고 내려받아요. 주소를 아는 사람만 볼 수 있고 검색되지 않아요</li>
+            <li>앱이 쓰는 작은 사진은 그 안의 <b>앱용 작은 사진</b> 폴더에 있어요</li>
+            <li>드라이브에서 앨범 폴더나 사진을 지우면 앱에서도 안 보여요</li>
+          </ol>
+        </div>
       </div>
     </Page>
   );
 }
 
-function OriginalCleanup() {
-  const album = useAlbum()!;
-  const run = async () => {
-    const p = progress('원본을 세는 중');
-    let list: api.GridItem[] = [];
-    try { list = await api.allPhotos(album.id); } catch (e) { p.close(); return toast((e as Error).message); }
-    p.close();
-    const now = Date.now();
-    const options = ([[3, '3개월'], [6, '6개월'], [12, '1년']] as const).map(([m, label]) => {
-      const before = new Date(now - m * 30.4 * 86400000).toISOString();
-      // 기본 저장소의 원본만 (구글 드라이브 원본은 각자 드라이브에 그대로)
-      const olds = list.filter((it) => it.orig && it.createdAt < before && it.orig.startsWith(`${album.id}/${it.postId}/`));
-      return { m, label, count: olds.length, bytes: olds.reduce((n, it) => n + (it.origSize || 0), 0), paths: olds.map((it) => it.orig!) };
-    });
-    const v = await menu(options.map((o) => ({ label: `${o.label} 지난 원본 ${o.count}장${o.count ? ` · ${fmtBytes(o.bytes)}` : ''}`, value: o.count ? o.m : null })), '오래된 원본 정리');
-    const o = options.find((x) => x.m === v);
-    if (!o) return;
-    if (!(await confirm({ title: `원본 ${o.count}장을 지울까요?`, message: '‘원본 파일’만 지워지고 앨범의 사진은 그대로 남아요.\n필요한 원본은 먼저 저장해 두세요.', ok: '원본 지우기', danger: true }))) return;
-    const pr = progress('원본을 정리하는 중');
-    try {
-      const n = await api.dropOriginals(album.id, o.paths);
-      pr.close();
-      toast(`원본 ${n}장을 정리했어요`);
-    } catch (e) { pr.close(); toast((e as Error).message); }
-  };
-  return (
-    <Group footer="공간이 모자랄 때 오래된 사진의 원본만 지워요.">
-      <Row label="오래된 원본 정리" onClick={run} />
-    </Group>
-  );
-}
-
-// ---------- 홈 화면에 추가 ----------
 export function Install() {
   return (
     <Page>

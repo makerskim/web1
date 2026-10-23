@@ -25,6 +25,9 @@ alter table public.families add column if not exists drive_folder_id text;
 alter table public.families add column if not exists drive_email text;
 alter table public.families drop constraint if exists families_storage_check;
 alter table public.families add constraint families_storage_check check (storage in ('supabase', 'drive'));
+-- 사진·동영상은 이제 언제나 올린 사람의 구글 드라이브에 저장해요 (Supabase 저장소에는 새로 올리지 않아요)
+alter table public.families alter column storage set default 'drive';
+update public.families set storage = 'drive' where storage <> 'drive';
 -- 앨범 사진(가족 탭 맨 위): 비어 있음 / 이 앨범 게시물의 작은 사진 / 관리자가 올린 사진 '가족ID/cover/시각.jpg' / 드라이브 파일
 alter table public.families add column if not exists cover text not null default '';
 alter table public.families drop constraint if exists families_cover_check;
@@ -101,7 +104,8 @@ create table if not exists public.members (
   primary key (family_id, user_id)
 );
 create index if not exists members_user_idx on public.members (user_id);
--- 얼굴 사진: 비어 있음 / 카카오·구글 프로필 사진 주소 / 내가 올린 사진 'sb:가족ID/avatars/내ID-시각.jpg'
+-- 얼굴 사진: 비어 있음 / 카카오·구글 프로필 사진 주소 / 내 구글 드라이브에 올린 사진 'gd:파일ID'
+-- (예전에 Supabase에 올린 'sb:가족ID/avatars/내ID-시각.jpg'도 그대로 보여요)
 alter table public.members alter column avatar set default '';
 alter table public.members drop constraint if exists members_avatar_check;
 -- v1의 이모지 얼굴(🙂 등)과 'img:' 사진은 새 규칙에 맞지 않아서 비워요 (이름 첫 글자로 보여요)
@@ -109,11 +113,13 @@ update public.members set avatar = ''
 where not (
   avatar = ''
   or (char_length(avatar) <= 600 and avatar ~ '^https://([a-z0-9-]+\.)*(googleusercontent\.com|kakaocdn\.net|kakao\.com)/')
-  or avatar ~ ('^sb:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$'));
+  or avatar ~ ('^sb:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$')
+  or avatar ~ '^gd:[A-Za-z0-9_-]{10,200}$');
 alter table public.members add constraint members_avatar_check check (
   avatar = ''
   or (char_length(avatar) <= 600 and avatar ~ '^https://([a-z0-9-]+\.)*(googleusercontent\.com|kakaocdn\.net|kakao\.com)/')
-  or avatar ~ ('^sb:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$'));
+  or avatar ~ ('^sb:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$')
+  or avatar ~ '^gd:[A-Za-z0-9_-]{10,200}$');
 
 create table if not exists public.posts (
   id         uuid primary key default gen_random_uuid(),
@@ -238,6 +244,14 @@ begin
        or (x ? 'dur' and jsonb_typeof(x->'dur') <> 'number')
   ) then
     raise exception 'bad_photo_path';
+  end if;
+  -- 새 게시물은 구글 드라이브 파일만 (예전 게시물은 그대로 둬요)
+  if tg_op = 'INSERT' and exists (
+    select 1 from jsonb_array_elements(new.photos) x
+    where coalesce(x->>'path', '') !~ '^gd:' or coalesce(x->>'thumb', '') !~ '^gd:'
+       or (x ? 'orig' and coalesce(x->>'orig', '') !~ '^gd:')
+  ) then
+    raise exception 'drive_only';
   end if;
   return new;
 end $$;
@@ -614,7 +628,8 @@ drop policy if exists comments_delete on public.comments;
 create policy comments_delete on public.comments for delete to authenticated
   using (author_id = auth.uid() or public.is_owner(family_id));
 
--- ---------- 사진 저장소 (Supabase를 고른 앨범) ----------
+-- ---------- 예전 사진 저장소 (Supabase) ----------
+-- 예전에 올린 사진을 보고 지울 수만 있어요. 새 사진·동영상은 각자의 구글 드라이브에 올려요
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('photos', 'photos', false, 31457280,
@@ -626,8 +641,6 @@ drop policy if exists photos_select on storage.objects;
 create policy photos_select on storage.objects for select to authenticated
   using (bucket_id = 'photos' and public.is_member_path(name));
 drop policy if exists photos_insert on storage.objects;
-create policy photos_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'photos' and public.is_member_path(name));
 drop policy if exists photos_delete on storage.objects;
 create policy photos_delete on storage.objects for delete to authenticated
   using (bucket_id = 'photos' and (owner_id = auth.uid()::text or public.is_owner_path(name)));
