@@ -65,11 +65,19 @@ export function meFrom(u: { id: string; email?: string | null; user_metadata?: R
 // 개인 개발자 앱은 이메일 동의항목을 켤 수 없어 KOE205 오류가 나요 → scope를 직접 정해서 보내요.
 const KAKAO_SCOPE = 'profile_nickname,profile_image';
 
+// 구글은 로그인하면서 '내 구글 드라이브'(이 앱이 만든 파일만)도 함께 허락받아요 → 따로 연결하지 않고 바로 올려요
+// (구글 화면에서 드라이브 항목을 체크하지 않았으면 + 를 누를 때 다시 물어봐요)
+const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
 export async function signIn(provider: 'kakao' | 'google') {
   const redirectTo = `${location.origin}${location.pathname}`;
+  // 돌아왔을 때 어느 쪽으로 로그인했는지 (구글이면 드라이브 연결 정보를 서버 기능에 건네요)
+  sessionStorage.setItem('pm-login', provider);
   const { error } = await sb.auth.signInWithOAuth({
     provider,
-    options: { redirectTo, queryParams: provider === 'google' ? { prompt: 'select_account' } : { scope: KAKAO_SCOPE } },
+    options: provider === 'google'
+      ? { redirectTo, scopes: GOOGLE_DRIVE_SCOPE, queryParams: { prompt: 'consent select_account', access_type: 'offline' } }
+      : { redirectTo, queryParams: { scope: KAKAO_SCOPE } },
   });
   if (error) throw new Error(friendly(error));
 }

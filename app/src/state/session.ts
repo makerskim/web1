@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase';
 import * as api from '../lib/api';
 import type { Album, Me, Member } from '../lib/types';
 import { kidsFrom } from '../lib/kids';
+import { linkFromLogin } from '../lib/drive';
 
 export type TextSize = 'normal' | 'large' | 'xlarge';
 
@@ -68,6 +69,11 @@ export const useSession = create<Session>((set, get) => ({
     document.documentElement.dataset.text = get().textSize;
     const { data } = await sb.auth.getSession();
     set({ me: api.meFrom(data.session?.user ?? null) });
+    // 방금 구글로 로그인하면서 드라이브도 허락했으면 바로 연결해요 (Pastel Memories 폴더 · 앨범 폴더)
+    const via = sessionStorage.getItem('pm-login');
+    sessionStorage.removeItem('pm-login');
+    const refresh = data.session?.provider_refresh_token;
+    if (via === 'google' && refresh) linkFromLogin(refresh);
     sb.auth.onAuthStateChange((event, s) => {
       const me = api.meFrom(s?.user ?? null);
       if (me?.id !== get().me?.id) set({ me });

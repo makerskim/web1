@@ -38,6 +38,7 @@ export function Landing() {
           <GoogleIcon />
           {busy === 'google' ? 'Google로 이동 중…' : 'Google 로그인'}
         </button>
+        <p className={s.note} data-f="login-note">사진·동영상은 올린 사람의 구글 드라이브에 저장돼요. 카카오로 로그인해도 사진을 올릴 때 구글 로그인을 한 번 해요.</p>
       </motion.div>
     </div>
   );

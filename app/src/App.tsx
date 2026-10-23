@@ -1,8 +1,9 @@
 import { Component, useEffect, useMemo, type ReactNode } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
-import { OverlayHosts, afterBack, confirm } from './components/ui';
-import { loadMyDrive, useMyDrive } from './lib/drive';
+import { OverlayHosts } from './components/ui';
+import { loadMyDrive, preloadDrive, useMyDrive } from './lib/drive';
+import { loginThenPick } from './state/actions';
 import { TabBar } from './components/Bars';
 import { Stack, forgetScroll } from './components/Stack';
 import { PostHubOverlays } from './components/PostHub';
@@ -102,22 +103,12 @@ function Shell() {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', check); };
   }, [album?.id]);
 
-  // 내 구글 드라이브 연결 상태 (+ 버튼을 누를 때 써요)
-  useEffect(() => { loadMyDrive(); }, [me.id]);
-  // 사진·동영상은 구글 드라이브를 연결한 사람만 올려요 (카카오만 쓰는 분은 보기·좋아요·댓글)
+  // 내 구글 드라이브 연결 상태 (+ 버튼을 누를 때 써요). 아직이면 구글 창을 미리 불러 둬요 (누르자마자 열리게)
+  useEffect(() => { loadMyDrive().then((d) => { if (!d.email) preloadDrive(); }); }, [me.id]);
+  // 사진·동영상은 올린 사람의 구글 드라이브에 저장돼요 → 구글 로그인을 한 사람만 올려요 (카카오로 로그인했어도 + 를 누르면 구글 로그인)
   const compose = async () => {
     const d = useMyDrive.getState();
-    if (d.loaded && !d.email) {
-      const ok = await confirm({
-        title: '내 구글 드라이브를 연결하면 올릴 수 있어요',
-        message: me.provider === 'kakao'
-          ? '사진·동영상은 올린 사람의 구글 드라이브에 저장돼요.\n카카오로 로그인한 분은 보기·좋아요·댓글을 할 수 있어요. 구글 계정이 있으면 연결해서 올릴 수도 있어요.'
-          : '사진·동영상은 올린 사람의 구글 드라이브에 저장돼요.\n처음 한 번만 연결하면 돼요.',
-        ok: '연결하러 가기',
-      });
-      if (ok) { await afterBack(); nav('/settings/drive'); }
-      return;
-    }
+    if (d.loaded && !d.email) { await loginThenPick(startCompose); return; }
     startCompose();
   };
 

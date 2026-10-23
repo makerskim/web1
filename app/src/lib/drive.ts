@@ -1,5 +1,6 @@
 // 각자 구글 드라이브
-// - 연결: 구글 로그인 창에서 내 계정을 고르면, 서버 기능이 연결 정보를 보관해요 (한 번만)
+// - 연결: 앱의 '구글 로그인' 창에서 내 계정을 고르면, 서버 기능이 연결 정보를 보관해요 (한 번만)
+//         구글로 앱에 로그인할 때 드라이브도 허락했으면 저절로 연결돼요
 // - 올리기: 앱이 내 드라이브 'Pastel Memories/앨범이름' 폴더에 바로 올려요 (Supabase를 거치지 않아요)
 // - 보기: 앨범 폴더는 '링크가 있는 사람 보기'로 공유돼서, 가족은 구글 드라이브에서 바로 받아 봐요
 // 클라이언트 ID·API 키는 앱 코드가 아니라 서버 기능(Supabase 비밀값)에서 받아 와요.
@@ -83,9 +84,9 @@ export const preloadDrive = () => { driveSetup().then((r) => { if (r.state === '
 /** 아이폰 홈 화면 앱 · 카카오톡 안에서는 구글 창이 안 열릴 수 있어요 */
 export function popupWarning() {
   const ua = navigator.userAgent;
-  if (/KAKAOTALK/i.test(ua)) return '카카오톡 안에서는 구글 연결 창이 열리지 않아요. 오른쪽 아래 ⋯ → 다른 브라우저로 열기에서 연결해 주세요.';
+  if (/KAKAOTALK/i.test(ua)) return '카카오톡 안에서는 구글 로그인 창이 열리지 않아요. 오른쪽 아래 ⋯ → 다른 브라우저로 열기에서 해 주세요.';
   const standalone = (navigator as { standalone?: boolean }).standalone === true;
-  if (standalone && /iPhone|iPad|iPod/.test(ua)) return '홈 화면 앱에서 구글 창이 안 열리면, Safari에서 앱 주소를 열고 연결해 주세요. 한 번만 연결하면 돼요.';
+  if (standalone && /iPhone|iPad|iPod/.test(ua)) return '홈 화면 앱에서 구글 창이 안 열리면, Safari에서 앱 주소를 열고 구글 로그인해 주세요. 한 번만 하면 돼요.';
   return '';
 }
 
@@ -93,6 +94,8 @@ export function popupWarning() {
 interface MyDrive { loaded: boolean; email: string | null; root: string | null }
 export const useMyDrive = create<MyDrive>(() => ({ loaded: false, email: null, root: null }));
 export async function loadMyDrive() {
+  // 로그인하면서 연결하는 중이면 끝난 다음에 확인해요 (먼저 끝난 '연결 안 됨'이 덮어쓰지 않게)
+  if (linking) await linking;
   try {
     const { data, error } = await sb.rpc('my_drive');
     if (error) throw error;
@@ -106,8 +109,19 @@ export async function loadMyDrive() {
 }
 export const driveFolderLink = (id: string) => `https://drive.google.com/drive/folders/${id}`;
 
-/** cancelled: 사용자가 '취소'를 누르면 끝나는 약속 · onCode: 구글 창에서 허용한 다음 (이제는 취소 못 해요) */
-export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?: () => void } = {}) {
+// 구글로 앱에 로그인할 때 드라이브도 허락했으면 그 연결 정보로 바로 연결해요 (안 되면 조용히 넘어가요 → + 를 누를 때 물어봐요)
+let linking: Promise<unknown> | null = null;
+export function linkFromLogin(refreshToken: string) {
+  linking = fnCall<{ email: string | null; root: string | null }>('connect', { refresh_token: refreshToken })
+    .then((r) => { tickets.clear(); useMyDrive.setState({ loaded: true, email: r.email || '연결됨', root: r.root }); })
+    .catch((e) => console.warn('[pm] drive link from login', (e as { code?: string }).code || e))
+    .finally(() => { linking = null; });
+  return linking;
+}
+
+/** cancelled: 사용자가 '취소'를 누르면 끝나는 약속 · onCode: 구글 창에서 허용한 다음 (이제는 취소 못 해요)
+ *  hint: 구글로 로그인한 분의 이메일 (계정 고르기를 건너뛰어요) */
+export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?: () => void; hint?: string } = {}) {
   const st = await driveSetup();
   if (st.state !== 'ready') throw new Error(setupHelp(st));
   await loadGis();
@@ -116,16 +130,16 @@ export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?:
       client_id: st.clientId,
       scope: SCOPE,
       ux_mode: 'popup',
-      select_account: true,
+      ...(hooks.hint ? { login_hint: hooks.hint } : { select_account: true }),
       callback: (r: { code?: string; scope?: string; error?: string }) => {
-        if (!r.code) return reject(new Error('연결을 취소했어요.'));
+        if (!r.code) return reject(new Error('구글 로그인을 취소했어요.'));
         // 구글 화면에서 드라이브 항목 체크를 풀었으면
         if (r.scope && !r.scope.split(' ').includes(SCOPE)) return reject(new Error('구글 화면에서 ‘Google Drive 파일’ 항목에 체크한 뒤 계속을 눌러 주세요.'));
         resolve(r.code);
       },
       error_callback: (e: { type?: string }) => reject(new Error(e?.type === 'popup_failed_to_open'
         ? (popupWarning() || '구글 창이 열리지 않았어요. 팝업 차단을 풀고 다시 눌러 주세요.')
-        : '연결을 취소했어요.')),
+        : '구글 로그인을 취소했어요.')),
     });
     client.requestCode();
   });
