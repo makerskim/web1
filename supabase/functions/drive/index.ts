@@ -1,11 +1,17 @@
-// Pastel Memories · 구글 드라이브 저장 서버 기능 (Supabase Edge Function, 이름: drive)
+// Pastel Memories · 서버 기능 (Supabase Edge Function, 이름: drive)
 //
-// 앨범 관리자가 자기 구글 드라이브를 연결하면, 가족 누구나 올린 사진이 관리자 드라이브의
-// 'Pastel Memories · 앨범이름' 폴더에 저장돼요. 사진은 공개 링크 없이 이 기능을 거쳐서만 볼 수 있어요.
+// 1) 각자 구글 드라이브
+//    멤버마다 자기 구글 드라이브를 한 번 연결해요. 사진·동영상은 앱(휴대폰)이 올린 사람의 드라이브
+//    'Pastel Memories/앨범이름' 폴더에 바로 올리고, 그 폴더는 '링크가 있는 사람 보기'로 공유돼서
+//    가족은 앱 안에서 구글 드라이브의 파일을 바로 봐요. (Supabase 저장공간·전송량을 쓰지 않아요)
+//    이 기능은 연결 정보(갱신 토큰)를 보관하고, 올릴 때 잠깐 쓰는 출입증(액세스 토큰)과 폴더를 만들어 줘요.
+// 2) 알림
+//    새 사진·댓글 알림을 보내고, 매일 아침(daily) 기념일·'N년 전 오늘' 알림을 보내요.
+//    알림 서명 키(VAPID)는 처음 한 번 스스로 만들어 데이터베이스(app_keys)에 보관해요.
 //
 // 필요한 비밀값 (Supabase → Edge Functions → Secrets):
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET   (Google Cloud의 '웹 애플리케이션' OAuth 클라이언트)
-// 앱은 클라이언트 ID를 이 기능(/drive/config)에서 받아 가요. 앱 코드에 넣을 필요가 없어요.
+//   GOOGLE_API_KEY                            (Google Cloud의 API 키: 공유된 사진을 앱에서 읽을 때)
 // SUPABASE_URL 과 서버용 비밀 키는 Supabase가 자동으로 넣어 줘요.
 // (새 키 방식이면 SUPABASE_SECRET_KEYS, 예전 방식이면 SUPABASE_SERVICE_ROLE_KEY)
 
@@ -22,17 +28,18 @@ function serviceKey(): string {
 const SERVICE_KEY = serviceKey();
 const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+const API_KEY = Deno.env.get('GOOGLE_API_KEY') ?? '';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE = 'https://www.googleapis.com/drive/v3';
-const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
-const MAX_UPLOAD = 25 * 1024 * 1024;
-const ID_RE = /^[A-Za-z0-9_-]{10,200}$/;
+const ROOT_NAME = 'Pastel Memories';
+const SMALL_NAME = '앱용 작은 사진';
+const FOLDER = 'application/vnd.google-apps.folder';
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info, x-cron-key',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
 };
@@ -40,9 +47,9 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 const fail = (error: string, status = 400) => json({ error }, status);
 
-// ---------- 구글 토큰 ----------
-const tokenCache = new Map<string, { token: string; exp: number }>();
-
+// ================================================================
+//  구글 연결
+// ================================================================
 async function googleToken(params: Record<string, string>) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -61,188 +68,417 @@ async function googleToken(params: Record<string, string>) {
 }
 
 // 구글에 연결 정보 돌려주기 (끊을 때 · 다른 계정으로 바꿀 때). 실패해도 괜찮아요
-// 돌려주면 그 구글 계정의 연결이 통째로 풀려요. 같은 계정을 쓰는 다른 앨범이 있으면 그대로 둬요
-async function revoke(token: string, email: string | null, albumId: string) {
-  if (email && (await sameAccountToken(email, albumId))) return;
+// 돌려주면 그 구글 계정의 연결이 통째로 풀려요 → 같은 구글 계정을 쓰는 다른 사용자가 있으면 그대로 둬요
+async function revoke(token: string, email: string | null, userId: string) {
+  if (email) {
+    const { data } = await admin.from('user_drives').select('user_id').eq('email', email).neq('user_id', userId).limit(1);
+    if (data?.length) return;
+  }
   await fetch('https://oauth2.googleapis.com/revoke', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token }),
   }).catch(() => {});
 }
 
-// 같은 구글 계정으로 연결된 다른 앨범의 연결 정보
-async function sameAccountToken(email: string, albumId: string) {
-  const { data: fams } = await admin.from('families').select('id').eq('drive_email', email).neq('id', albumId);
-  const ids = (fams || []).map((f: { id: string }) => f.id);
-  if (!ids.length) return null;
-  const { data } = await admin.from('drive_tokens').select('refresh_token').in('family_id', ids).limit(1);
-  return (data?.[0]?.refresh_token as string | undefined) || null;
-}
-
-// 구글 드라이브 API가 꺼져 있으면 알려 줘요
+// 구글 드라이브 오류를 알아듣게 (401: 출입증이 막혔어요 → 새로 받아 한 번 더)
 async function driveError(res: Response, fallback: string) {
+  if (res.status === 401) return 'drive_auth';
   const t = await res.text().catch(() => '');
   if (/accessNotConfigured|SERVICE_DISABLED|has not been used/.test(t)) return 'drive_api_disabled';
   if (/insufficient|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(t)) return 'drive_scope_missing';
+  if (/storageQuotaExceeded/.test(t)) return 'drive_quota';
   return fallback;
 }
 
-async function accessToken(albumId: string) {
-  const c = tokenCache.get(albumId);
-  if (c && c.exp > Date.now() + 60_000) return c.token;
-  const { data } = await admin.from('drive_tokens').select('refresh_token').eq('family_id', albumId).maybeSingle();
-  if (!data) throw new Error('drive_not_connected');
-  const t = await googleToken({ grant_type: 'refresh_token', refresh_token: data.refresh_token });
-  tokenCache.set(albumId, { token: t.access_token, exp: Date.now() + t.expires_in * 1000 });
-  return t.access_token;
-}
+type DriveRow = { user_id: string; refresh_token: string; email: string | null; root_folder: string | null; folders: Record<string, { id: string; small: string }> };
+const tokenCache = new Map<string, { token: string; exp: number }>();
 
-async function gfetch(albumId: string, url: string, init: RequestInit = {}, given?: string) {
-  const token = given || await accessToken(albumId);
-  const res = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` } });
-  if (res.status === 401) tokenCache.delete(albumId);
-  if (res.status === 403) {
-    const t = await res.clone().text();
-    if (/storageQuotaExceeded/.test(t)) throw new Error('drive_quota');
+async function userToken(row: DriveRow) {
+  const c = tokenCache.get(row.user_id);
+  if (c && c.exp > Date.now() + 5 * 60_000) return c;
+  try {
+    const t = await googleToken({ grant_type: 'refresh_token', refresh_token: row.refresh_token });
+    const v = { token: t.access_token, exp: Date.now() + t.expires_in * 1000 };
+    tokenCache.set(row.user_id, v);
+    return v;
+  } catch (e) {
+    // 구글에서 연결을 풀었거나 만료됐으면 연결 정보를 지워요 (앱이 '다시 연결'을 보여 줘요)
+    if ((e as Error).message === 'drive_reconnect') await admin.from('user_drives').delete().eq('user_id', row.user_id);
+    throw e;
   }
-  return res;
 }
 
-// 파일이 이 앨범 폴더 안에 있는지
-async function inFolder(albumId: string, folder: string, id: string) {
-  if (!ID_RE.test(id)) return false;
-  const res = await gfetch(albumId, `${DRIVE}/files/${id}?fields=parents,trashed`);
+const gget = (token: string, url: string) => fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+async function exists(token: string, id: string | null | undefined) {
+  if (!id || !/^[A-Za-z0-9_-]{10,200}$/.test(id)) return false;
+  const res = await gget(token, `${DRIVE}/files/${id}?fields=id,trashed`);
+  if (res.status === 401) throw new Error('drive_auth');
   if (!res.ok) return false;
-  const f = await res.json();
-  return !f.trashed && Array.isArray(f.parents) && f.parents.includes(folder);
+  return !(await res.json()).trashed;
+}
+// 앱이 만든 폴더는 표시(appProperties)로 다시 찾아요 (다시 연결해도 폴더가 늘어나지 않게, 이름이 같은 앨범끼리 섞이지 않게)
+async function folder(token: string, name: string, parent: string | null, tag: Record<string, string>) {
+  const q = [`mimeType='${FOLDER}'`, 'trashed=false', ...Object.entries(tag).map(([k, v]) => `appProperties has { key='${k}' and value='${v}' }`)].join(' and ');
+  const found = await gget(token, `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1&spaces=drive`);
+  if (found.status === 401) throw new Error('drive_auth');
+  if (found.ok) {
+    const id = (await found.json()).files?.[0]?.id as string | undefined;
+    if (id) return id;
+  }
+  const res = await fetch(`${DRIVE}/files?fields=id`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: FOLDER, appProperties: tag, ...(parent ? { parents: [parent] } : {}) }),
+  });
+  if (!res.ok) throw new Error(await driveError(res, 'drive_folder_failed'));
+  return (await res.json()).id as string;
+}
+// 앨범 폴더: 링크가 있는 사람은 볼 수 있게 (안의 사진·동영상도 같이) — 검색에는 나오지 않아요
+async function shareByLink(token: string, id: string) {
+  const res = await fetch(`${DRIVE}/files/${id}/permissions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone', allowFileDiscovery: false }),
+  });
+  if (!res.ok) throw new Error(await driveError(res, 'drive_share_failed'));
+}
+const folderName = (v: string) => v.replace(/[\\/\u0000-\u001f]/g, ' ').trim().slice(0, 60) || '앨범';
+
+// ================================================================
+//  알림 (Web Push: VAPID 서명 + aes128gcm 암호화)
+// ================================================================
+const enc = new TextEncoder();
+const b64u = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fromB64u = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
+const concat = (...parts: Uint8Array[]) => {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+};
+
+type Vapid = { publicKey: string; privateJwk: JsonWebKey };
+let vapidCache: Vapid | null = null;
+async function vapid(): Promise<Vapid> {
+  if (vapidCache) return vapidCache;
+  const { data } = await admin.from('app_keys').select('value').eq('name', 'vapid').maybeSingle();
+  if (data?.value?.publicKey) return (vapidCache = data.value as Vapid);
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']) as CryptoKeyPair;
+  const v: Vapid = { publicKey: b64u(await crypto.subtle.exportKey('raw', kp.publicKey)), privateJwk: await crypto.subtle.exportKey('jwk', kp.privateKey) };
+  // 동시에 두 번 만들어도 먼저 저장된 하나만 써요
+  await admin.from('app_keys').upsert({ name: 'vapid', value: v }, { onConflict: 'name', ignoreDuplicates: true });
+  const { data: again } = await admin.from('app_keys').select('value').eq('name', 'vapid').maybeSingle();
+  return (vapidCache = (again?.value as Vapid) || v);
 }
 
-// ---------- 요청 처리 ----------
+async function hkdf(salt: BufferSource, ikm: BufferSource, info: BufferSource, bytes: number) {
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, bytes * 8));
+}
+
+// RFC 8291: 받는 휴대폰만 풀 수 있게 알림 내용을 잠가요
+async function encryptPayload(p256dh: string, authSecret: string, payload: Uint8Array) {
+  const ua = fromB64u(p256dh);
+  const auth = fromB64u(authSecret);
+  const local = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']) as CryptoKeyPair;
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', local.publicKey));
+  const uaKey = await crypto.subtle.importKey('raw', ua, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey }, local.privateKey, 256));
+  const ikm = await hkdf(auth, shared, concat(enc.encode('WebPush: info\0'), ua, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, enc.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, enc.encode('Content-Encoding: nonce\0'), 12);
+  const key = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, concat(payload, new Uint8Array([2]))));
+  const rs = new Uint8Array([0, 0, 16, 0]); // 4096
+  return concat(salt, rs, new Uint8Array([asPub.length]), asPub, sealed);
+}
+
+async function vapidHeader(endpoint: string) {
+  const v = await vapid();
+  const key = await crypto.subtle.importKey('jwk', v.privateJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const head = b64u(enc.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const body = b64u(enc.encode(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: 'mailto:pastel-memories@users.noreply.github.com' })));
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, enc.encode(`${head}.${body}`));
+  return `vapid t=${head}.${body}.${b64u(sig)}, k=${v.publicKey}`;
+}
+
+type Sub = { endpoint: string; p256dh: string; auth: string; prefs: Record<string, boolean> | null };
+type Note = { title: string; body: string; url: string; tag: string };
+
+async function pushTo(subs: Sub[], note: Note) {
+  let sent = 0;
+  const payload = enc.encode(JSON.stringify(note));
+  for (const s of subs) {
+    try {
+      const res = await fetch(s.endpoint, {
+        method: 'POST',
+        headers: { Authorization: await vapidHeader(s.endpoint), TTL: '86400', Urgency: 'normal', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream' },
+        body: await encryptPayload(s.p256dh, s.auth, payload),
+      });
+      // 앱을 지웠거나 알림을 끈 휴대폰은 목록에서 빼요
+      if (res.status === 404 || res.status === 410) await admin.from('push_subs').delete().eq('endpoint', s.endpoint);
+      else if (res.ok) sent++;
+    } catch { /* 한 휴대폰이 안 돼도 나머지는 보내요 */ }
+  }
+  return sent;
+}
+
+// 앨범 멤버들의 휴대폰 (나는 빼고, 그 종류 알림을 켠 사람만)
+async function subsFor(userIds: string[], kind: 'post' | 'comment' | 'daily') {
+  if (!userIds.length) return [];
+  const { data } = await admin.from('push_subs').select('endpoint, p256dh, auth, prefs').in('user_id', userIds);
+  return ((data || []) as Sub[]).filter((s) => s.prefs?.[kind] !== false);
+}
+
+// 처음 보내는 거면 true (두 번 보내지 않게)
+async function firstTime(key: string) {
+  const { error } = await admin.from('push_sent').insert({ key });
+  return !error;
+}
+
+// ---------- 한국어 ----------
+const batchim = (w: string) => {
+  const c = w.trim().replace(/[^가-힣0-9a-zA-Z]+$/, '').slice(-1).charCodeAt(0);
+  if (c >= 0xac00 && c <= 0xd7a3) return (c - 0xac00) % 28 !== 0;
+  return /[013678]$/.test(String.fromCharCode(c)); // 일·삼·육·칠·팔·영…
+};
+const isYeyo = (w: string) => `${w}${batchim(w) ? '이에요' : '예요'}`;
+const callName = (n: string) => (batchim(n) && /[가-힣]$/.test(n) ? `${n}이` : n);
+
+// ---------- 날짜 (한국 시간) ----------
+const DAY = 86400000;
+const kstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+const toUTC = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+const dayCount = (from: string, to: string) => Math.round((toUTC(to) - toUTC(from)) / DAY);
+// 그해의 같은 날 (2월 29일은 윤년이 아니면 2월 28일)
+function sameDayIn(d: string, year: number) {
+  const m = +d.slice(5, 7), dd = +d.slice(8, 10);
+  const last = new Date(Date.UTC(year, m, 0)).getUTCDate();
+  return `${year}-${String(m).padStart(2, '0')}-${String(Math.min(dd, last)).padStart(2, '0')}`;
+}
+const yearsOn = (d: string, today: string) => {
+  const y = +today.slice(0, 4) - +d.slice(0, 4);
+  return y > 0 && sameDayIn(d, +today.slice(0, 4)) === today ? y : 0;
+};
+function babyMilestone(birthday: string, today: string) {
+  const day = dayCount(birthday, today) + 1;
+  if (day === 50) return '50일';
+  if (day === 100) return '백일';
+  if (day === 200) return '200일';
+  if (day === 300) return '300일';
+  const y = yearsOn(birthday, today);
+  return y ? (y === 1 ? '첫 돌' : `${y}번째 생일`) : '';
+}
+function togetherMilestone(since: string, today: string) {
+  const day = dayCount(since, today) + 1;
+  if ([100, 200, 300, 500, 1000].includes(day)) return `${day}일`;
+  const y = yearsOn(since, today);
+  return y ? `${y}주년` : '';
+}
+
+type Fam = { id: string; name: string; kind: string; since: string | null; created_at: string; children: Array<{ nickname?: string; name?: string; birthday?: string | null; born?: boolean }>; days: Array<{ name: string; date: string; yearly?: boolean }> };
+function celebrations(f: Fam, today: string) {
+  const out: string[] = [];
+  if (f.kind === 'baby') {
+    for (const c of f.children || []) {
+      if (!c.birthday || !/^\d{4}-\d{2}-\d{2}$/.test(c.birthday)) continue;
+      const who = callName((c.name || c.nickname || '아기').trim());
+      if (c.born === false) { if (c.birthday === today) out.push(`${who}의 출산 예정일`); continue; }
+      if (c.birthday > today) continue;
+      const m = babyMilestone(c.birthday, today);
+      if (m) out.push(`${who}의 ${m}`);
+    }
+  } else {
+    const since = f.since || new Date(new Date(f.created_at).getTime() + 9 * 3600000).toISOString().slice(0, 10);
+    const m = togetherMilestone(since, today);
+    if (m) out.push(`우리 ${f.kind === 'family' ? '가족' : '모임'}의 ${m}`);
+  }
+  for (const d of f.days || []) {
+    if (!d?.date || !/^\d{4}-\d{2}-\d{2}$/.test(d.date) || d.date > today) continue;
+    if (d.yearly) { if (sameDayIn(d.date, +today.slice(0, 4)) === today) out.push(d.name); continue; }
+    if (d.date === today) out.push(d.name);
+    else { const m = togetherMilestone(d.date, today); if (m) out.push(`${d.name} ${m}`); }
+  }
+  return out;
+}
+
+// 매일 아침: 앨범마다 오늘 챙길 날 + N년 전 오늘 사진
+async function daily() {
+  const today = kstToday();
+  const md = today.slice(5);
+  const { data: fams } = await admin.from('families').select('id, name, kind, since, created_at, children, days');
+  let sent = 0;
+  for (const f of (fams || []) as Fam[]) {
+    const cel = celebrations(f, today);
+    const { data: posts } = await admin.from('posts').select('id, taken_at, photos').eq('family_id', f.id).lt('taken_at', `${today}T00:00:00+09:00`);
+    const old = (posts || []).filter((p: { taken_at: string }) => new Date(new Date(p.taken_at).getTime() + 9 * 3600000).toISOString().slice(5, 10) === md);
+    if (!cel.length && !old.length) continue;
+    if (!(await firstTime(`daily:${f.id}:${today}`))) continue;
+    const years = [...new Set(old.map((p: { taken_at: string }) => +today.slice(0, 4) - new Date(new Date(p.taken_at).getTime() + 9 * 3600000).getUTCFullYear()))].sort((a, b) => a - b);
+    const shots = old.reduce((n: number, p: { photos: unknown[] }) => n + (p.photos?.length || 0), 0);
+    const lines = [
+      cel.length ? `오늘은 ${isYeyo(cel.join(' · '))} 🎉` : '',
+      old.length ? `${years[0]}년 전 오늘의 사진 ${shots}장이 있어요 · 눌러서 추억 보기` : '',
+    ].filter(Boolean);
+    const { data: mem } = await admin.from('members').select('user_id').eq('family_id', f.id);
+    const subs = await subsFor((mem || []).map((m: { user_id: string }) => m.user_id), 'daily');
+    sent += await pushTo(subs, {
+      title: f.name, body: lines.join('\n'), tag: `daily-${f.id}`,
+      url: old.length ? `#/open?album=${f.id}&to=${encodeURIComponent('/memories')}` : `#/open?album=${f.id}&to=${encodeURIComponent('/home')}`,
+    });
+  }
+  return sent;
+}
+
+// ================================================================
+//  요청 처리
+// ================================================================
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const url = new URL(req.url);
     const route = url.pathname.split('/').filter(Boolean).pop();
 
+    // 매일 아침 알림 (데이터베이스의 예약 작업이 불러요): 비밀값이 맞아야 해요
+    if (route === 'daily') {
+      const { data } = await admin.from('app_keys').select('value').eq('name', 'cron').maybeSingle();
+      const key = req.headers.get('x-cron-key') || '';
+      if (!data?.value || key !== data.value) return fail('not_allowed', 403);
+      return json({ sent: await daily() });
+    }
+
     // 로그인한 사람 확인
     const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
     const { data: { user } } = await admin.auth.getUser(jwt);
     if (!user) return fail('not_signed_in', 401);
+    const body = req.method === 'POST' && (req.headers.get('content-type') || '').includes('application/json') ? await req.json() : {};
 
-    // 앱이 연결 버튼을 그릴 때: 클라이언트 ID (공개돼도 괜찮은 값)와 준비 상태
-    if (route === 'config') return json({ clientId: CLIENT_ID, ready: !!(CLIENT_ID && CLIENT_SECRET) });
+    // 앱이 처음에 물어봐요: 구글 연결에 쓰는 공개값과 준비 상태, 알림 공개 키
+    if (route === 'config') {
+      const need = [!CLIENT_ID && 'GOOGLE_CLIENT_ID', !CLIENT_SECRET && 'GOOGLE_CLIENT_SECRET', !API_KEY && 'GOOGLE_API_KEY'].filter(Boolean);
+      const v = await vapid().catch(() => null);
+      return json({ clientId: CLIENT_ID, apiKey: API_KEY, ready: !need.length, need, vapid: v?.publicKey || null });
+    }
 
-    const body = req.method === 'POST' && (req.headers.get('content-type') || '').includes('application/json')
-      ? await req.json() : {};
-    const albumId: string = url.searchParams.get('album') || body.album || '';
-    if (!/^[0-9a-f-]{36}$/.test(albumId)) return fail('bad_album');
-
-    const { data: me } = await admin.from('members').select('role').eq('family_id', albumId).eq('user_id', user.id).maybeSingle();
-    if (!me) return fail('not_member', 403);
-    const { data: fam } = await admin.from('families').select('name, drive_folder_id, drive_email').eq('id', albumId).single();
-
-    // 관리자: 드라이브 연결 (브라우저의 구글 로그인 창에서 받은 인증 코드를 토큰으로 바꿔 보관)
+    // ---------- 내 구글 드라이브 연결 (구글 로그인 창에서 받은 인증 코드) ----------
     if (route === 'connect') {
-      if (me.role !== 'owner') return fail('not_owner', 403);
       if (!CLIENT_ID || !CLIENT_SECRET) return fail('drive_not_configured', 500);
       if (typeof body.code !== 'string' || !body.code) return fail('drive_code_expired');
       const t = await googleToken({ grant_type: 'authorization_code', code: body.code, redirect_uri: 'postmessage' });
-      // 구글 화면에서 드라이브 권한 체크를 풀면 사진을 저장할 수 없어요
+      // 구글 화면에서 드라이브 항목 체크를 풀면 사진을 저장할 수 없어요
       if (t.scope && !t.scope.split(' ').includes(SCOPE)) return fail('drive_scope_missing');
-      // 폴더까지 만들어진 다음에 연결 정보를 저장해요 (중간에 실패하면 예전 연결 그대로)
-      const aboutRes = await gfetch(albumId, `${DRIVE}/about?fields=user(emailAddress)`, {}, t.access_token);
+      const aboutRes = await gget(t.access_token, `${DRIVE}/about?fields=user(emailAddress)`);
       if (!aboutRes.ok) return fail(await driveError(aboutRes, 'drive_folder_failed'), 502);
       const email = ((await aboutRes.json())?.user?.emailAddress as string | undefined) || null;
-      // 같은 구글 계정으로 다른 앨범을 이미 연결했으면 구글이 연결 정보를 다시 주지 않아요 → 그걸 같이 써요
-      const refresh = t.refresh_token || (email ? await sameAccountToken(email, albumId) : null);
-      if (!refresh) return fail('drive_no_refresh_token');
-      let folder = fam?.drive_folder_id as string | null;
-      if (!folder || !(await gfetch(albumId, `${DRIVE}/files/${folder}?fields=id,trashed`, {}, t.access_token)).ok) {
-        const created = await gfetch(albumId, `${DRIVE}/files?fields=id`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: `Pastel Memories · ${fam?.name || '가족 앨범'}`, mimeType: 'application/vnd.google-apps.folder' }),
-        }, t.access_token);
-        if (!created.ok) return fail(await driveError(created, 'drive_folder_failed'), 502);
-        folder = (await created.json()).id;
+      const { data: old } = await admin.from('user_drives').select('*').eq('user_id', user.id).maybeSingle() as { data: DriveRow | null };
+      const same = !!old && old.email === email;
+      // 이미 허락한 계정이면 구글이 갱신 토큰을 다시 안 줄 수 있어요 → 같은 계정의 연결 정보를 이어 써요
+      let refresh = t.refresh_token || (same ? old!.refresh_token : null);
+      if (!refresh && email) {
+        const { data: other } = await admin.from('user_drives').select('refresh_token').eq('email', email).limit(1);
+        refresh = other?.[0]?.refresh_token || null;
       }
-      const { data: old } = await admin.from('drive_tokens').select('refresh_token').eq('family_id', albumId).maybeSingle();
-      const { error: saveErr } = await admin.from('drive_tokens').upsert({ family_id: albumId, refresh_token: refresh, connected_by: user.id, updated_at: new Date().toISOString() });
-      if (saveErr) throw new Error(saveErr.message);
-      tokenCache.set(albumId, { token: t.access_token, exp: Date.now() + t.expires_in * 1000 });
-      await admin.from('families').update({ drive_folder_id: folder, drive_email: email, storage: 'drive' }).eq('id', albumId);
-      // 다른 계정으로 바꿨으면 예전 계정의 연결은 돌려줘요 (같은 계정이면 지금 연결까지 풀리니 그대로)
-      const oldEmail = (fam?.drive_email as string | null) || null;
-      if (old?.refresh_token && oldEmail && oldEmail !== email) await revoke(old.refresh_token, oldEmail, albumId);
-      return json({ email });
+      if (!refresh) return fail('drive_no_refresh_token');
+      // 'Pastel Memories' 폴더 (내 드라이브 맨 위)
+      const root = same && (await exists(t.access_token, old!.root_folder)) ? old!.root_folder! : await folder(t.access_token, ROOT_NAME, null, { pm: 'root' });
+      const { error } = await admin.from('user_drives').upsert({
+        user_id: user.id, refresh_token: refresh, email, root_folder: root, folders: same ? old!.folders || {} : {}, updated_at: new Date().toISOString(),
+      });
+      if (error) throw new Error(error.message);
+      tokenCache.set(user.id, { token: t.access_token, exp: Date.now() + t.expires_in * 1000 });
+      // 다른 계정으로 바꿨으면 예전 계정의 연결은 돌려줘요
+      if (old && !same && old.refresh_token !== refresh) await revoke(old.refresh_token, old.email, user.id);
+      return json({ email, root });
     }
 
     if (route === 'disconnect') {
-      if (me.role !== 'owner') return fail('not_owner', 403);
-      const { data: old } = await admin.from('drive_tokens').select('refresh_token').eq('family_id', albumId).maybeSingle();
-      await admin.from('drive_tokens').delete().eq('family_id', albumId);
-      if (old?.refresh_token) await revoke(old.refresh_token, (fam?.drive_email as string | null) || null, albumId);
-      await admin.from('families').update({ storage: 'supabase', drive_email: null }).eq('id', albumId);
-      tokenCache.delete(albumId);
+      const { data: old } = await admin.from('user_drives').select('refresh_token, email').eq('user_id', user.id).maybeSingle();
+      await admin.from('user_drives').delete().eq('user_id', user.id);
+      tokenCache.delete(user.id);
+      if (old?.refresh_token) await revoke(old.refresh_token, old.email, user.id);
       return json({ ok: true });
     }
 
-    const folder = fam?.drive_folder_id as string | null;
-    if (!folder) return fail('drive_not_connected', 409);
+    // 앨범마다 확인: 그 앨범의 멤버인지
+    const albumId: string = url.searchParams.get('album') || body.album || '';
+    if (!/^[0-9a-f-]{36}$/.test(albumId)) return fail('bad_album');
+    const { data: me } = await admin.from('members').select('role, display_name').eq('family_id', albumId).eq('user_id', user.id).maybeSingle();
+    if (!me) return fail('not_member', 403);
+    const { data: fam } = await admin.from('families').select('name').eq('id', albumId).single();
 
-    // 가족 누구나: 사진 올리기
-    if (route === 'upload') {
-      const type = req.headers.get('content-type') || 'image/jpeg';
-      if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(type)) return fail('bad_type');
-      const bytes = new Uint8Array(await req.arrayBuffer());
-      if (!bytes.length || bytes.length > MAX_UPLOAD) return fail('Payload too large', 413);
-      const name = (url.searchParams.get('name') || 'photo.jpg').replace(/[^\w.\-]/g, '_').slice(0, 120);
-      const boundary = `pm${crypto.randomUUID()}`;
-      const meta = JSON.stringify({ name, parents: [folder] });
-      const enc = new TextEncoder();
-      const head = enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${type}\r\n\r\n`);
-      const tail = enc.encode(`\r\n--${boundary}--`);
-      const payload = new Uint8Array(head.length + bytes.length + tail.length);
-      payload.set(head, 0); payload.set(bytes, head.length); payload.set(tail, head.length + bytes.length);
-      const res = await gfetch(albumId, `${UPLOAD}/files?uploadType=multipart&fields=id`, {
-        method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body: payload,
-      });
-      if (!res.ok) return fail(`drive_upload_${res.status}`, 502);
-      return json({ id: (await res.json()).id });
+    // ---------- 올리기 전에: 잠깐 쓰는 출입증 + 이 앨범 폴더 ----------
+    if (route === 'token') {
+      const { data: row } = await admin.from('user_drives').select('*').eq('user_id', user.id).maybeSingle() as { data: DriveRow | null };
+      if (!row) return fail('drive_not_connected', 409);
+      // 앱이 '출입증이 안 된다'고 하면 새로 받아요
+      if (body.fresh) tokenCache.delete(user.id);
+      const prepare = async () => {
+        const t = await userToken(row);
+        let f = row.folders?.[albumId];
+        // 처음이거나, 폴더를 지웠거나 휴지통에 넣었으면 (다시) 만들어요
+        if (!f || !(await exists(t.token, f.id)) || !(await exists(t.token, f.small))) {
+          const root = (await exists(t.token, row.root_folder)) ? row.root_folder! : await folder(t.token, ROOT_NAME, null, { pm: 'root' });
+          const id = f && (await exists(t.token, f.id)) ? f.id : await folder(t.token, folderName(fam?.name || '앨범'), root, { pmAlbum: albumId });
+          await shareByLink(t.token, id);
+          const small = await folder(t.token, SMALL_NAME, id, { pmSmall: albumId });
+          f = { id, small };
+          await admin.from('user_drives').update({ root_folder: root, folders: { ...(row.folders || {}), [albumId]: f }, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+        }
+        return { t, f };
+      };
+      let r: Awaited<ReturnType<typeof prepare>>;
+      try {
+        r = await prepare();
+      } catch (e) {
+        // 보관해 둔 출입증이 막혔으면(구글에서 권한을 없앴거나) 새로 받아 한 번 더 → 연결이 풀렸으면 drive_reconnect
+        if ((e as Error).message !== 'drive_auth') throw e;
+        tokenCache.delete(user.id);
+        r = await prepare();
+      }
+      return json({ token: r.t.token, exp: r.t.exp, folder: r.f.id, small: r.f.small });
     }
 
-    // 가족 누구나: 사진 보기 (앨범 폴더 안의 파일만)
-    if (route === 'file') {
-      const id = url.searchParams.get('id') || '';
-      if (!(await inFolder(albumId, folder, id))) return fail('not_found', 404);
-      const res = await gfetch(albumId, `${DRIVE}/files/${id}?alt=media`);
-      if (!res.ok || !res.body) return fail('not_found', 404);
-      return new Response(res.body, {
-        headers: { ...cors, 'Content-Type': res.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'private, max-age=31536000, immutable' },
-      });
-    }
-
-    // 지우기: 관리자, 또는 그 사진이 들어 있는 게시물을 올린 사람
-    if (route === 'delete') {
-      const ids: string[] = (Array.isArray(body.ids) ? body.ids : []).filter((x: unknown) => typeof x === 'string' && ID_RE.test(x)).slice(0, 100);
-      let mine = new Set<string>();
-      if (me.role !== 'owner') {
-        const { data: rows } = await admin.from('posts').select('photos').eq('family_id', albumId).eq('author_id', user.id);
-        mine = new Set((rows || []).flatMap((r: { photos: Array<Record<string, string>> }) =>
-          r.photos.flatMap((p) => [p.path, p.thumb, p.orig]).filter((x) => x?.startsWith('drive:')).map((x) => x.slice(6))));
+    // ---------- 새 사진 · 댓글 알림 ----------
+    if (route === 'notify') {
+      const type = body.type === 'comment' ? 'comment' : 'post';
+      const id = String(body.id || '');
+      if (!/^[0-9a-f-]{36}$/.test(id)) return fail('bad_id');
+      const stale = (at: string) => new Date(at).getTime() < Date.now() - 15 * 60_000;
+      const who = me.display_name || '멤버';
+      if (type === 'post') {
+        const { data: p } = await admin.from('posts').select('id, author_id, caption, photos, created_at').eq('id', id).eq('family_id', albumId).maybeSingle();
+        if (!p || p.author_id !== user.id || stale(p.created_at)) return fail('not_found', 404);
+        if (!(await firstTime(`post:${id}`))) return json({ sent: 0 });
+        const n = (p.photos || []).length;
+        const videos = (p.photos || []).filter((x: { kind?: string }) => x.kind === 'video').length;
+        const what = videos === n ? `동영상${n > 1 ? ` ${n}개` : ''}` : videos ? `사진·동영상 ${n}개` : `사진${n > 1 ? ` ${n}장` : ''}`;
+        const { data: mem } = await admin.from('members').select('user_id').eq('family_id', albumId).neq('user_id', user.id);
+        const subs = await subsFor((mem || []).map((m: { user_id: string }) => m.user_id), 'post');
+        const cap = String(p.caption || '').replace(/\s+/g, ' ').trim();
+        return json({ sent: await pushTo(subs, {
+          title: fam?.name || 'Pastel Memories', tag: `post-${id}`,
+          body: `${who}${batchim(who) ? '이' : '가'} ${what}${batchim(what) ? '을' : '를'} 올렸어요${cap ? `\n${cap.slice(0, 60)}` : ''}`,
+          url: `#/open?album=${albumId}&to=${encodeURIComponent(`/p/${id}`)}`,
+        }) });
       }
-      let deleted = 0;
-      for (const id of ids) {
-        if (me.role !== 'owner' && !mine.has(id)) continue;
-        if (!(await inFolder(albumId, folder, id))) continue;
-        const res = await gfetch(albumId, `${DRIVE}/files/${id}`, { method: 'DELETE' });
-        if (res.ok || res.status === 404) deleted++;
-      }
-      return json({ deleted });
+      const { data: c } = await admin.from('comments').select('id, post_id, author_id, body, created_at').eq('id', id).eq('family_id', albumId).maybeSingle();
+      if (!c || c.author_id !== user.id || stale(c.created_at)) return fail('not_found', 404);
+      if (!(await firstTime(`comment:${id}`))) return json({ sent: 0 });
+      // 게시물을 올린 사람과 그 게시물에 댓글을 단 사람들에게
+      const { data: p } = await admin.from('posts').select('author_id').eq('id', c.post_id).maybeSingle();
+      const { data: others } = await admin.from('comments').select('author_id').eq('post_id', c.post_id);
+      const to = [...new Set([p?.author_id, ...(others || []).map((o: { author_id: string }) => o.author_id)].filter((u): u is string => !!u && u !== user.id))];
+      const subs = await subsFor(to, 'comment');
+      return json({ sent: await pushTo(subs, {
+        title: `${fam?.name || 'Pastel Memories'} · 댓글`, tag: `comment-${c.post_id}`,
+        body: `${who}: ${String(c.body).replace(/\s+/g, ' ').slice(0, 80)}`,
+        url: `#/open?album=${albumId}&to=${encodeURIComponent(`/p/${c.post_id}`)}`,
+      }) });
     }
 
     return fail('unknown_route', 404);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return fail(msg, /drive_not_connected|drive_reconnect/.test(msg) ? 409 : /drive_quota/.test(msg) ? 507 : /drive_code_expired/.test(msg) ? 400 : 500);
+    return fail(msg, /drive_not_connected|drive_reconnect|drive_auth/.test(msg) ? 409 : /drive_quota/.test(msg) ? 507 : /drive_code_expired/.test(msg) ? 400 : 500);
   }
 });

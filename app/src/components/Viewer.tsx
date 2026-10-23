@@ -7,6 +7,7 @@ import { Icon } from './Icon';
 import { Avatar } from './Avatar';
 import { useBackClose } from './ui';
 import { usePhotoURL } from '../hooks/usePhoto';
+import { VideoSlide, isVideo } from './Video';
 import { useSession } from '../state/session';
 import { fmtDate } from '../lib/dates';
 import { postTag } from '../lib/album';
@@ -58,7 +59,7 @@ export function Viewer({ items, start, onClose, onOpenPost }: {
   const lastTap = useRef(0);
 
   const onDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('button, video')) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const p = [...pts.current.values()];
@@ -153,6 +154,11 @@ export function Viewer({ items, start, onClose, onOpenPost }: {
 }
 
 function ViewerImage({ item }: { item: ViewItem }) {
+  if (isVideo(item)) return <VideoSlide key={item.path} albumId={item.albumId} item={item} className={s.img} autoPlay />;
+  return <ViewerPhoto item={item} />;
+}
+
+function ViewerPhoto({ item }: { item: ViewItem }) {
   const { url } = usePhotoURL(item.albumId, item.path);
   const [ok, setOk] = useState(false);
   const ph = /^data:image\/jpeg;base64,/.test(item.ph) ? item.ph : '';

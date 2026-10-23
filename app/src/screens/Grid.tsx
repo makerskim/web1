@@ -1,8 +1,9 @@
 // 모아보기: 모든 사진을 올린 달별로. 사진이 많아지면 '날짜'(하루·한 달)·'올린 사람'으로 걸러 봐요
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
 import { Photo } from '../components/Photo';
+import { VideoMark } from '../components/Video';
 import { Icon } from '../components/Icon';
 import { openViewer } from '../components/PostHub';
 import { FilterChips, NO_FILTER, matches, monthOf, type Filter } from '../components/Filters';
@@ -17,6 +18,7 @@ export const invalidateGrid = () => { cache = null; };
 
 export function Grid() {
   const album = useAlbum()!;
+  const nav = useNavigate();
   const postsVersion = usePosts((st) => st.list.length + st.list.join().length);
   const [items, setItems] = useState<api.GridItem[] | null>(cache?.albumId === album.id ? cache.items : null);
   const [error, setError] = useState('');
@@ -68,12 +70,19 @@ export function Grid() {
             <h3 className={s.monthBar}>
               {day ? fmtDay(day, true) : fmtMonth(`${k}-01`)}
               <small>{list.length}장{m !== null && m >= 0 ? ` · ${m === 0 ? '첫 달' : `${m}개월`}` : ''}</small>
+              {/* 이 달 사진을 영상처럼 */}
+              {!day && list.length > 1 && (
+                <button className={s.playMonth} onClick={() => nav(`/memories?month=${k}`)} aria-label={`${fmtMonth(`${k}-01`)} 사진 재생`} data-play-month={k}>
+                  <Icon name="play" size={12} /> 재생
+                </button>
+              )}
             </h3>
             <div className={s.tiles}>
               {list.map((it) => (
                 <button key={it.path} className={s.tile} onClick={() => open(it)} aria-label="사진 크게 보기">
                   <Photo albumId={album.id} path={it.thumb} ph={it.ph} className={s.ph} />
                   {it.count > 1 && it.index === 0 && <Icon name="layers" size={16} className={s.multi} />}
+                  <VideoMark item={it} />
                 </button>
               ))}
             </div>

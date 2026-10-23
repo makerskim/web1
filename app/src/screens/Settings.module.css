@@ -83,3 +83,9 @@
 
 /* 설정 줄의 이모지: 줄 아이콘(22px)과 같은 자리·크기로 */
 .tile { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--c-accent-soft); font-size: 17px; line-height: 1; flex: none; }
+
+/* 사진 저장 위치: 각자 구글 드라이브 설명 */
+.howCard { padding: var(--s-4); border-radius: var(--r-md); background: var(--c-accent-soft); font-size: var(--t-sub); line-height: 1.6; color: var(--c-label-2); }
+.howCard > b { display: block; margin-bottom: var(--s-1); color: var(--c-label); font-size: var(--t-callout); }
+.howCard ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; }
+.howCard li b { color: var(--c-label); font-weight: 600; }

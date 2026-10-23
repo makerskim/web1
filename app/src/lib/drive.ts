@@ -1,6 +1,11 @@
-// 관리자: 내 구글 드라이브를 앨범 저장소로 연결 (구글 로그인 창 → 서버 기능이 연결 정보 보관)
-// 클라이언트 ID는 앱 코드가 아니라 서버 기능(Supabase 비밀값 GOOGLE_CLIENT_ID)에서 받아 와요.
-import { driveCall } from './storage';
+// 각자 구글 드라이브
+// - 연결: 구글 로그인 창에서 내 계정을 고르면, 서버 기능이 연결 정보를 보관해요 (한 번만)
+// - 올리기: 앱이 내 드라이브 'Pastel Memories/앨범이름' 폴더에 바로 올려요 (Supabase를 거치지 않아요)
+// - 보기: 앨범 폴더는 '링크가 있는 사람 보기'로 공유돼서, 가족은 구글 드라이브에서 바로 받아 봐요
+// 클라이언트 ID·API 키는 앱 코드가 아니라 서버 기능(Supabase 비밀값)에서 받아 와요.
+import { create } from 'zustand';
+import { sb } from './supabase';
+import { fnCall } from './fn';
 
 declare global {
   interface Window {
@@ -9,6 +14,7 @@ declare global {
 }
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const API = 'https://www.googleapis.com';
 
 let gis: Promise<void> | null = null;
 function loadGis() {
@@ -23,43 +29,53 @@ function loadGis() {
   return gis;
 }
 
-/** 드라이브 연결 준비 상태: ready면 버튼을 누를 수 있어요. 나머지는 앱을 만든 분이 한 번 해 줄 일 */
+// ---------------- 준비 상태 ----------------
+/** ready면 연결·올리기·보기를 할 수 있어요. 나머지는 앱을 만든 분이 한 번 해 줄 일 */
 export type DriveSetup =
-  | { state: 'ready'; clientId: string }
-  | { state: 'missing' | 'old' | 'secrets' | 'jwt' | 'offline' | 'unreachable' | 'error' };
+  | { state: 'ready'; clientId: string; apiKey: string; vapid: string | null }
+  | { state: 'secrets'; need: string[]; vapid: string | null }
+  | { state: 'missing' | 'old' | 'jwt' | 'offline' | 'unreachable' | 'error' };
 
 let setup: Promise<DriveSetup> | null = null;
+let known: DriveSetup | null = null;
 async function loadSetup(): Promise<DriveSetup> {
   try {
-    const r = await driveCall<{ clientId?: string; ready?: boolean }>('config');
-    return r.clientId && r.ready ? { state: 'ready', clientId: r.clientId } : { state: 'secrets' };
+    const r = await fnCall<{ clientId?: string; apiKey?: string; ready?: boolean; need?: string[]; vapid?: string | null }>('config');
+    // 예전 서버 기능은 API 키·알림 키를 몰라요
+    if (!Array.isArray(r.need)) return { state: 'old' };
+    return r.ready && r.clientId && r.apiKey
+      ? { state: 'ready', clientId: r.clientId, apiKey: r.apiKey, vapid: r.vapid ?? null }
+      : { state: 'secrets', need: r.need, vapid: r.vapid ?? null };
   } catch (e) {
     const code = (e as { code?: string }).code || '';
     // 인터넷은 되는데 닿지 않으면, 서버 기능이 없거나 막힌 경우가 많아요 (그 응답엔 CORS 헤더가 없어요)
     if (code === 'offline') return { state: navigator.onLine === false ? 'offline' : 'unreachable' };
     if (code === 'drive_404') return { state: 'missing' };
     if (code === 'drive_401') return { state: 'jwt' };
-    // 예전 서버 기능은 config를 몰라서 '앨범이 없어요'라고 답해요
     if (code === 'bad_album' || code === 'unknown_route') return { state: 'old' };
     return { state: 'error' };
   }
 }
 /** 준비됐을 때만 기억해요 (설정을 마치고 다시 열면 바로 반영) */
 export function driveSetup(fresh = false) {
-  if (!setup || fresh) setup = loadSetup().then((r) => { if (r.state !== 'ready') setup = null; return r; });
+  if (!setup || fresh) setup = loadSetup().then((r) => { known = r; if (r.state !== 'ready') setup = null; return r; });
   return setup;
 }
+/** 지금 알고 있는 API 키 (없으면 null) */
+export const apiKeyNow = () => (known?.state === 'ready' ? known.apiKey : null);
 
 /** 준비가 안 됐을 때 알려 줄 말 (설명서 6번의 몇 단계인지) */
-export const setupHelp: Record<Exclude<DriveSetup['state'], 'ready'>, string> = {
-  missing: '서버 기능(drive)이 아직 없어요. 설명서 6-3을 해 주세요.',
-  old: '서버 기능(drive)이 예전 코드예요. 설명서 6-3대로 새 코드로 바꿔 주세요.',
-  secrets: '구글 클라이언트 ID·보안 비밀번호가 아직 없어요. 설명서 6-5를 해 주세요.',
-  jwt: '서버 기능의 Verify JWT가 켜져 있어요. 설명서 6-4를 해 주세요.',
-  offline: '인터넷 연결을 확인해 주세요.',
-  unreachable: '서버 기능(drive)에 닿지 않아요. 설명서 6-3(배포)과 6-4(Verify JWT 끄기)를 확인해 주세요.',
-  error: '서버 기능에 문제가 있어요. 잠시 후 다시 확인해 주세요.',
-};
+export function setupHelp(st: Exclude<DriveSetup, { state: 'ready' }>) {
+  switch (st.state) {
+    case 'missing': return '서버 기능(drive)이 아직 없어요. 설명서 6-4를 해 주세요.';
+    case 'old': return '서버 기능(drive)이 예전 코드예요. 설명서 6-4대로 새 코드로 바꿔 주세요.';
+    case 'secrets': return `Supabase 비밀값 ${st.need.join(', ')}이 아직 없어요. 설명서 6-6을 해 주세요.`;
+    case 'jwt': return '서버 기능의 Verify JWT가 켜져 있어요. 설명서 6-5를 해 주세요.';
+    case 'offline': return '인터넷 연결을 확인해 주세요.';
+    case 'unreachable': return '서버 기능(drive)에 닿지 않아요. 설명서 6-4(배포)와 6-5(Verify JWT 끄기)를 확인해 주세요.';
+    default: return '서버 기능에 문제가 있어요. 잠시 후 다시 확인해 주세요.';
+  }
+}
 
 // 버튼을 누르자마자 창을 열 수 있게 미리 불러 둬요 (늦으면 팝업이 막혀요)
 export const preloadDrive = () => { driveSetup().then((r) => { if (r.state === 'ready') loadGis().catch(() => {}); }); };
@@ -73,17 +89,33 @@ export function popupWarning() {
   return '';
 }
 
+// ---------------- 내 드라이브 연결 상태 ----------------
+interface MyDrive { loaded: boolean; email: string | null; root: string | null }
+export const useMyDrive = create<MyDrive>(() => ({ loaded: false, email: null, root: null }));
+export async function loadMyDrive() {
+  try {
+    const { data, error } = await sb.rpc('my_drive');
+    if (error) throw error;
+    const row = (Array.isArray(data) ? data[0] : data) as { email?: string | null; root_folder?: string | null } | null;
+    useMyDrive.setState({ loaded: true, email: row ? row.email || '연결됨' : null, root: row?.root_folder || null });
+  } catch {
+    // 데이터베이스 설정 전이면 연결 안 된 것으로
+    useMyDrive.setState({ loaded: true, email: null, root: null });
+  }
+  return useMyDrive.getState();
+}
+export const driveFolderLink = (id: string) => `https://drive.google.com/drive/folders/${id}`;
+
 /** cancelled: 사용자가 '취소'를 누르면 끝나는 약속 · onCode: 구글 창에서 허용한 다음 (이제는 취소 못 해요) */
-export async function connectDrive(albumId: string, hooks: { cancelled?: Promise<never>; onCode?: () => void } = {}): Promise<string | null> {
+export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?: () => void } = {}) {
   const st = await driveSetup();
-  if (st.state !== 'ready') throw new Error(setupHelp[st.state]);
+  if (st.state !== 'ready') throw new Error(setupHelp(st));
   await loadGis();
   const asked = new Promise<string>((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initCodeClient({
       client_id: st.clientId,
       scope: SCOPE,
       ux_mode: 'popup',
-      prompt: 'consent',
       select_account: true,
       callback: (r: { code?: string; scope?: string; error?: string }) => {
         if (!r.code) return reject(new Error('연결을 취소했어요.'));
@@ -100,12 +132,138 @@ export async function connectDrive(albumId: string, hooks: { cancelled?: Promise
   // 홈 화면 앱에서는 구글 창이 답을 안 줄 때가 있어서 취소할 수 있게 해요
   const code = await (hooks.cancelled ? Promise.race([asked, hooks.cancelled]) : asked);
   hooks.onCode?.();
-  const r = await driveCall<{ email: string | null }>('connect', {
-    method: 'POST', body: JSON.stringify({ album: albumId, code }), headers: { 'Content-Type': 'application/json' },
-  });
+  const r = await fnCall<{ email: string | null; root: string | null }>('connect', { code });
+  tickets.clear();
+  useMyDrive.setState({ loaded: true, email: r.email || '연결됨', root: r.root });
   return r.email;
 }
 
-export async function disconnectDrive(albumId: string) {
-  await driveCall('disconnect', { method: 'POST', body: JSON.stringify({ album: albumId }), headers: { 'Content-Type': 'application/json' } });
+export async function disconnectDrive() {
+  await fnCall('disconnect', {});
+  tickets.clear();
+  useMyDrive.setState({ loaded: true, email: null, root: null });
 }
+
+// ---------------- 올리기 ----------------
+// 출입증: 잠깐(1시간) 쓰는 액세스 토큰 + 이 앨범 폴더 (원본) · 작은 사진 폴더
+interface Ticket { token: string; exp: number; folder: string; small: string }
+const tickets = new Map<string, Promise<Ticket>>();
+async function ticket(albumId: string, fresh = false): Promise<Ticket> {
+  const hit = tickets.get(albumId);
+  if (hit && !fresh) {
+    const t = await hit.catch(() => null);
+    if (t && t.exp > Date.now() + 5 * 60_000) return t;
+  }
+  const p = fnCall<Ticket>('token', fresh ? { album: albumId, fresh: true } : { album: albumId }).catch((e) => {
+    tickets.delete(albumId);
+    // 구글에서 연결이 풀렸으면 '연결 안 됨'으로
+    if (/drive_reconnect|drive_not_connected/.test((e as { code?: string }).code || '')) useMyDrive.setState({ loaded: true, email: null, root: null });
+    throw e;
+  });
+  tickets.set(albumId, p);
+  return p;
+}
+
+const uploadError = (status: number, text: string) => {
+  if (/storageQuotaExceeded/.test(text)) return new Error('구글 드라이브 공간이 가득 찼어요. 드라이브를 정리하거나 공간을 늘려 주세요.');
+  return Object.assign(new Error(status === 0 ? '인터넷 연결을 확인해 주세요.' : '구글 드라이브에 올리지 못했어요. 다시 시도해 주세요.'), { status });
+};
+
+function xhr(method: string, url: string, headers: Record<string, string>, body: Blob | string | null, onProgress?: (sent: number) => void) {
+  return new Promise<{ status: number; text: string; location: string | null; range: string | null }>((resolve) => {
+    const x = new XMLHttpRequest();
+    x.open(method, url);
+    Object.entries(headers).forEach(([k, v]) => x.setRequestHeader(k, v));
+    if (onProgress) x.upload.onprogress = (e) => onProgress(e.loaded);
+    x.onload = () => resolve({ status: x.status, text: x.responseText, location: x.getResponseHeader('Location'), range: x.getResponseHeader('Range') });
+    x.onerror = () => resolve({ status: 0, text: '', location: null, range: null });
+    x.send(body);
+  });
+}
+
+const SMALL_LIMIT = 5 * 1024 * 1024;
+const CHUNK = 8 * 1024 * 1024; // 256KB의 배수
+
+async function sendOnce(t: Ticket, blob: Blob, name: string, type: string, small: boolean, onProgress?: (sent: number) => void) {
+  const meta = JSON.stringify({ name, parents: [small ? t.small : t.folder] });
+  const auth = { Authorization: `Bearer ${t.token}` };
+  if (blob.size <= SMALL_LIMIT) {
+    const b = `pm${Math.random().toString(36).slice(2)}`;
+    const body = new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: ${type}\r\n\r\n`, blob, `\r\n--${b}--`]);
+    const r = await xhr('POST', `${API}/upload/drive/v3/files?uploadType=multipart&fields=id`, { ...auth, 'Content-Type': `multipart/related; boundary=${b}` }, body, onProgress);
+    if (r.status >= 200 && r.status < 300) return JSON.parse(r.text).id as string;
+    throw uploadError(r.status, r.text);
+  }
+  // 큰 파일(동영상·큰 원본)은 나눠서 올려요 (끊겨도 이어서)
+  const init = await xhr('POST', `${API}/upload/drive/v3/files?uploadType=resumable&fields=id`,
+    { ...auth, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': type, 'X-Upload-Content-Length': String(blob.size) }, meta);
+  if (init.status < 200 || init.status >= 300 || !init.location) throw uploadError(init.status, init.text);
+  let at = 0;
+  let tries = 0;
+  while (at < blob.size) {
+    const end = Math.min(blob.size, at + CHUNK);
+    const r = await xhr('PUT', init.location, { 'Content-Range': `bytes ${at}-${end - 1}/${blob.size}` }, blob.slice(at, end), (n) => onProgress?.(at + n));
+    if (r.status === 200 || r.status === 201) return JSON.parse(r.text).id as string;
+    if (r.status === 308) {
+      // 받은 데까지 이어서
+      const m = r.range?.match(/bytes=0-(\d+)/);
+      at = m ? +m[1] + 1 : end;
+      tries = 0;
+      continue;
+    }
+    if ((r.status === 0 || r.status >= 500) && tries++ < 4) {
+      await new Promise((res) => setTimeout(res, 1000 * 2 ** tries));
+      // 어디까지 받았는지 물어보고 이어서
+      const q = await xhr('PUT', init.location, { 'Content-Range': `bytes */${blob.size}` }, null);
+      if (q.status === 200 || q.status === 201) return JSON.parse(q.text).id as string;
+      const m = q.range?.match(/bytes=0-(\d+)/);
+      at = q.status === 308 ? (m ? +m[1] + 1 : 0) : at;
+      continue;
+    }
+    throw uploadError(r.status, r.text);
+  }
+  throw uploadError(0, '');
+}
+
+/** 내 드라이브의 이 앨범 폴더에 올리고 파일 ID를 돌려줘요 (small: 앱용 작은 사진 폴더) */
+export async function uploadToDrive(albumId: string, blob: Blob, opts: { name: string; type: string; small?: boolean; onProgress?: (sent: number) => void }) {
+  let t = await ticket(albumId);
+  try {
+    return await sendOnce(t, blob, opts.name, opts.type, !!opts.small, opts.onProgress);
+  } catch (e) {
+    // 출입증이 만료됐거나(401) 폴더를 지웠으면(404) 새로 받아 한 번 더
+    const status = (e as { status?: number }).status;
+    if (status !== 401 && status !== 403 && status !== 404) throw e;
+    t = await ticket(albumId, true);
+    return sendOnce(t, blob, opts.name, opts.type, !!opts.small, opts.onProgress);
+  }
+}
+
+/** 내가 올린 파일을 드라이브 휴지통으로 (게시물을 지울 때). 다른 사람 파일은 그대로 */
+export async function trashOnDrive(albumId: string, ids: string[]) {
+  if (!ids.length) return;
+  const t = await ticket(albumId).catch(() => null);
+  if (!t) return;
+  await Promise.all(ids.map((id) => fetch(`${API}/drive/v3/files/${id}`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${t.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }),
+  }).catch(() => null)));
+}
+
+// ---------------- 보기 ----------------
+/** 공유된 드라이브 파일 주소 (API 키로 읽어요) */
+export async function driveFileURL(id: string) {
+  const st = await driveSetup();
+  if (st.state !== 'ready') throw new Error(setupHelp(st));
+  return `${API}/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(st.apiKey)}`;
+}
+export async function fetchDriveFile(id: string): Promise<Blob> {
+  const res = await fetch(await driveFileURL(id)).catch(() => null);
+  if (!res) throw new Error('인터넷 연결을 확인해 주세요.');
+  if (!res.ok) {
+    const err = new Error(res.status === 404 ? '사진이 올린 사람의 구글 드라이브에서 지워졌어요.' : '구글 드라이브에서 사진을 받지 못했어요.') as Error & { notFound?: boolean };
+    err.notFound = res.status === 404;
+    throw err;
+  }
+  return res.blob();
+}
+export const driveViewLink = (id: string) => `https://drive.google.com/file/d/${id}/view`;

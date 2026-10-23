@@ -26,3 +26,13 @@
 .appear > article { animation: rise .32s cubic-bezier(.32, .72, 0, 1) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .skel i, .appear > article { animation: none; } }
+
+/* N년 전 오늘: 추억 보기 */
+.memory { position: relative; margin: 0 var(--gutter) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #fff4e8, #ffeef3); box-shadow: var(--e-1); }
+.memoryMain { width: 100%; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) 44px var(--s-3) var(--s-3); text-align: left; }
+.memoryThumb { width: 52px; height: 52px; border-radius: 12px; flex: none; }
+.memoryText { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.memoryText b { font-size: var(--t-callout); font-weight: 800; }
+.memoryText small { font-size: var(--t-footnote); color: var(--c-label-2); }
+.memoryPlay { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; padding-left: 2px; background: var(--c-accent-strong); color: #fff; }
+.memoryClose { position: absolute; right: 2px; top: 2px; width: 32px; height: 32px; display: grid; place-items: center; color: var(--c-label-3); }

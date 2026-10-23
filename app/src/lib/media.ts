@@ -1,11 +1,17 @@
 // 휴대폰에 저장하기 · 다른 앱으로 보내기
 import { confirm, progress, toast, copyText } from '../components/ui';
-import { fetchFile, photoBlob } from './storage';
+import { driveId, fetchFile, isDrive, photoBlob } from './storage';
+import { driveViewLink } from './drive';
 import { isIOS, isKakaoInApp } from './device';
 import { ymd } from './dates';
 import type { PhotoMeta } from './types';
 
-const MIME_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif' };
+const MIME_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif',
+  'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/3gpp': '3gp',
+};
+// 이보다 큰 동영상은 휴대폰 메모리에 한 번에 받지 않고 구글 드라이브 화면에서 내려받아요
+const BIG_VIDEO = 200 * 1024 * 1024;
 
 /** 내려받는 파일 이름에 쓸 것: 올린 사람 · 앨범 이름 */
 export interface SaveName { who: string; album: string }
@@ -49,7 +55,17 @@ function kakaoBlocked() {
 
 export async function savePhotos(albumId: string, photos: PhotoMeta[], naming?: SaveName, original = false) {
   if (kakaoBlocked()) return;
-  const prog = photos.length > 1 || original ? progress(original ? '원본을 받는 중' : '사진을 받는 중') : null;
+  // 아주 큰 동영상: 구글 드라이브 화면을 열어 거기서 내려받아요
+  const big = photos.filter((p) => p.kind === 'video' && p.orig && isDrive(p.orig) && (p.origSize || 0) > BIG_VIDEO);
+  if (big.length) {
+    if (await confirm({ title: '큰 동영상이에요', message: '구글 드라이브 화면에서 내려받을 수 있어요. (오른쪽 위 ⋮ → 다운로드)', ok: '드라이브에서 열기' })) {
+      window.open(driveViewLink(driveId(big[0].orig!)), '_blank', 'noopener');
+    }
+    photos = photos.filter((p) => !big.includes(p));
+    if (!photos.length) return;
+  }
+  const hasVideo = photos.some((p) => p.kind === 'video');
+  const prog = photos.length > 1 || original || hasVideo ? progress(hasVideo ? '동영상을 받는 중' : original ? '원본을 받는 중' : '사진을 받는 중') : null;
   let cleaned = 0;
   let noOrig = 0;
   try {
@@ -57,7 +73,7 @@ export async function savePhotos(albumId: string, photos: PhotoMeta[], naming?: 
     for (let i = 0; i < photos.length; i++) {
       const p = photos[i];
       let blob: Blob | null = null;
-      if (original && p.orig) {
+      if ((original || p.kind === 'video') && p.orig) {
         try {
           blob = await fetchFile(albumId, p.orig);
         } catch (e) {
@@ -72,7 +88,7 @@ export async function savePhotos(albumId: string, photos: PhotoMeta[], naming?: 
     }
     prog?.close();
     const notes = [cleaned && `${cleaned}장은 원본이 정리되어`, noOrig && `${noOrig}장은 원본이 없어`].filter(Boolean);
-    const done = () => toast(notes.length ? `저장했어요 · ${notes.join(', ')} 일반 화질로 저장했어요` : original ? '원본 화질로 저장했어요' : '사진을 저장했어요');
+    const done = () => toast(notes.length ? `저장했어요 · ${notes.join(', ')} 일반 화질로 저장했어요` : hasVideo ? '저장했어요' : original ? '원본 화질로 저장했어요' : '사진을 저장했어요');
     if (isIOS() && navigator.canShare?.({ files })) {
       try {
         await navigator.share({ files });
@@ -81,7 +97,7 @@ export async function savePhotos(albumId: string, photos: PhotoMeta[], naming?: 
         if ((e as Error).name === 'AbortError') return;
         if ((e as Error).name === 'NotAllowedError') {
           // 받는 데 시간이 걸리면 아이폰이 공유 창을 막아요 → 한 번 더 눌러서
-          if (await confirm({ title: '사진이 준비됐어요', message: '‘이미지 저장’을 누르면 사진 앱에 저장돼요.', ok: '저장하기' })) {
+          if (await confirm({ title: hasVideo ? '동영상이 준비됐어요' : '사진이 준비됐어요', message: hasVideo ? '‘비디오 저장’을 누르면 사진 앱에 저장돼요.' : '‘이미지 저장’을 누르면 사진 앱에 저장돼요.', ok: '저장하기' })) {
             try { await navigator.share({ files }); done(); } catch { /* 취소 */ }
           }
           return;

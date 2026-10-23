@@ -3,6 +3,8 @@ import { uuid } from './uuid';
 import { sb } from './supabase';
 import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
+import { fnCall } from './fn';
+import { ymd } from './dates';
 import { remember } from './photoCache';
 import type { ActivityEvent, Album, AlbumKind, Anniversary, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
 import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
@@ -25,7 +27,7 @@ const album = (r: Row, m?: Row): Album => {
   return {
   id: r.id, name: r.name, children, bio: r.bio || '',
   babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children.length ? ageBirthday(children) : r.baby_birthday ?? null, inviteCode: r.invite_code,
-  storage: (r.storage || 'supabase') as StorageKind, driveEmail: r.drive_email || null, driveReady: !!r.drive_folder_id && !!r.drive_email, cover: r.cover || '',
+  storage: (r.storage || 'supabase') as StorageKind, cover: r.cover || '',
   kind: toKind(r.kind), since: typeof r.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.since) ? r.since.slice(0, 10) : null, days: toDays(r.days),
   createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
   };
@@ -264,10 +266,17 @@ export async function postTiles(albumId: string): Promise<PostTile[]> {
   }
 }
 
-export interface NewPhoto { blob: Blob; thumb: Blob; w: number; h: number; ph: string; orig?: File }
+export interface NewPhoto {
+  blob: Blob; thumb: Blob; w: number; h: number; ph: string;
+  /** 원본 사진, 또는 동영상 파일 */
+  orig?: File;
+  /** 동영상이면 길이(초) */
+  video?: { dur: number };
+}
 export interface OrigInfo { type: string; ext: string }
 
 const ORIG_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+const VIDEO_TYPES: Record<string, string> = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp' };
 export function originalInfo(file: File): OrigInfo | null {
   const ext = (file.name.match(/\.([a-z0-9]{2,5})$/i)?.[1] || '').toLowerCase();
   const byType = Object.entries(ORIG_TYPES).find(([, t]) => t === file.type);
@@ -276,8 +285,17 @@ export function originalInfo(file: File): OrigInfo | null {
   const e = byType ? byType[0] : ext;
   return { type, ext: e === 'jpeg' ? 'jpg' : e };
 }
+export function videoInfo(file: File): OrigInfo | null {
+  const ext = (file.name.match(/\.([a-z0-9]{2,5})$/i)?.[1] || '').toLowerCase();
+  if (file.type.startsWith('video/')) return { type: file.type, ext: ext || 'mp4' };
+  return VIDEO_TYPES[ext] ? { type: VIDEO_TYPES[ext], ext } : null;
+}
+
+// 드라이브에 보일 원본 이름: '2026-10-23 IMG_1234.HEIC' (찍은 날 + 원래 이름)
+const driveOrigName = (f: File, takenAt: string) => `${ymd(takenAt)} ${(f.name || 'photo').replace(/[\\/\u0000-\u001f]/g, '_').slice(-80)}`;
 
 // 사진 올리기: 화면용·작은 사진을 먼저 모두, 그다음 원본(실패해도 그 원본만 빼고 계속)
+// 동영상은 첫 장면 사진을 먼저, 그다음 동영상 파일 (동영상은 꼭 올라가야 해요)
 export async function createPost(
   a: Album, p: { caption: string; takenAt: string; photos: NewPhoto[] }, onProgress?: (f: number) => void,
 ): Promise<{ post: Post; skippedOriginals: number }> {
@@ -285,11 +303,13 @@ export async function createPost(
   const target = { albumId: a.id, storage: a.storage, postId: id };
   const total = p.photos.reduce((n, ph) => n + ph.blob.size + ph.thumb.size + (ph.orig?.size || 0), 0) || 1;
   let done = 0;
-  const step = (n: number) => { done += n; onProgress?.(done / total); };
+  const step = (n: number) => { done += n; onProgress?.(Math.min(1, done / total)); };
   const uploaded: string[] = [];
-  const put = async (name: string, blob: Blob, type: string, cache: boolean) => {
-    const path = await uploadFile(target, name, blob, type, cache);
+  const put = async (name: string, blob: Blob, type: string, cache: boolean, opts: { small?: boolean; driveName?: string } = {}) => {
+    const base = done;
+    const path = await uploadFile(target, name, blob, type, cache, { ...opts, onProgress: (n) => onProgress?.(Math.min(1, (base + n) / total)) });
     uploaded.push(path);
+    done = base;
     step(blob.size);
     return path;
   };
@@ -299,19 +319,27 @@ export async function createPost(
     for (let i = 0; i < p.photos.length; i++) {
       const ph = p.photos[i];
       metas.push({
-        path: await put(`${i}.jpg`, ph.blob, 'image/jpeg', true),
-        thumb: await put(`${i}_t.jpg`, ph.thumb, 'image/jpeg', true),
+        path: await put(`${i}.jpg`, ph.blob, 'image/jpeg', true, { small: true }),
+        thumb: await put(`${i}_t.jpg`, ph.thumb, 'image/jpeg', true, { small: true }),
         w: ph.w, h: ph.h, ph: ph.ph,
       });
     }
     for (let i = 0; i < p.photos.length; i++) {
       const ph = p.photos[i];
-      const info = ph.orig && originalInfo(ph.orig);
       if (!ph.orig) continue;
+      if (ph.video) {
+        const info = videoInfo(ph.orig);
+        if (a.storage !== 'drive' || !info) throw new Error('동영상은 사진 저장 위치가 ‘각자 구글 드라이브’인 앨범에서 올릴 수 있어요.');
+        const path = await put(`${i}_v.${info.ext}`, ph.orig, info.type, false, { driveName: driveOrigName(ph.orig, p.takenAt) });
+        Object.assign(metas[i], { orig: path, origName: ph.orig.name.slice(-80), origSize: ph.orig.size, kind: 'video', dur: Math.round(ph.video.dur * 10) / 10, mime: info.type });
+        continue;
+      }
+      const info = originalInfo(ph.orig);
       if (!info) { step(ph.orig.size); continue; }
       try {
         const name = `${i}_o.${info.ext}`;
-        const path = await put(name, ph.orig, info.type, false).catch(() => put(name, ph.orig!, info.type, false));
+        const opts = { driveName: driveOrigName(ph.orig, p.takenAt) };
+        const path = await put(name, ph.orig, info.type, false, opts).catch(() => put(name, ph.orig!, info.type, false, opts));
         Object.assign(metas[i], { orig: path, origName: ph.orig.name.slice(-80), origSize: ph.orig.size });
       } catch {
         skippedOriginals++;
@@ -340,14 +368,25 @@ export async function updatePost(id: string, p: { caption?: string; takenAt?: st
 
 export const filesOf = (ph: PhotoMeta) => [ph.path, ph.thumb, ph.orig].filter(Boolean) as string[];
 
-export async function deletePost(p: Post) {
-  // 드라이브 파일은 게시물이 남아 있을 때 지워야 서버가 '이 앨범 사진'인지 확인할 수 있어요
-  const paths = p.photos.flatMap(filesOf).filter((x) => isDrive(x) || x.startsWith(`${p.albumId}/${p.id}/`));
-  const drive = paths.filter(isDrive);
-  if (drive.length) await removeFiles(p.albumId, drive).catch(() => {});
+export async function deletePost(p: Post, uid?: string) {
+  // 구글 드라이브 파일은 올린 사람만 (자기 드라이브 휴지통으로). 관리자가 남의 게시물을 지우면 파일은 올린 사람 드라이브에 남아요
+  const paths = p.photos.flatMap(filesOf).filter((x) => (isDrive(x) && p.authorId === uid) || x.startsWith(`${p.albumId}/${p.id}/`));
   const rows = check(await sb.from('posts').delete().eq('id', p.id).select('id')) as Row[];
   if (!rows.length) throw new Error('지울 수 있는 권한이 없어요.');
-  await removeFiles(p.albumId, paths.filter((x) => !isDrive(x))).catch(() => {});
+  await removeFiles(p.albumId, paths).catch(() => {});
+}
+
+// ---------- 알림 (올린 다음 가족에게) ----------
+export function notify(albumId: string, type: 'post' | 'comment', id: string) {
+  fnCall('notify', { album: albumId, type, id }).catch(() => { /* 알림이 안 가도 올리기는 끝났어요 */ });
+}
+
+// ---------- N년 전 오늘 ----------
+export async function onThisDay(albumId: string, at: Date = new Date()): Promise<Post[]> {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Seoul';
+  const { data, error } = await sb.rpc('on_this_day', { p_family: albumId, p_month: at.getMonth() + 1, p_day: at.getDate(), p_tz: tz });
+  if (error) return [];
+  return ((data || []) as Row[]).map((r) => post({ ...r, likes: [], comments: [] }));
 }
 
 // ---------- 좋아요·댓글 ----------

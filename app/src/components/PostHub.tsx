@@ -74,7 +74,7 @@ async function postMenu(p: Post) {
   if (v === 'delete' && await confirm({ title: '게시물을 지울까요?', message: '사진과 댓글이 모두 사라져요.', ok: '지우기', danger: true })) {
     const pr = progress('지우는 중');
     try {
-      await api.deletePost(p);
+      await api.deletePost(p, useSession.getState().me?.id);
       usePosts.getState().remove(p.id);
       // 앨범 사진으로 쓰던 사진이면 (서버에서도 비워져요) 화면에서도 비워요
       const cover = st.album()?.cover;

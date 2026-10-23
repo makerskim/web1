@@ -1,10 +1,15 @@
-// 사진 올리기: 고르기 → 글 쓰기 → 올리기 (꾸미기 없이, 원본은 항상 함께 저장)
+// 사진·동영상 올리기: 고르기 → 글 쓰기 → 올리기 (꾸미기 없이, 원본은 항상 함께 저장)
+// '각자 구글 드라이브' 앨범이면 올리는 사람의 드라이브에 저장돼요 (처음 한 번 연결)
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { create } from 'zustand';
-import { exportPhoto, loadPhoto, releasePhoto, type PickedPhoto } from '../lib/photo';
+import { exportPhoto, isVideoFile, loadPhoto, releasePhoto, type PickedPhoto } from '../lib/photo';
+import { connectDrive, loadMyDrive, popupWarning, preloadDrive, useMyDrive } from '../lib/drive';
+import { GoogleIcon } from '../components/ProviderIcon';
+import { fmtBytes } from '../lib/image';
+import { fmtDur } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { Button } from '../components/Button';
 import { Avatar } from '../components/Avatar';
@@ -17,6 +22,7 @@ import s from './Compose.module.css';
 
 const MAX_PHOTOS = 10;
 const MAX_ORIGINAL = 25 * 1024 * 1024;
+const MAX_VIDEO = 1024 * 1024 * 1024;
 const canKeep = (f: File) => f.size <= MAX_ORIGINAL && !!api.originalInfo(f);
 const DISCARD = { title: '작성을 그만둘까요?', message: '고른 사진과 쓴 글이 사라져요.', ok: '그만두기', danger: true };
 
@@ -44,12 +50,14 @@ function closeCompose() {
 let input: HTMLInputElement | null = null;
 let appending = false;
 
+// 지금 앨범이 동영상도 받는지 ('각자 구글 드라이브' 앨범만)
+const videoOK = () => useSession.getState().album()?.storage === 'drive';
+
 function openPicker(append: boolean) {
   appending = append;
   if (!input) {
     input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
     input.multiple = true;
     input.className = 'sr-only';
     input.setAttribute('aria-hidden', 'true');
@@ -57,6 +65,7 @@ function openPicker(append: boolean) {
     document.body.appendChild(input);
     input.addEventListener('change', onPicked);
   }
+  input.accept = videoOK() ? 'image/*,video/*' : 'image/*';
   input.click();
 }
 
@@ -66,9 +75,14 @@ async function onPicked() {
   input!.value = '';
   if (!files.length) return;
   const room = MAX_PHOTOS - (add ? useCompose.getState().photos.length : 0);
-  if (files.length > room) { toast(`한 번에 ${MAX_PHOTOS}장까지 올릴 수 있어요`); files = files.slice(0, Math.max(0, room)); }
+  // 동영상: '각자 구글 드라이브' 앨범에서만, 1GB까지
+  const videos = files.filter(isVideoFile);
+  if (videos.length && !videoOK()) { toast('동영상은 사진 저장 위치가 ‘각자 구글 드라이브’인 앨범에서 올릴 수 있어요'); files = files.filter((f) => !isVideoFile(f)); }
+  const big = files.filter((f) => isVideoFile(f) && f.size > MAX_VIDEO);
+  if (big.length) { toast(`동영상은 ${fmtBytes(MAX_VIDEO)}까지 올릴 수 있어요`); files = files.filter((f) => !big.includes(f)); }
+  if (files.length > room) { toast(`한 번에 ${MAX_PHOTOS}개까지 올릴 수 있어요`); files = files.slice(0, Math.max(0, room)); }
   if (!files.length) return;
-  const p = progress('사진을 준비하는 중');
+  const p = progress(videos.length ? '사진·동영상을 준비하는 중' : '사진을 준비하는 중');
   const picked: PickedPhoto[] = [];
   for (let i = 0; i < files.length; i++) {
     try { picked.push(await loadPhoto(files[i])); } catch (e) { toast((e as Error).message); }
@@ -135,6 +149,22 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
   const nav = useNavigate();
   const onHome = /^\/(home)?$/.test(useLocation().pathname);
   const text = useRef<HTMLTextAreaElement>(null);
+  // '각자 구글 드라이브' 앨범: 내 드라이브가 연결돼 있어야 올릴 수 있어요
+  const toDrive = album.storage === 'drive';
+  const myDrive = useMyDrive();
+  const needDrive = toDrive && myDrive.loaded && !myDrive.email;
+  useEffect(() => { if (toDrive) { loadMyDrive(); preloadDrive(); } }, [toDrive]);
+  const linkDrive = async () => {
+    let cancel = () => {};
+    const cancelled = new Promise<never>((_, reject) => { cancel = () => reject(new Error('연결을 취소했어요.')); });
+    cancelled.catch(() => {});
+    const p = progress('구글 창에서 계정을 골라 주세요', () => cancel());
+    try {
+      await connectDrive({ cancelled, onCode: () => { p.cancelable(false); p.set(0.6, '드라이브에 폴더를 만드는 중'); } });
+      p.close();
+      toast('구글 드라이브에 연결했어요. 이제 공유를 눌러 주세요');
+    } catch (e) { p.close(); toast((e as Error).message); }
+  };
 
   // 글이 길어지면 칸도 같이 늘어나요
   useEffect(() => {
@@ -168,12 +198,14 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
 
   const share = async () => {
     if (useCompose.getState().busy) return;
+    if (needDrive) { toast('먼저 내 구글 드라이브를 연결해 주세요'); return; }
     useCompose.setState({ busy: true });
     // 찍은 날은 기록만 해 두고, 화면의 날짜·아이 나이는 올린 날 기준이에요
     const first = new Date(Math.min(...photos.map((p) => +p.takenAt || Date.now())));
     let wake: { release: () => Promise<void> } | null = null;
     try { wake = await (navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen') ?? null; } catch { /* 지원 안 함 */ }
-    const p = progress('사진을 만드는 중');
+    const hasVideo = photos.some((x) => x.video);
+    const p = progress(hasVideo ? '사진·동영상을 준비하는 중' : '사진을 만드는 중');
     try {
       const out: api.NewPhoto[] = [];
       let skipped = 0;
@@ -181,22 +213,26 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
       for (let i = 0; i < photos.length; i++) {
         const item: api.NewPhoto = { ...(await exportPhoto(photos[i])) };
         const f = photos[i].file;
-        if (canKeep(f)) item.orig = f; else skipped++;
+        const v = photos[i].video;
+        if (v) { item.orig = f; item.video = { dur: v.dur }; }
+        else if (canKeep(f)) item.orig = f; else skipped++;
         out.push(item);
         p.set(((i + 1) / photos.length) * 0.15);
       }
       if (skipped) toast(`${skipped}장은 원본으로 올릴 수 없어 일반 화질로 올려요`);
-      p.set(0.15, '앨범에 올리는 중');
+      p.set(0.15, toDrive ? '내 구글 드라이브에 올리는 중' : '앨범에 올리는 중');
       const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: first.toISOString(), photos: out }, (f) => p.set(0.15 + f * 0.85));
       p.close();
       usePosts.getState().prepend(post);
+      // 가족에게 알림 (켜 둔 사람에게만)
+      api.notify(album.id, 'post', post.id);
       // 글쓰기 기록을 홈으로 바꿔 끼워요 (뒤로 눌렀을 때 빈 화면이 남지 않게)
       // 다른 탭에서 올렸으면 홈이 예전 자리 말고 맨 위(방금 올린 사진)에서 열려요
       forgetScroll('/home');
       nav('/home', { replace: true });
       onDone();
       if (onHome) scrollPageTop();
-      toast(skippedOriginals ? `올렸어요 · 원본 ${skippedOriginals}장은 올리지 못했어요` : '사진을 올렸어요');
+      toast(skippedOriginals ? `올렸어요 · 원본 ${skippedOriginals}장은 올리지 못했어요` : photos.every((x) => x.video) ? '동영상을 올렸어요' : hasVideo ? '사진·동영상을 올렸어요' : '사진을 올렸어요');
     } catch (e) {
       p.close();
       toast((e as Error).message || '올리지 못했어요. 다시 시도해 주세요.');
@@ -220,9 +256,24 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
           <textarea ref={text} value={caption} onChange={(e) => useCompose.setState({ caption: e.target.value })} maxLength={2000} rows={3}
             placeholder="사진에 이야기를 남겨 보세요" aria-label="사진 이야기" data-w="caption" />
         </label>
-        {album.storage === 'drive' && <p className={s.note}><Icon name="shield" size={16} /> 관리자의 구글 드라이브에 저장돼요</p>}
+        {toDrive && !needDrive && myDrive.email && (
+          <p className={s.note} data-w="drive-note"><Icon name="shield" size={16} /> 내 구글 드라이브({myDrive.email})의 ‘Pastel Memories › {album.name}’ 폴더에 저장돼요</p>
+        )}
+        {needDrive && (
+          <div className={s.driveGate} data-w="drive-gate">
+            <b>먼저 내 구글 드라이브를 연결해 주세요</b>
+            <p>이 앨범은 사진·동영상을 올린 사람의 구글 드라이브에 저장해요. 한 번만 연결하면 돼요.</p>
+            <Button onClick={linkDrive} className={s.googleBtn} data-w="drive-connect"><GoogleIcon size={18} />구글 계정으로 연결</Button>
+            {popupWarning() && <small>{popupWarning()}</small>}
+          </div>
+        )}
       </div>
-      <div className={s.foot}><Button size="lg" block onClick={share} disabled={busy} data-w="post">공유</Button></div>
+      <div className={s.foot}>
+        {needDrive
+          // 아직 연결 전이면 아래 버튼이 바로 '연결'이에요 (연결하면 '공유'로 바뀌어요)
+          ? <Button size="lg" block onClick={linkDrive} className={s.googleBtn} data-w="drive-connect-foot"><GoogleIcon size={20} />내 구글 드라이브 연결</Button>
+          : <Button size="lg" block onClick={share} disabled={busy || (toDrive && !myDrive.loaded)} data-w="post">공유</Button>}
+      </div>
     </motion.div>
   );
 }
@@ -266,7 +317,10 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
       <div className={s.track} ref={track} onScroll={onScroll} data-w="photos">
         {photos.map((p, i) => (
           <figure className={s.slide} key={p.id} data-w="slide">
-            <img src={p.url} alt={`${photos.length}장 중 ${i + 1}번째 사진`} draggable={false} />
+            {p.video
+              ? <><video src={`${p.url}#t=0.1`} muted playsInline preload="metadata" aria-label={`${photos.length}개 중 ${i + 1}번째 동영상`} />
+                  <span className={s.vBadge}><Icon name="play" size={14} />{fmtDur(p.video.dur)}</span></>
+              : <img src={p.url} alt={`${photos.length}장 중 ${i + 1}번째 사진`} draggable={false} />}
             {many && (
               // 지금 보이는 사진의 ×만 보여요 (옆 사진의 ×가 가장자리에 걸리지 않게). 옆 사진의 ×는 읽어 주지도 않아요
               <button type="button" className={`${s.remove} ${i === at ? '' : s.away}`} onClick={() => onRemove(p.id)}
@@ -279,7 +333,7 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
         {photos.length < MAX_PHOTOS && (
           <button type="button" className={s.add} onClick={addPhotos} data-w="add">
             <span className={s.addIcon}><Icon name="plus" size={26} stroke={2.2} /></span>
-            <span>사진 추가</span>
+            <span>{videoOK() ? '사진·동영상 추가' : '사진 추가'}</span>
             <small>{photos.length}/{MAX_PHOTOS}장</small>
           </button>
         )}
