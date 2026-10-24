@@ -169,8 +169,7 @@ export function Settings() {
         </Group>
 
         <Group title="앱">
-          <Row icon={<Icon name="star" size={22} />} label="기념일 · 추억" detail="홈 화면 카드" onClick={() => nav('/settings/memories')} data-row="memories" />
-          <Row icon={<Icon name="bell" size={22} />} label="알림" detail="새 사진 · 댓글 · 기념일" onClick={() => nav('/settings/notify')} data-row="notify" />
+          <Row icon={<Icon name="bell" size={22} />} label="알림 · 기념일" detail="알림 · 홈 카드 · 기념일" onClick={() => nav('/settings/notify')} data-row="notify" />
           <Row icon={<Icon name="text" size={22} />} label="글자 크기" detail={TEXT_SIZES.find((t) => t.value === textSize)?.label} onClick={() => setSheet('text')} data-row="text" />
           {isStandalone()
             ? <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail="추가됨" />
@@ -322,7 +321,6 @@ export function AlbumSettings() {
       toast(`${sinceLabel(album.kind)}을 바꿨어요`);
     } catch (e) { toast((e as Error).message); }
   };
-  const upcoming = new Map(upcomingDays(album, 10).map((u) => [u.id, u]));
 
   const newCode = async () => {
     if (!(await confirm({ title: '초대 코드를 새로 만들까요?', message: '지금 코드는 더 이상 쓸 수 없어요. 이미 들어온 멤버는 그대로예요.', ok: '새로 만들기' }))) return;
@@ -366,20 +364,6 @@ export function AlbumSettings() {
           {isBaby
             ? <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isOwner ? () => nav('/settings/album/info') : undefined} data-row="kids" />
             : <Row icon={<Icon name="calendar" size={22} />} label={sinceLabel(album.kind)} detail={since ? fmtDate(since) : '고르기'} onClick={isOwner ? () => setSheet('since') : undefined} data-row="since" />}
-        </Group>
-
-        {/* 기념일: 모든 앨범 (앨범 만든 날 · 결혼기념일 · 가족 생일 …) */}
-        <Group title="기념일" footer={`기념일 당일엔 홈 맨 위에 축하가 뜨고, ${album.kind === 'group' ? '모임' : '가족'} 탭에 다가오는 기념일이 보여요.`}>
-          {album.days.map((d) => {
-            const u = upcoming.get(d.id);
-            return (
-              <Row key={d.id} icon={<Emoji e={d.yearly ? '🎂' : '🎉'} />} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
-                detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
-                onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
-            );
-          })}
-          {isOwner && album.days.length < 10 && <Row icon={<Icon name="plus" size={20} />} label="기념일 추가" onClick={() => nav('/settings/album/day/new')} data-row="day-add" />}
-          {!isOwner && !album.days.length && <Row label="아직 기념일이 없어요" />}
         </Group>
 
         <Group title="멤버" footer={isOwner ? '가족뿐 아니라 초대받은 누구나 멤버가 될 수 있어요. 관리자는 멤버와 초대 코드를 관리해요.' : undefined}>
@@ -469,7 +453,7 @@ export function AlbumInfo() {
         </Group>
 
         {isGroup
-          ? <p className={s.kindNote}>{kindInfo(album.kind).label}이에요. {sinceLabel(album.kind)}과 기념일은 <b>설정 → 앨범 설정</b>에서 바꿀 수 있어요.</p>
+          ? <p className={s.kindNote}>{kindInfo(album.kind).label}이에요. {sinceLabel(album.kind)}은 <b>설정 → 앨범 설정</b>, 기념일은 <b>설정 → 알림 · 기념일</b>에서 바꿀 수 있어요.</p>
           : <KidsForm kids={kids} onChange={setKids} />}
       </div>
       {cover.ui}
@@ -477,37 +461,13 @@ export function AlbumInfo() {
   );
 }
 
-// ---------- 기념일 · 추억: 홈 화면 카드 (이 휴대폰) · 기념일 관리 · 알림 ----------
-export function MemorySettings() {
-  const album = useAlbum()!;
-  const nav = useNavigate();
-  const home = useHomePrefs();
-  const owner = album.myRole === 'owner';
-  return (
-    <Page>
-      <TopBar back title="기념일 · 추억" />
-      <div className={s.page}>
-        <Group title="홈 화면에 보이기" footer="이 휴대폰에서만 바뀌어요. 끄면 그날 카드가 홈 맨 위에 나오지 않아요.">
-          <Row label={<Two title="오늘의 기념일" sub="‘오늘은 백일이에요 🎉’ 같은 카드" />} chevron={false} data-row="home-anniv">
-            <Toggle checked={home.anniv} onChange={(v) => setHomePref('anniv', v)} label="오늘의 기념일 카드" data-home="anniv" />
-          </Row>
-          <Row label={<Two title="N년 전 오늘" sub="지난해 오늘 찍은 사진 모아 보기 카드" />} chevron={false} data-row="home-memory">
-            <Toggle checked={home.memory} onChange={(v) => setHomePref('memory', v)} label="N년 전 오늘 카드" data-home="memory" />
-          </Row>
-        </Group>
-        <Group>
-          <Row icon={<Icon name="play" size={22} />} label="N년 전 오늘 보기" onClick={() => nav('/memories')} data-row="memories-open" />
-          <Row icon={<Icon name="calendar" size={22} />} label="기념일 관리" detail={owner ? undefined : '관리자만'} onClick={owner ? () => nav('/settings/album') : undefined} data-row="days" />
-          <Row icon={<Icon name="bell" size={22} />} label="알림" detail="기념일 · N년 전 오늘" onClick={() => nav('/settings/notify')} data-row="notify-link" />
-        </Group>
-      </div>
-    </Page>
-  );
-}
-
-// ---------- 알림 (이 휴대폰) ----------
+// ---------- 알림 · 기념일: 이 휴대폰 알림 · 홈 맨 위 카드 · 기념일 관리 (한 곳에서) ----------
 export function NotifySettings() {
   const nav = useNavigate();
+  const album = useAlbum()!;
+  const isOwner = album.myRole === 'owner';
+  const home = useHomePrefs();
+  const upcoming = new Map(upcomingDays(album, 10).map((u) => [u.id, u]));
   const support = pushSupport();
   const [st, setSt] = useState<{ on: boolean; prefs: PushPrefs; denied: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -531,7 +491,7 @@ export function NotifySettings() {
 
   return (
     <Page>
-      <TopBar back title="알림" />
+      <TopBar back title="알림 · 기념일" />
       <div className={s.page}>
         {support === 'ios-home' && (
           <div className={s.install} data-f="notify-ios">
@@ -549,15 +509,39 @@ export function NotifySettings() {
               </Row>
             </Group>
             {st?.on && (
-              <Group title="받을 알림" footer="기념일·N년 전 오늘 알림은 매일 아침 9시쯤, 챙길 날이나 그날 찍은 지난 사진이 있을 때만 와요.">
+              <Group title="받을 알림" footer="기념일 · N년 전 오늘 알림은 매일 아침 9시쯤, 챙길 날이나 몇 해 전 같은 날 올린 사진이 있을 때만 와요.">
                 <Row label={<Two title="새 사진·동영상" sub="가족이 올리면" />} chevron={false}><Toggle checked={st.prefs.post} onChange={(v) => setPref('post', v)} label="새 사진 알림" data-pref="post" /></Row>
                 <Row label={<Two title="댓글" sub="내 게시물이나 내가 댓글 단 게시물에" />} chevron={false}><Toggle checked={st.prefs.comment} onChange={(v) => setPref('comment', v)} label="댓글 알림" data-pref="comment" /></Row>
                 <Row label={<Two title="기념일" sub="백일·돌·생일, 앨범에 넣은 기념일" />} chevron={false}><Toggle checked={st.prefs.anniv} onChange={(v) => setPref('anniv', v)} label="기념일 알림" data-pref="anniv" /></Row>
-                <Row label={<Two title="N년 전 오늘" sub="지난해 오늘 찍은 사진이 있으면" />} chevron={false}><Toggle checked={st.prefs.memory} onChange={(v) => setPref('memory', v)} label="N년 전 오늘 알림" data-pref="memory" /></Row>
+                <Row label={<Two title="N년 전 오늘" sub="1년 전 · 2년 전 … 같은 날 올린 사진이 있으면" />} chevron={false}><Toggle checked={st.prefs.memory} onChange={(v) => setPref('memory', v)} label="N년 전 오늘 알림" data-pref="memory" /></Row>
               </Group>
             )}
           </>
         )}
+
+        {/* 홈 맨 위 카드 (이 휴대폰에서만) */}
+        <Group title="홈 화면에 보이기" footer="이 휴대폰에서만 바뀌어요. 끄면 그날 카드가 홈 맨 위에 나오지 않아요.">
+          <Row label={<Two title="오늘의 기념일" sub="백일 · 돌 · 생일, 아래 기념일" />} chevron={false} data-row="home-anniv">
+            <Toggle checked={home.anniv} onChange={(v) => setHomePref('anniv', v)} label="오늘의 기념일 카드" data-home="anniv" />
+          </Row>
+          <Row label={<Two title="N년 전 오늘" sub="1년 전 · 2년 전 … 같은 날 올린 사진" />} chevron={false} data-row="home-memory">
+            <Toggle checked={home.memory} onChange={(v) => setHomePref('memory', v)} label="N년 전 오늘 카드" data-home="memory" />
+          </Row>
+        </Group>
+
+        {/* 기념일: 모든 앨범 (앨범 만든 날 · 결혼기념일 · 가족 생일 …) */}
+        <Group title="기념일 관리" footer={`기념일 당일엔 홈 맨 위에 축하가 뜨고, ${album.kind === 'group' ? '모임' : '가족'} 탭에 다가오는 기념일이 보여요.`}>
+          {album.days.map((d) => {
+            const u = upcoming.get(d.id);
+            return (
+              <Row key={d.id} icon={<Emoji e={d.yearly ? '🎂' : '🎉'} />} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
+                detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
+                onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
+            );
+          })}
+          {isOwner && album.days.length < 10 && <Row icon={<Icon name="plus" size={20} />} label="기념일 추가" onClick={() => nav('/settings/album/day/new')} data-row="day-add" />}
+          {!isOwner && !album.days.length && <Row label="아직 기념일이 없어요" />}
+        </Group>
       </div>
     </Page>
   );

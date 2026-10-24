@@ -1,20 +1,27 @@
-.chips { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--s-2); padding: var(--s-2) var(--gutter); }
-.side { display: flex; min-width: 0; }
-.end { justify-content: flex-end; }
-.middle { display: flex; justify-content: center; }
-.chip {
-  display: inline-flex; align-items: center; max-width: 100%; height: 2.5rem; border-radius: var(--r-full);
+/* 아이콘 버튼 (글씨 없이): 올린 사람 · 날짜. 고르면 진하게 */
+.icons { display: inline-flex; align-items: center; gap: var(--s-1); }
+.iconBtn {
+  width: 2.75rem; height: 2.75rem; flex: none; display: grid; place-items: center; border-radius: 50%;
   background: var(--c-surface); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); color: var(--c-label);
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.chipMain { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 100%; padding: 0 var(--s-3) 0 var(--s-3); font-size: var(--t-sub); font-weight: 600; color: inherit; white-space: nowrap; }
-.chipText { overflow: hidden; text-overflow: ellipsis; }
-.chipX { display: grid; place-items: center; width: 36px; height: 100%; margin-left: -6px; color: inherit; flex: none; }
-.chip.on { background: var(--c-label); color: var(--c-surface); box-shadow: none; }
-.chip.on .chipMain { padding-right: var(--s-1); }
-/* 고르기 전엔 달력 아이콘만 (홈 위쪽) */
-.iconOnly { width: 2.75rem; height: 2.75rem; justify-content: center; }
-.iconOnly .chipMain { padding: 0; justify-content: center; width: 100%; }
+.iconBtn:active { transform: scale(.94); }
+.iconBtn.on { background: var(--c-label); color: var(--c-surface); box-shadow: none; }
+
+/* 모아보기 · 가족 탭: 왼쪽 글 · 오른쪽 아이콘 */
+.bar { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--gutter); }
+.barText { flex: 1; min-width: 0; font-size: var(--t-sub); color: var(--c-label); line-height: 1.4; }
+.barText small { font-size: inherit; color: var(--c-label-3); }
+.barClear { flex: none; min-height: 2.25rem; padding: 0 var(--s-3); border-radius: 999px; background: var(--c-accent-soft); font-size: var(--t-footnote); font-weight: 600; color: var(--c-accent-strong); white-space: nowrap; }
+
+/* 고른 것 한 줄 (홈) */
+.summary {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  margin: 0 var(--gutter) var(--s-2); padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+  border-radius: var(--r-md); background: var(--c-accent-soft); font-size: var(--t-sub); color: var(--c-label);
+}
+.summary small { font-size: inherit; color: var(--c-label-2); }
+.summary button { flex: none; min-height: 32px; padding: 0 var(--s-3); border-radius: 999px; background: var(--c-surface); font-size: var(--t-footnote); font-weight: 600; color: var(--c-accent-strong); white-space: nowrap; }
 
 .list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
 .list li { margin: 0; padding: 0; }
@@ -31,23 +38,25 @@
 
 /* 날짜: 아이폰 달력 앱처럼 달이 위아래로 이어져요 */
 .calBox { padding-bottom: var(--s-4); }
-/* 위에 붙는 띠: '모든 날짜' + 요일 줄 */
+/* 위에 붙는 띠: 고르는 방법 + '모든 날짜' (어느 방법이든 같은 자리) */
 .calTop {
   position: sticky; top: calc(var(--s-2) * -1); z-index: 2;
-  margin: 0 calc(var(--gutter) * -1); padding: 0 var(--gutter);
+  margin: calc(var(--s-2) * -1) calc(var(--gutter) * -1) 0; padding: var(--s-2) var(--gutter) 0;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-hairline);
 }
 .allRow { min-height: 3.25rem; padding: var(--s-1) 0; }
 .weekBar {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-  padding: var(--s-2) 0;
+  padding: 0 0 var(--s-1);
 }
 .weekBar span { text-align: center; font-size: var(--t-footnote); font-weight: 600; color: var(--c-label-3); }
 
 .mon { padding-top: var(--s-5); }
 .monHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); padding-bottom: var(--s-2); }
-.monTitle { font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; color: var(--c-accent-strong); font-variant-numeric: tabular-nums; }
+.monTitle { display: flex; flex-direction: column; font-size: var(--t-title3); font-weight: 800; letter-spacing: -0.02em; color: var(--c-accent-strong); font-variant-numeric: tabular-nums; }
+.monTitle small { font-size: var(--t-footnote); font-weight: 600; letter-spacing: 0; color: var(--c-label-3); }
+.calEmpty { padding: var(--s-6) 0; text-align: center; color: var(--c-label-3); font-size: var(--t-sub); }
 .pill {
   min-height: 2.75rem; padding: 0 var(--s-4); border-radius: var(--r-full);
   background: var(--c-surface-2); color: var(--c-label); font-size: var(--t-sub); font-weight: 600;
@@ -58,7 +67,9 @@
 .pill:disabled { background: transparent; color: var(--c-label-3); box-shadow: inset 0 0 0 1px var(--c-hairline); }
 .pillOn { background: var(--c-label); color: var(--c-surface); }
 
-.wk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+/* 칸: 날짜 · 기간은 7칸(요일), 연도 · 개월은 4칸 */
+.cells { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cells4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .blank { min-height: 3.5rem; }
 .cell {
   min-width: 0; min-height: 3.5rem; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -72,6 +83,8 @@
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 .has .num { font-weight: 600; }
+.numWide { width: auto; min-width: min(4rem, 100%); aspect-ratio: auto; height: 2.25rem; padding: 0 6px; border-radius: var(--r-full); font-size: var(--t-callout); }
+.off .num { opacity: .4; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-accent); }
 .isToday, .has:active .isToday { background: var(--c-accent-strong); color: #fff; font-weight: 700; }
 .isSel, .has:active .isSel { background: var(--c-label); color: #fff; font-weight: 700; }
@@ -81,10 +94,6 @@
 .tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; padding: 3px; margin: var(--s-1) 0 var(--s-2); border-radius: var(--r-full); background: var(--c-fill); }
 .tabs button { min-height: 2.25rem; border-radius: var(--r-full); font-size: var(--t-sub); font-weight: 600; color: var(--c-label-2); }
 .tabs .tabOn { background: var(--c-surface); color: var(--c-label); box-shadow: 0 1px 3px rgba(40, 20, 30, .12); }
-.option:disabled { opacity: .45; }
-.yearNum { font-size: var(--t-sub); font-weight: 800; color: var(--c-label); font-variant-numeric: tabular-nums; }
-.optLabel em.sub { margin-left: auto; background: none; padding: 0; color: var(--c-label-3); font-size: var(--t-footnote); font-weight: 500; }
-.rangeHint { margin: 0 0 var(--s-1); font-size: var(--t-footnote); color: var(--c-accent-strong); font-weight: 600; text-align: center; }
 .inRange .num { background: var(--c-accent-soft); }
 .rangeBar {
   position: sticky; bottom: calc(var(--s-4) * -1); z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
@@ -93,3 +102,4 @@
 }
 .rangeBar button { min-height: 2.75rem; padding: 0 var(--s-4); border-radius: var(--r-full); background: var(--c-label); color: var(--c-surface); font-weight: 700; white-space: nowrap; }
 .rangeBar button:disabled { opacity: .4; }
+.rangeBar em { font-style: normal; color: var(--c-accent-strong); }

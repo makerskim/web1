@@ -16,16 +16,16 @@ import s from './Memories.module.css';
 
 const SHOW_MS = 4500;
 
-interface Slide extends PhotoMeta { key: string; postId: string; authorId: string; takenAt: string; caption: string }
-
-/** 오늘과 같은 날(지난해들)에 찍은 사진 */
-export async function memoriesToday(albumId: string): Promise<Slide[]> {
-  const posts = await api.onThisDay(albumId);
-  return posts.flatMap((p) => p.photos.map((ph, i) => ({ ...ph, key: `${p.id}-${i}`, postId: p.id, authorId: p.authorId, takenAt: p.takenAt, caption: i === 0 ? p.caption : '' })))
-    .sort((a, b) => a.takenAt.localeCompare(b.takenAt));
-}
+interface Slide extends PhotoMeta { key: string; postId: string; authorId: string; createdAt: string; caption: string }
 
 const yearsAgo = (iso: string) => new Date().getFullYear() - new Date(iso).getFullYear();
+
+/** 오늘과 같은 날(지난해들)에 올린 사진: 1년 전 → 2년 전 … 해마다 묶어서 (같은 해 안에서는 올린 순서) */
+export async function memoriesToday(albumId: string): Promise<Slide[]> {
+  const posts = await api.onThisDay(albumId);
+  return posts.flatMap((p) => p.photos.map((ph, i) => ({ ...ph, key: `${p.id}-${i}`, postId: p.id, authorId: p.authorId, createdAt: p.createdAt, caption: i === 0 ? p.caption : '' })))
+    .sort((a, b) => yearsAgo(a.createdAt) - yearsAgo(b.createdAt) || a.createdAt.localeCompare(b.createdAt));
+}
 
 export function Memories() {
   const album = useAlbum()!;
@@ -43,7 +43,7 @@ export function Memories() {
     let live = true;
     const load = month
       ? api.allPhotos(album.id).then((list) => list.filter((it) => dayOf(it).slice(0, 7) === month)
-        .sort((a, b) => (a.takenAt || a.createdAt).localeCompare(b.takenAt || b.createdAt) || a.postId.localeCompare(b.postId) || a.index - b.index)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.postId.localeCompare(b.postId) || a.index - b.index)
         .map((it) => ({ ...it, key: `${it.postId}-${it.index}`, caption: '' } as Slide)))
       : memoriesToday(album.id);
     load.then((l) => live && setSlides(l), () => live && setSlides([]));
@@ -86,8 +86,8 @@ export function Memories() {
   }, [i, slides, album.id]);
 
   const it = slides?.[i];
-  const title = month ? fmtMonth(`${month}-01`) : it ? `${yearsAgo(it.takenAt)}년 전 오늘` : 'N년 전 오늘';
-  const years = useMemo(() => [...new Set((slides || []).map((x) => yearsAgo(x.takenAt)))], [slides]);
+  const title = month ? fmtMonth(`${month}-01`) : it ? `${yearsAgo(it.createdAt)}년 전 오늘` : 'N년 전 오늘';
+  const years = useMemo(() => [...new Set((slides || []).map((x) => yearsAgo(x.createdAt)))], [slides]);
 
   return createPortal(
     <motion.div className={s.wrap} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} data-f="memories">
@@ -106,7 +106,7 @@ export function Memories() {
         <div className={s.head}>
           <div>
             <h2 data-f="mem-title">{title}</h2>
-            {it && <small>{fmtDate(it.takenAt)}{!month && years.length > 1 ? ` · ${years.map((y) => `${y}년 전`).join(', ')}` : ''}</small>}
+            {it && <small>{fmtDate(it.createdAt)}{!month && years.length > 1 ? ` · ${years.map((y) => `${y}년 전`).join(', ')}` : ''}</small>}
           </div>
           <button className={s.btn} onClick={close} aria-label="닫기" data-f="mem-close"><Icon name="close" size={24} /></button>
         </div>

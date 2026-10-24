@@ -6,7 +6,7 @@ import { Photo } from '../components/Photo';
 import { VideoMark } from '../components/Video';
 import { Icon } from '../components/Icon';
 import { openViewer } from '../components/PostHub';
-import { FilterChips, NO_FILTER, dayOf, matches, type Filter } from '../components/Filters';
+import { FilterBar, NO_FILTER, dayOf, matches, type Filter } from '../components/Filters';
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
@@ -37,14 +37,11 @@ export function Grid() {
     return () => { live = false; };
   }, [album.id, postsVersion]);
 
-  // 찍은 날 순 (같은 게시물 안에서는 올린 순서 그대로)
+  // 올린 순 (같은 게시물 안에서는 올린 순서 그대로)
   // 생후 N개월로 거르기: 태어난 뒤에만 (그 전엔 출산 예정일이에요)
   const birthday = album.kind === 'baby' && album.babyBirthday && album.babyBirthday <= ymd(new Date()) ? album.babyBirthday : null;
-  // 사진 · 달별(달마다 표지 한 장) — 이 휴대폰에 기억해요
-  const [view, setViewState] = useState<'photos' | 'months'>(() => { try { return localStorage.getItem('pm-grid-view') === 'months' ? 'months' : 'photos'; } catch { return 'photos'; } });
-  const setView = (v: 'photos' | 'months') => { setViewState(v); try { localStorage.setItem('pm-grid-view', v); } catch { /* 무시 */ } };
   const shown = useMemo(() => (items || []).filter((it) => matches(filter, it, birthday))
-    .sort((a, b) => (b.takenAt || b.createdAt).localeCompare(a.takenAt || a.createdAt) || a.postId.localeCompare(b.postId) || a.index - b.index), [items, filter, birthday]);
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.postId.localeCompare(b.postId) || a.index - b.index), [items, filter, birthday]);
   const groups = useMemo(() => {
     const m = new Map<string, api.GridItem[]>();
     shown.forEach((it) => {
@@ -59,39 +56,18 @@ export function Grid() {
   const open = (it: api.GridItem) => {
     openViewer({ items: shown.map((x) => ({ ...x, albumId: album.id })), start: shown.indexOf(it), postLink: true });
   };
-  const filtered = filter.who || filter.period;
   const day = filter.period && filter.period.length === 10 ? filter.period : null; // 하루만 볼 때는 그날로 제목을 달아요
 
   return (
     <Page>
-      <TopBar large title={<span className={s.title}>모아보기</span>} right={items && <span className={s.count}>{filtered ? `${shown.length} / ` : ''}{items.length}장</span>} />
+      <TopBar large title={<span className={s.title}>모아보기</span>} />
+      {/* 왼쪽: 몇 장인지(고르면 고른 것) · 오른쪽: 올린 사람 · 날짜 아이콘 */}
       {!!items?.length && (
         <div className={s.bar}>
-          <FilterChips value={filter} onChange={setFilter} items={items} birthday={birthday} middle={
-            <div className={s.seg} role="radiogroup" aria-label="보기">
-              {([['photos', '사진'], ['months', '달별']] as const).map(([v, label]) => (
-                <button key={v} role="radio" aria-checked={view === v} className={view === v ? s.segOn : ''} onClick={() => setView(v)} data-view={v}>{label}</button>
-              ))}
-            </div>
-          } />
+          <FilterBar value={filter} onChange={setFilter} items={items} shown={shown.length} label="사진" birthday={birthday} />
         </div>
       )}
-      {/* 달별: 달마다 표지 한 장 (아기 앨범은 몇 개월인지도) → 누르면 그 달 사진 */}
-      {view === 'months' && groups.length > 0 && (
-        <div className={s.covers} data-f="month-covers">
-          {groups.map(([k, list]) => {
-            const m = birthday ? babyMonths(birthday, toDate(`${k}-15`)) : null;
-            const cover = list[0];
-            return (
-              <button key={k} className={s.cover} onClick={() => { setFilter({ ...filter, period: k }); setView('photos'); }} data-cover={k}>
-                <Photo albumId={album.id} path={cover.thumb} ph={cover.ph} className={s.coverPh} />
-                <span className={s.coverText}><b>{fmtMonth(`${k}-01`)}</b><small>{list.length}장{m !== null && m >= 0 ? ` · ${m === 0 ? '첫 달' : `${m}개월`}` : ''}</small></span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {view === 'photos' && groups.length > 2 && !day && (
+      {groups.length > 2 && !day && (
         <nav className={s.months} aria-label="달로 바로 가기" data-f="month-strip">
           {groups.map(([k], i) => (
             <button key={k} onClick={() => go(k)} data-go={k}>
@@ -107,7 +83,7 @@ export function Grid() {
       {items && !!items.length && !shown.length && (
         <p className={s.msg}>조건에 맞는 사진이 없어요<br /><button className={s.reset} onClick={() => setFilter(NO_FILTER)}>거르기 풀기</button></p>
       )}
-      {view === 'photos' && groups.map(([k, list]) => {
+      {groups.map(([k, list]) => {
         const m = album.kind === 'baby' && album.babyBirthday ? babyMonths(album.babyBirthday, toDate(day || `${k}-15`)) : null;
         return (
           <section key={k} id={`m-${k}`} className={s.month}>

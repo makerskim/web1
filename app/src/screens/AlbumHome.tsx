@@ -5,7 +5,7 @@ import { Page } from '../components/Bars';
 import { Photo } from '../components/Photo';
 import { VideoMark } from '../components/Video';
 import { Icon, type IconName } from '../components/Icon';
-import { FilterChips, NO_FILTER, matches, type Filter } from '../components/Filters';
+import { FilterBar, NO_FILTER, matches, type Filter } from '../components/Filters';
 import { AmpText, CoverFace, MembersSheet, useCoverChanger } from '../components/AlbumBits';
 import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
@@ -262,7 +262,8 @@ export function AlbumHome() {
           </button>
         ))}
       </nav>
-      {!!base.length && <FilterChips value={filter} onChange={setFilter} items={base} unit="개" birthday={birthday} />}
+      {/* 왼쪽: 몇 개인지(고르면 고른 것) · 오른쪽: 올린 사람 · 날짜 아이콘 */}
+      {!!base.length && <FilterBar value={filter} onChange={setFilter} items={base} shown={shown.length} label={tab === 'liked' ? '좋아요한 게시물' : '게시물'} unit="개" birthday={birthday} />}
 
       {err && !tiles ? (
         <div className={s.empty}><p>사진을 불러오지 못했어요</p><button className={s.link} onClick={() => setReload((n) => n + 1)}>다시 불러오기</button></div>

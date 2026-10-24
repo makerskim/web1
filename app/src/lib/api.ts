@@ -232,30 +232,29 @@ export const setRole = async (albumId: string, uid: string, role: 'owner' | 'mem
   check(await sb.rpc('set_member_role', { p_family: albumId, p_user: uid, p_role: role }));
 
 // ---------- 게시물 ----------
-/** 홈 타임라인: 새로 올린 게 위. range(날짜로 보기)를 주면 그 기간에 찍은 사진만, 최근에 찍은 게 위 ([시작일, 끝 다음날) 'YYYY-MM-DD') */
+/** 홈 타임라인: 새로 올린 게 위. range(날짜로 보기)를 주면 그 기간에 올린 것만 ([시작일, 끝 다음날) 'YYYY-MM-DD') */
 export async function posts(albumId: string, opts: { after?: Post | null; range?: [string, string] | null } = {}, limit = 8): Promise<Post[]> {
-  const col = opts.range ? 'taken_at' : 'created_at';
   let q = sb.from('posts').select(POST_COLS).eq('family_id', albumId)
-    .order(col, { ascending: false }).order('id', { ascending: false }).limit(limit);
+    .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit);
   if (opts.range) {
     // 이 휴대폰 시간의 그날 0시 기준
     const at = (d: string) => new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).toISOString();
-    q = q.gte('taken_at', at(opts.range[0])).lt('taken_at', at(opts.range[1]));
+    q = q.gte('created_at', at(opts.range[0])).lt('created_at', at(opts.range[1]));
   }
   if (opts.after) {
     // 같은 시각이 여럿이어도 빠뜨리지 않게 (시각, ID) 순서로 이어서
-    const at = opts.range ? opts.after.takenAt : opts.after.createdAt;
-    q = q.or(`${col}.lt."${at}",and(${col}.eq."${at}",id.lt.${opts.after.id})`);
+    const at = opts.after.createdAt;
+    q = q.or(`created_at.lt."${at}",and(created_at.eq."${at}",id.lt.${opts.after.id})`);
   }
   return (check(await q) as Row[]).map(post);
 }
 
-/** 날짜로 보기 달력에 쓰는 게시물 날짜들 (올린 사람 · 올린 날 · 찍은 날) */
-export async function postDates(albumId: string): Promise<{ authorId: string; createdAt: string; takenAt: string }[]> {
-  const out: { authorId: string; createdAt: string; takenAt: string }[] = [];
+/** 날짜로 보기 달력에 쓰는 게시물 날짜들 (올린 사람 · 올린 날) */
+export async function postDates(albumId: string): Promise<{ authorId: string; createdAt: string }[]> {
+  const out: { authorId: string; createdAt: string }[] = [];
   for (let from = 0; ; from += 1000) {
-    const rows = check(await sb.from('posts').select('author_id, created_at, taken_at').eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
-    rows.forEach((r) => out.push({ authorId: r.author_id, createdAt: r.created_at, takenAt: r.taken_at }));
+    const rows = check(await sb.from('posts').select('author_id, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
+    rows.forEach((r) => out.push({ authorId: r.author_id, createdAt: r.created_at }));
     if (rows.length < 1000) return out;
   }
 }
