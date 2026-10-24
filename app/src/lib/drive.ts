@@ -35,15 +35,18 @@ function loadGis() {
 export type DriveSetup =
   | { state: 'ready'; clientId: string; apiKey: string; vapid: string | null }
   | { state: 'secrets'; need: string[]; vapid: string | null }
+  /** 세 값은 다 있는데 틀렸어요 (서버 기능이 구글에 물어보고 알려 줘요) */
+  | { state: 'bad'; problem: string; clientId: string }
   | { state: 'missing' | 'old' | 'jwt' | 'offline' | 'unreachable' | 'error' };
 
 let setup: Promise<DriveSetup> | null = null;
 let known: DriveSetup | null = null;
 async function loadSetup(): Promise<DriveSetup> {
   try {
-    const r = await fnCall<{ clientId?: string; apiKey?: string; ready?: boolean; need?: string[]; vapid?: string | null }>('config');
+    const r = await fnCall<{ clientId?: string; apiKey?: string; ready?: boolean; need?: string[]; problem?: string | null; vapid?: string | null }>('config');
     // 예전 서버 기능은 API 키·알림 키를 몰라요
     if (!Array.isArray(r.need)) return { state: 'old' };
+    if (!r.need.length && r.problem) return { state: 'bad', problem: r.problem, clientId: r.clientId || '' };
     return r.ready && r.clientId && r.apiKey
       ? { state: 'ready', clientId: r.clientId, apiKey: r.apiKey, vapid: r.vapid ?? null }
       : { state: 'secrets', need: r.need, vapid: r.vapid ?? null };
@@ -82,9 +85,26 @@ export function setupHelp(st: Exclude<DriveSetup, { state: 'ready' }>) {
     case 'old': return '서버 기능(drive)이 예전 코드예요. 설명서 6-4대로 새 코드로 바꿔 주세요.';
     case 'secrets': return `Supabase 비밀값 ${st.need.join(', ')}이 아직 없어요. 설명서 6-6을 해 주세요.`;
     case 'jwt': return '서버 기능의 Verify JWT가 켜져 있어요. 설명서 6-5를 해 주세요.';
+    case 'bad': return badSecret(st.problem, st.clientId);
     case 'offline': return '인터넷 연결을 확인해 주세요.';
     case 'unreachable': return '서버 기능(drive)에 닿지 않아요. drive가 이 프로젝트에 없거나(설명서 6-4) Verify JWT가 켜져 있어요(설명서 6-5).';
     default: return '서버 기능에 문제가 있어요. 잠시 후 다시 확인해 주세요.';
+  }
+}
+
+// Supabase 비밀값이 틀렸을 때: 어느 칸에 무엇을 넣어야 하는지
+function badSecret(problem: string, clientId: string) {
+  const ID = '클라이언트 ID(숫자-글자.apps.googleusercontent.com)';
+  switch (problem) {
+    case 'client_is_secret': return `GOOGLE_CLIENT_ID 칸에 보안 비밀번호(GOCSPX-…)가 들어 있어요. ${ID}를 넣어 주세요. (설명서 6-6 ①)`;
+    case 'client_is_apikey': return `GOOGLE_CLIENT_ID 칸에 API 키(AIza…)가 들어 있어요. ${ID}를 넣어 주세요. (설명서 6-6 ①)`;
+    case 'client_format': return `GOOGLE_CLIENT_ID 값이 클라이언트 ID 모양이 아니에요. ${ID} 전체를 넣어 주세요. (설명서 6-6 ①)`;
+    case 'apikey_is_client': return 'GOOGLE_API_KEY 칸에 클라이언트 ID가 들어 있어요. AIza로 시작하는 API 키를 넣어 주세요. (설명서 6-6 ③)';
+    case 'apikey_is_secret': return 'GOOGLE_API_KEY 칸에 보안 비밀번호(GOCSPX-…)가 들어 있어요. AIza로 시작하는 API 키를 넣어 주세요. (설명서 6-6 ③)';
+    case 'apikey_format': return 'GOOGLE_API_KEY 값이 API 키 모양이 아니에요. AIza로 시작하는 39글자를 넣어 주세요. (설명서 6-6 ③)';
+    case 'client_not_found': return `구글에 이 클라이언트 ID가 없어요: ${clientId || '(비어 있음)'}. 구글 클라우드 → 클라이언트의 ID와 한 글자씩 같은지 확인하고 다시 넣어 주세요. 방금 만든 클라이언트면 5분쯤 뒤에 다시 확인해 주세요. (설명서 6-6 ①)`;
+    case 'secret_wrong': return 'GOOGLE_CLIENT_SECRET이 이 클라이언트의 보안 비밀번호가 아니에요. 같은 클라이언트에서 Add secret으로 새로 만들어 넣어 주세요. (설명서 6-6 ②)';
+    default: return 'Supabase 비밀값 중 틀린 값이 있어요. 설명서 6-6을 다시 확인해 주세요.';
   }
 }
 
