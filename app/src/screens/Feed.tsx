@@ -80,7 +80,7 @@ export function Feed() {
 
   // N년 전 오늘: 지난해 같은 날 찍은 사진이 있으면 '추억 보기'
   const nav = useNavigate();
-  const [mem, setMem] = useState<{ count: number; years: number; cover: PhotoMeta } | null>(null);
+  const [mem, setMem] = useState<{ count: number; years: string; cover: PhotoMeta } | null>(null);
   const memKey = `pm-mem-${album.id}-${ymd(new Date())}`;
   const [memHidden, setMemHidden] = useState(() => !!load(memKey, false));
   useEffect(() => {
@@ -89,8 +89,9 @@ export function Feed() {
     setMemHidden(!!load(memKey, false));
     memoriesToday(album.id).then((l) => {
       if (!live || !l.length) return;
-      const last = l[l.length - 1];
-      setMem({ count: l.length, years: new Date().getFullYear() - new Date(last.createdAt).getFullYear(), cover: last });
+      // 1년 전 · 2년 전 … (가까운 해부터)
+      const years = [...new Set(l.map((x) => new Date().getFullYear() - new Date(x.createdAt).getFullYear()))];
+      setMem({ count: l.length, years: years.join(' · '), cover: l[0] });
     }, () => {});
     return () => { live = false; };
   }, [album.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -102,6 +103,8 @@ export function Feed() {
           <AmpText text={album.name} /><Icon name="down" size={18} stroke={2.2} />
         </button>
       } right={<span data-f="feed-date"><DateFilter value={period} onChange={pickPeriod} items={dates} unit="개" birthday={birthday} /></span>} />
+      {/* 맨 위 앨범 이름과 첫 사진 사이 띄우기 */}
+      <div className={s.headGap} aria-hidden="true" />
 
       {milestone && !msHidden && home.anniv && (
         <div className={s.milestone}>

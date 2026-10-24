@@ -6,6 +6,7 @@
 .milestone p { flex: 1; font-size: var(--t-sub); }
 .milestone button { width: 36px; height: 36px; display: grid; place-items: center; color: var(--c-label-3); }
 .posts { display: flex; flex-direction: column; }
+.headGap { height: var(--s-3); }
 .end { display: grid; place-items: center; padding: var(--s-6) var(--gutter); min-height: 80px; }
 .endNote { color: var(--c-label-3); font-size: var(--t-footnote); }
 .spinner { width: 24px; height: 24px; border-radius: 50%; border: 2.5px solid var(--c-fill); border-top-color: var(--c-accent); animation: spin .8s linear infinite; }

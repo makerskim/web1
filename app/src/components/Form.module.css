@@ -16,7 +16,8 @@
 .hint { grid-column: 2; margin-top: -10px; padding-bottom: var(--s-2); font-size: var(--t-caption); color: var(--c-label-3); }
 .nav { grid-template-columns: auto 1fr auto auto; color: var(--c-label); }
 .nav:active:not(.static) { background: var(--c-surface-2); }
-.icon { min-width: 28px; height: 28px; display: grid; place-items: center; color: var(--c-label); }
+/* 아이콘 칸: 큰 사진(앨범 사진 · 프로필)도 글자와 같은 높이 가운데에 */
+.icon { min-width: 28px; min-height: 28px; display: grid; place-items: center; color: var(--c-label); }
 .navLabel { font-size: var(--t-callout); font-weight: 500; grid-column: 2; }
 /* 오른쪽 끝(›, 스위치, 설명)은 언제나 같은 자리에 (설명이 있든 없든 › 줄이 맞게) */
 .nav > :last-child:not(.navLabel):not(.icon) { grid-column: -2 / -1; }

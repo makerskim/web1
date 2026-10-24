@@ -18,14 +18,14 @@ const SHOW_MS = 4500;
 
 interface Slide extends PhotoMeta { key: string; postId: string; authorId: string; createdAt: string; caption: string }
 
-/** 오늘과 같은 날(지난해들)에 올린 사진 */
+const yearsAgo = (iso: string) => new Date().getFullYear() - new Date(iso).getFullYear();
+
+/** 오늘과 같은 날(지난해들)에 올린 사진: 1년 전 → 2년 전 … 해마다 묶어서 (같은 해 안에서는 올린 순서) */
 export async function memoriesToday(albumId: string): Promise<Slide[]> {
   const posts = await api.onThisDay(albumId);
   return posts.flatMap((p) => p.photos.map((ph, i) => ({ ...ph, key: `${p.id}-${i}`, postId: p.id, authorId: p.authorId, createdAt: p.createdAt, caption: i === 0 ? p.caption : '' })))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .sort((a, b) => yearsAgo(a.createdAt) - yearsAgo(b.createdAt) || a.createdAt.localeCompare(b.createdAt));
 }
-
-const yearsAgo = (iso: string) => new Date().getFullYear() - new Date(iso).getFullYear();
 
 export function Memories() {
   const album = useAlbum()!;

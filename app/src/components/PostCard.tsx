@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 import { FaceStack } from './People';
 import { useSession } from '../state/session';
 import { myReaction, react } from '../state/actions';
-import { timeAgo } from '../lib/dates';
+import { fmtDay, timeAgo } from '../lib/dates';
 import { postTag } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import { REACTIONS, type Post, type Reaction } from '../lib/types';
@@ -45,6 +45,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
   const ratio = Math.min(1.25, Math.max(0.52, first.h / first.w)); // 4:5 ~ 1.91:1
   // 아이 나이(출산 D-day · 생후 N일, 모임은 기념일)는 올린 날 기준
   const age = postTag(album, post.createdAt);
+  const ago = timeAgo(post.createdAt);
 
   const onTap = () => {
     const now = Date.now();
@@ -198,7 +199,8 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
           <button className={s.cmtLink} onClick={() => h.onComments(post)} data-act="comments-link">댓글 {nComments}개 보기</button>
         )}
         <p className={s.time}>
-          <time dateTime={post.createdAt}>{timeAgo(post.createdAt)}</time>
+          {/* 올린 날 (올해가 아니면 해도) · 일주일 안이면 얼마 전인지도 */}
+          <time dateTime={post.createdAt} data-f="upload-day">{fmtDay(post.createdAt)} 올림</time>{/전$|방금|어제/.test(ago) ? ` · ${ago}` : ''}
         </p>
       </div>
     </article>
