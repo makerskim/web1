@@ -175,7 +175,7 @@ export function Feed() {
           const head = i === 0 ? (order === 'taken' || !!from) : key(posts[i - 1]) !== k;
           return (
             <Fragment key={p.id}>
-              {head && <h3 className={s.monthDiv} data-month={k}>{monthLabel(k, order, album)}</h3>}
+              {head && <h3 className={s.monthDiv} data-feed-month={k}>{monthLabel(k, order, album)}</h3>}
               <PostCard post={p} h={handlers} />
             </Fragment>
           );
