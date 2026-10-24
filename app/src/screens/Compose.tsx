@@ -309,8 +309,8 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
 
 // 피드 사진 칸 비율 (PostCard와 같아요: 첫 사진 기준 4:5 ~ 1.91:1)
 const frameOf = (p: PickedPhoto) => Math.min(1.25, Math.max(0.52, p.h / p.w));
-// 피드에서 사진 양옆(위아래)에 빈자리가 생기는지
-const hasGaps = (photos: PickedPhoto[]) => !!photos.length && photos.some((p) => Math.abs(p.h / p.w - frameOf(photos[0])) > 0.02);
+// 피드에서 사진 양옆(위아래)에 빈자리가 생기는지 (동영상은 언제나 검은 바탕이라 사진만 봐요)
+const hasGaps = (photos: PickedPhoto[]) => !!photos.length && photos.some((p) => !p.video && Math.abs(p.h / p.w - frameOf(photos[0])) > 0.02);
 
 // 올리기 설정: 세로 사진 양옆 · 공개 범위 · 동영상 크기
 function Options({ photos, bg, visibility, shrink, owner }: { photos: PickedPhoto[]; bg: PhotoBg; visibility: Visibility; shrink: boolean; owner: boolean }) {

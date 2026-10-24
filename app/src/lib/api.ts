@@ -377,12 +377,13 @@ export async function createPost(
         step(ph.orig.size);
       }
     }
-    const row = check(await sb.from('posts').insert({
-      id, family_id: a.id, caption: p.caption, taken_at: p.takenAt, photos: metas,
-      // 기본값이 아닐 때만 보내요 (새 칸이 없는 예전 데이터베이스에서도 기본 올리기는 돼요)
-      ...(p.bg && p.bg !== 'blur' ? { bg: p.bg } : {}),
-      ...(p.visibility === 'owners' ? { visibility: 'owners' } : {}),
-    }).select(POST_COLS).single()) as Row;
+    // 기본값이 아닐 때만 보내요 (새 칸이 없는 예전 데이터베이스에서도 기본 올리기는 돼요)
+    const base = { id, family_id: a.id, caption: p.caption, taken_at: p.takenAt, photos: metas, ...(p.visibility === 'owners' ? { visibility: 'owners' } : {}) };
+    const bg = p.bg && p.bg !== 'blur' ? { bg: p.bg } : {};
+    let res = await sb.from('posts').insert({ ...base, ...bg }).select(POST_COLS).single();
+    // 배경 칸이 아직 없으면 배경만 빼고 올려요 (공개 범위는 빼지 않아요: 관리자만이 모두에게 보이면 안 되니까)
+    if (res.error && 'bg' in bg && /schema cache|column .*bg/i.test(res.error.message)) res = await sb.from('posts').insert(base).select(POST_COLS).single();
+    const row = check(res) as Row;
     return { post: post(row), skippedOriginals };
   } catch (e) {
     // 게시물은 저장됐는데 응답만 못 받은 경우엔 지우지 않아요

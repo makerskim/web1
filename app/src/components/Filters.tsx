@@ -196,13 +196,13 @@ function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
     }
     return { byDay, byMonth, byYear, months };
   }, [items]);
-  // 아기 개월: 0개월(첫 달)부터 사진이 있는 마지막 개월까지
+  // 아기 개월: 사진이 있는 개월만 (생후 N개월마다 몇 개인지)
   const babyRows = useMemo(() => {
     if (!birthday) return [];
     const by = new Map<number, number>();
     items.forEach((it) => { const n = babyMonths(birthday, dayOf(it)); if (n !== null && n >= 0) by.set(n, (by.get(n) || 0) + 1); });
-    const top = Math.max(-1, ...by.keys());
-    return Array.from({ length: top + 1 }, (_, n) => ({ n, count: by.get(n) || 0 })).reverse();
+    // 사진이 있는 개월만 (최근부터)
+    return [...by.entries()].sort((x, y) => y[0] - x[0]).map(([n, count]) => ({ n, count }));
   }, [items, birthday]);
   const today = ymd(new Date());
   const box = useRef<HTMLDivElement>(null);
@@ -266,7 +266,7 @@ function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
               const [st, en] = periodRange(`m:${n}`, birthday)!;
               const key = `m:${n}`;
               return (
-                <li key={n}><button type="button" className={s.option} onClick={() => onPick(key)} disabled={!count} aria-pressed={value === key} data-baby-month={n}>
+                <li key={n}><button type="button" className={s.option} onClick={() => onPick(key)} aria-pressed={value === key} data-baby-month={n}>
                   <span className={s.allIcon}><b className={s.yearNum}>{n}</b></span>
                   <span className={s.optLabel}>{n === 0 ? '생후 첫 달' : `생후 ${n}개월`}<em className={s.sub}>{md(st)} ~ {md(addDays(en, -1))}</em></span>
                   <small>{count}{unit}</small>
