@@ -136,8 +136,8 @@ create table if not exists public.posts (
   created_at timestamptz not null default now()
 );
 create index if not exists posts_family_created_idx on public.posts (family_id, created_at desc);
--- 찍은 날 순 타임라인 · 날짜로 찾기
-create index if not exists posts_family_taken_idx on public.posts (family_id, taken_at desc, id desc);
+-- 날짜는 모두 올린 날 기준이라 찍은 날 색인은 쓰지 않아요
+drop index if exists public.posts_family_taken_idx;
 
 create table if not exists public.likes (
   post_id    uuid not null references public.posts(id) on delete cascade,
@@ -544,15 +544,15 @@ insert into public.app_keys (name, value) values ('cron', to_jsonb(replace(gen_r
   on conflict (name) do nothing;
 create table if not exists public.push_sent (key text primary key, at timestamptz not null default now());
 
--- N년 전 오늘 (찍은 날 기준, 오늘 이전 해들)
+-- N년 전 오늘 (올린 날 기준, 오늘 이전 해들)
 create or replace function public.on_this_day(p_family uuid, p_month int, p_day int, p_tz text default 'Asia/Seoul')
 returns setof public.posts language sql stable set search_path = public as $$
   select p.* from posts p
   where p.family_id = p_family
-    and extract(month from p.taken_at at time zone p_tz) = p_month
-    and extract(day from p.taken_at at time zone p_tz) = p_day
-    and (p.taken_at at time zone p_tz)::date < (now() at time zone p_tz)::date
-  order by p.taken_at desc limit 200
+    and extract(month from p.created_at at time zone p_tz) = p_month
+    and extract(day from p.created_at at time zone p_tz) = p_day
+    and (p.created_at at time zone p_tz)::date < (now() at time zone p_tz)::date
+  order by p.created_at desc limit 200
 $$;
 
 -- ---------- 접근 권한 ----------

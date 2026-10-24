@@ -6,6 +6,7 @@
   transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 .scrolled { background: var(--c-glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 1px 0 var(--c-hairline); }
+.white, .white.scrolled { background: var(--c-surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .side { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .right { justify-content: flex-end; }
 .title { font-size: var(--t-headline); font-weight: 700; letter-spacing: -0.02em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }

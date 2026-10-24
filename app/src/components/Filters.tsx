@@ -1,20 +1,21 @@
-// 사진 거르기: 올린 사람(사람 모양) · 날짜(달력 모양) — 홈 · 모아보기 · 가족 탭에서 함께 써요
-// 두 버튼은 양옆에 같은 모양으로 놓여요. 누르면 아래에서 시트가 올라오고, 고르면 버튼이 채워지고 ×로 풀어요.
-// 날짜: 하루 · 한 달(달력) / 한 해 / 기간(시작일 ~ 끝날) / 생후 N개월(아기 앨범). 사진을 찍은 날 기준이에요 (없으면 올린 날)
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+// 사진 거르기: 올린 사람(사람 아이콘) · 날짜(달력 아이콘) — 홈 · 모아보기 · 가족 탭에서 함께 써요
+// 버튼은 글씨 없이 아이콘만. 고르면 버튼이 진하게 채워지고, 무엇을 골랐는지는 아래 한 줄(FilterSummary)에 나와요.
+// 날짜: 하루 · 한 달 / 한 해 · 그 해의 달 / 기간(시작일 ~ 끝날) / 생후 N개월(아기 앨범). 언제나 올린 날 기준이에요
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from './ui';
 import { Icon, type IconName } from './Icon';
 import { Avatar } from './Avatar';
 import { useSession } from '../state/session';
+import { hasBatchim } from '../lib/korean';
 import { WEEKDAYS, addDays, babyMonths, fmtDay, monthCells, toDate, ymd } from '../lib/dates';
 import s from './Filters.module.css';
 
-/** period: 'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD' | 'YYYY-MM-DD~YYYY-MM-DD'(기간) | 'm:N'(생후 N개월) */
+/** period: 'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD' | 'YYYY-MM-DD~YYYY-MM-DD'(기간) | 'm:N'(생후 N개월) | 'm:A-B'(생후 A~B개월) */
 export interface Filter { who: string | null; period: string | null }
 export const NO_FILTER: Filter = { who: null, period: null };
-export interface Dated { authorId: string; createdAt: string; takenAt?: string | null }
-/** 이 사진의 날짜: 찍은 날 (없으면 올린 날) */
-export const dayOf = (it: Dated) => ymd(new Date(it.takenAt || it.createdAt));
+export interface Dated { authorId: string; createdAt: string }
+/** 이 사진의 날짜: 올린 날 */
+export const dayOf = (it: Dated) => ymd(new Date(it.createdAt));
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -33,8 +34,8 @@ export function periodRange(p: string, birthday?: string | null): [string, strin
   if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return [p, addDays(p, 1)];
   const r = p.match(/^(\d{4}-\d{2}-\d{2})~(\d{4}-\d{2}-\d{2})$/);
   if (r) { const [a, b] = r[1] <= r[2] ? [r[1], r[2]] : [r[2], r[1]]; return [a, addDays(b, 1)]; }
-  const m = p.match(/^m:(\d{1,3})$/);
-  if (m && birthday) return [babyMonthStart(birthday, +m[1]), babyMonthStart(birthday, +m[1] + 1)];
+  const m = p.match(/^m:(\d{1,3})(?:-(\d{1,3}))?$/);
+  if (m && birthday) return [babyMonthStart(birthday, +m[1]), babyMonthStart(birthday, +(m[2] ?? m[1]) + 1)];
   return null;
 }
 
@@ -48,7 +49,11 @@ export function matches(f: Filter, it: Dated, birthday?: string | null) {
   return true;
 }
 
-// '2026년' · '2026년 8월' · '8월 20일 (목)' · '8월 1일 ~ 8월 15일' · '생후 3개월'
+// 돌: 0~11개월은 첫 돌까지, 12~23개월은 두 돌까지 …
+const DOL = ['첫', '두', '세', '네', '다섯', '여섯', '일곱', '여덟', '아홉', '열'];
+const dolTitle = (i: number) => `${DOL[i] ?? `${i + 1}번째`} 돌까지`;
+
+// '2026년' · '2026년 8월' · '8월 20일 (목)' · '8월 1일 ~ 8월 15일' · '생후 3개월' · '생후 0~11개월'
 const md = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일`;
 export function periodLabel(p: string) {
   if (p.length === 4) return `${p}년`;
@@ -62,61 +67,90 @@ export function periodLabel(p: string) {
     const y = (d: string) => (d.slice(0, 4) === thisYear && a.slice(0, 4) === b.slice(0, 4) ? '' : `${d.slice(0, 4)}년 `);
     return `${y(a)}${md(a)} ~ ${a.slice(0, 4) === b.slice(0, 4) ? '' : `${b.slice(0, 4)}년 `}${md(b)}`;
   }
-  const m = p.match(/^m:(\d+)$/);
+  const m = p.match(/^m:(\d+)(?:-(\d+))?$/);
+  if (m && m[2]) return `생후 ${m[1]}~${m[2]}개월`;
   if (m) return +m[1] === 0 ? '생후 첫 달' : `생후 ${m[1]}개월`;
   return p;
 }
 
-// ---------- 버튼: 아이콘 + 이름 (고르면 채워지고 ×) ----------
-function FilterButton({ icon, label, on, onOpen, onClear, compact, ...rest }: {
-  icon: IconName; label: string; on: boolean; onOpen: () => void; onClear: () => void; compact?: boolean; 'data-chip': string;
+// ---------- 버튼: 아이콘만 (고르면 진하게) ----------
+function FilterButton({ icon, label, on, onOpen, ...rest }: {
+  icon: IconName; label: string; on: boolean; onOpen: () => void; 'data-chip': string;
 }) {
   return (
-    <span className={`${s.chip} ${on ? s.on : ''} ${compact && !on ? s.iconOnly : ''}`} {...rest}>
-      <button type="button" className={s.chipMain} onClick={onOpen} aria-haspopup="dialog" aria-label={compact && !on ? label : undefined}>
-        <Icon name={icon} size={18} stroke={2} />{(!compact || on) && <span className={s.chipText}>{label}</span>}
-      </button>
-      {on && <button type="button" className={s.chipX} onClick={onClear} aria-label={`${label} 거르기 풀기`}><Icon name="close" size={14} stroke={2.6} /></button>}
-    </span>
+    <button type="button" className={`${s.iconBtn} ${on ? s.on : ''}`} onClick={onOpen} aria-haspopup="dialog" aria-pressed={on} aria-label={label} {...rest}>
+      <Icon name={icon} size={20} stroke={2} />
+    </button>
   );
 }
 
-/** 날짜 버튼 하나 (+ 시트). compact: 고르기 전엔 달력 아이콘만 (홈 위쪽) */
-export function DateFilter({ value, onChange, items, unit = '장', birthday, compact }: {
-  value: string | null; onChange: (p: string | null) => void; items: Dated[]; unit?: string; birthday?: string | null; compact?: boolean;
+/** 날짜 버튼 (+ 시트) */
+export function DateFilter({ value, onChange, items, unit = '장', birthday }: {
+  value: string | null; onChange: (p: string | null) => void; items: Dated[]; unit?: string; birthday?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <FilterButton icon="calendar" label={value ? periodLabel(value) : '날짜'} on={!!value} compact={compact}
-        onOpen={() => setOpen(true)} onClear={() => onChange(null)} data-chip="date" />
+      <FilterButton icon="calendar" label={value ? `날짜: ${periodLabel(value)}` : '날짜로 보기'} on={!!value} onOpen={() => setOpen(true)} data-chip="date" />
       <DateSheet open={open} onClose={() => setOpen(false)} items={items} unit={unit} birthday={birthday}
         value={value} onPick={(p) => { onChange(p); setOpen(false); }} />
     </>
   );
 }
 
-/** 올린 사람(왼쪽) · 가운데(선택) · 날짜(오른쪽) — 양옆 대칭 */
-export function FilterChips({ value, onChange, items, unit = '장', birthday, middle }: {
-  value: Filter; onChange: (f: Filter) => void; items: Dated[]; unit?: string; birthday?: string | null; middle?: ReactNode;
+/** 올린 사람 · 날짜 아이콘 두 개 (나란히) */
+export function FilterIcons({ value, onChange, items, unit = '장', birthday }: {
+  value: Filter; onChange: (f: Filter) => void; items: Dated[]; unit?: string; birthday?: string | null;
 }) {
   const [who, setWho] = useState(false);
   const member = useSession((st) => st.member);
   return (
-    <>
-      <div className={s.chips} role="toolbar" aria-label="사진 거르기">
-        <div className={s.side}>
-          <FilterButton icon="user" label={value.who ? member(value.who).displayName : '올린 사람'} on={!!value.who}
-            onOpen={() => setWho(true)} onClear={() => onChange({ ...value, who: null })} data-chip="who" />
-        </div>
-        {middle && <div className={s.middle}>{middle}</div>}
-        <div className={`${s.side} ${s.end}`}>
-          <DateFilter value={value.period} onChange={(period) => onChange({ ...value, period })} items={items} unit={unit} birthday={birthday} />
-        </div>
-      </div>
+    <span className={s.icons} role="toolbar" aria-label="사진 거르기">
+      <FilterButton icon="user" label={value.who ? `올린 사람: ${member(value.who).displayName}` : '올린 사람으로 보기'} on={!!value.who} onOpen={() => setWho(true)} data-chip="who" />
+      <DateFilter value={value.period} onChange={(period) => onChange({ ...value, period })} items={items} unit={unit} birthday={birthday} />
       <WhoSheet open={who} onClose={() => setWho(false)} items={items} unit={unit}
         value={value.who} onPick={(w) => { onChange({ ...value, who: w }); setWho(false); }} />
+    </span>
+  );
+}
+
+// 고른 것: '2025년 8월에 엄마가 올린 사진'
+function Chosen({ value }: { value: Filter }) {
+  const member = useSession((st) => st.member);
+  const name = value.who ? member(value.who).displayName : '';
+  return (
+    <>
+      {value.period && <><b>{periodLabel(value.period)}</b>에 </>}
+      {name && <><b>{name}</b>{hasBatchim(name) ? '이' : '가'} </>}
+      올린 사진
     </>
+  );
+}
+
+/** 고른 것 한 줄 + 모두 보기 (홈 위쪽, 고른 게 없으면 안 보여요) */
+export function FilterSummary({ value, onClear }: { value: Filter; onClear: () => void }) {
+  if (!value.who && !value.period) return null;
+  return (
+    <div className={s.summary} data-f="filter-summary">
+      <span><Chosen value={value} /></span>
+      <button type="button" onClick={onClear} data-f="filter-all">모두 보기</button>
+    </div>
+  );
+}
+
+/** 모아보기 · 가족 탭: 왼쪽에 몇 개인지(고르면 고른 것), 오른쪽에 아이콘 두 개 */
+export function FilterBar({ value, onChange, items, shown, label, unit = '장', birthday }: {
+  value: Filter; onChange: (f: Filter) => void; items: Dated[]; shown: number; label: string; unit?: string; birthday?: string | null;
+}) {
+  const on = !!(value.who || value.period);
+  return (
+    <div className={s.bar} data-f="filter-bar">
+      <p className={s.barText} data-f="filter-text">
+        {on ? <><Chosen value={value} /><small> · {shown}{unit}</small></> : <>{label} <small>{items.length}{unit}</small></>}
+      </p>
+      {on && <button type="button" className={s.barClear} onClick={() => onChange(NO_FILTER)} data-f="filter-all">모두 보기</button>}
+      <FilterIcons value={value} onChange={onChange} items={items} unit={unit} birthday={birthday} />
+    </div>
   );
 }
 
@@ -155,8 +189,15 @@ function WhoSheet({ open, onClose, items, value, onPick, unit }: {
   );
 }
 
+// ---------- 날짜로 보기 ----------
+// 네 가지 모두 같은 모양이에요: 위에 고르는 방법 · '모든 날짜' (붙어 있어요)
+// → 묶음마다 분홍 제목 + 오른쪽 '전체' 버튼 + 동그란 칸들(올린 게 있으면 점)
 type Tab = 'day' | 'year' | 'range' | 'baby';
 const tabOf = (v: string | null): Tab => (!v ? 'day' : v.length === 4 ? 'year' : v.includes('~') ? 'range' : v.startsWith('m:') ? 'baby' : 'day');
+const MONTHS = Array.from({ length: 12 }, (_, i) => i);
+
+interface Cell { key: string; label: string; count: number; pick: string; today?: boolean; off?: boolean }
+interface Section { key: string; title: string; sub?: string; all: { pick: string; count: number; label: string } | null; week?: boolean; cols: number; cells: (Cell | null)[] }
 
 function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
   open: boolean; onClose: () => void; items: Dated[]; value: string | null; onPick: (v: string | null) => void; unit: string; birthday?: string | null;
@@ -172,18 +213,22 @@ function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
     setA(r ? r[1] : null); setB(r ? r[2] : null);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 날마다·달마다·해마다 몇 개인지, 그리고 가장 오래된 달부터 가장 최근 달까지 (빈 달도 이어서)
+  // 날마다·달마다·해마다·생후 개월마다 몇 개인지
   const cal = useMemo(() => {
     const byDay = new Map<string, number>();
     const byMonth = new Map<string, number>();
     const byYear = new Map<string, number>();
+    const byAge = new Map<number, number>();
     items.forEach((it) => {
       const d = dayOf(it);
       byDay.set(d, (byDay.get(d) || 0) + 1);
       byMonth.set(d.slice(0, 7), (byMonth.get(d.slice(0, 7)) || 0) + 1);
       byYear.set(d.slice(0, 4), (byYear.get(d.slice(0, 4)) || 0) + 1);
+      const n = birthday ? babyMonths(birthday, d) : null;
+      if (n !== null && n >= 0) byAge.set(n, (byAge.get(n) || 0) + 1);
     });
-    const keys = [...byMonth.keys()].filter((k) => /^\d{4}-\d{2}$/.test(k)).sort();
+    // 가장 오래된 달부터 가장 최근 달까지 (빈 달도 이어서)
+    const keys = [...byMonth.keys()].sort();
     const months: Array<{ k: string; y: number; m: number }> = [];
     if (keys.length) {
       const [lo, hi] = [keys[0], keys[keys.length - 1]];
@@ -194,27 +239,73 @@ function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
         if (k >= hi) break;
       }
     }
-    return { byDay, byMonth, byYear, months };
-  }, [items]);
-  // 아기 개월: 사진이 있는 개월만 (생후 N개월마다 몇 개인지)
-  const babyRows = useMemo(() => {
-    if (!birthday) return [];
-    const by = new Map<number, number>();
-    items.forEach((it) => { const n = babyMonths(birthday, dayOf(it)); if (n !== null && n >= 0) by.set(n, (by.get(n) || 0) + 1); });
-    // 사진이 있는 개월만 (최근부터)
-    return [...by.entries()].sort((x, y) => y[0] - x[0]).map(([n, count]) => ({ n, count }));
+    const years = keys.length ? Array.from({ length: +keys[keys.length - 1].slice(0, 4) - +keys[0].slice(0, 4) + 1 }, (_, i) => String(+keys[0].slice(0, 4) + i)) : [];
+    return { byDay, byMonth, byYear, byAge, months, years };
   }, [items, birthday]);
-  const today = ymd(new Date());
-  const box = useRef<HTMLDivElement>(null);
 
-  // 달력을 열 때: 고른 달(없으면 가장 최근 달)이 바로 보이게
+  const today = ymd(new Date());
+  const thisMonth = today.slice(0, 7);
+  const ageNow = birthday ? babyMonths(birthday, today) : null;
+  const [lo, hi] = a && b ? (a <= b ? [a, b] : [b, a]) : [a, a];
+  const tapRange = (d: string) => { if (!a || b) { setA(d); setB(null); } else setB(d); };
+  const sumDays = (x: string, y: string) => [...cal.byDay.entries()].filter(([d]) => d >= x && d <= y).reduce((n, [, c]) => n + c, 0);
+  const rangeCount = lo && hi ? sumDays(lo, hi) : 0;
+
+  // 지금 고르는 방법의 묶음들
+  const sections: Section[] = useMemo(() => {
+    if (tab === 'year') {
+      return cal.years.map((y) => ({
+        key: y, title: `${y}년`, cols: 4,
+        all: { pick: y, count: cal.byYear.get(y) || 0, label: '이 해 전체' },
+        cells: MONTHS.map((m) => {
+          const k = `${y}-${pad(m + 1)}`;
+          return { key: k, label: `${m + 1}월`, count: cal.byMonth.get(k) || 0, pick: k, today: k === thisMonth };
+        }),
+      }));
+    }
+    if (tab === 'baby') {
+      if (!birthday) return [];
+      const top = Math.max(ageNow ?? 0, ...cal.byAge.keys());
+      return Array.from({ length: Math.floor(top / 12) + 1 }, (_, i) => {
+        const [from, to] = [i * 12, i * 12 + 11];
+        const count = [...cal.byAge.entries()].filter(([n]) => n >= from && n <= to).reduce((x, [, c]) => x + c, 0);
+        return {
+          key: `a${i}`, title: dolTitle(i), sub: `생후 ${from}~${to}개월`, cols: 4,
+          all: { pick: `m:${from}-${to}`, count, label: '1년 전체' },
+          cells: MONTHS.map((j) => {
+            const n = from + j;
+            return { key: `m:${n}`, label: `${n}개월`, count: cal.byAge.get(n) || 0, pick: `m:${n}`, today: n === ageNow, off: ageNow !== null && n > ageNow };
+          }),
+        };
+      });
+    }
+    // 날짜 · 기간: 달력
+    return cal.months.map(({ k, y, m }) => {
+      const last = `${k}-${pad(new Date(y, m + 1, 0).getDate())}`;
+      return {
+        key: k, title: `${y}년 ${m + 1}월`, cols: 7, week: true,
+        all: { pick: tab === 'range' ? `${k}-01~${last}` : k, count: cal.byMonth.get(k) || 0, label: '이 달 전체' },
+        cells: monthCells(y, m).map((d) => {
+          if (!d) return null;
+          const key = `${k}-${pad(d)}`;
+          return { key, label: String(d), count: cal.byDay.get(key) || 0, pick: key, today: key === today };
+        }),
+      };
+    });
+  }, [tab, cal, birthday, ageNow, today, thisMonth]);
+
+  // 시트를 열거나 방법을 바꾸면: 고른 묶음(없으면 가장 최근 묶음)이 바로 보이게
+  const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = box.current;
-    if (!open || !el || (tab !== 'day' && tab !== 'range')) return;
+    if (!open || !el || !sections.length) return;
     const at = tab === 'range' ? a : value;
-    const want = at && /^\d{4}-\d{2}/.test(at) ? cal.months.filter((x) => x.k.startsWith(at.slice(0, 7))).pop()?.k : undefined;
-    const k = want || cal.months[cal.months.length - 1]?.k;
-    const sec = k && el.querySelector<HTMLElement>(`[data-cal-month="${k}"]`);
+    let want: string | undefined;
+    if (at && tab === 'year') want = at.slice(0, 4);
+    else if (at && (tab === 'day' || tab === 'range') && /^\d{4}-\d{2}/.test(at)) want = at.slice(0, 7);
+    else if (at && tab === 'baby') { const n = at.match(/^m:(\d+)/); if (n) want = `a${Math.floor(+n[1] / 12)}`; }
+    const k = sections.some((x) => x.key === want) ? want! : sections[sections.length - 1].key;
+    const sec = el.querySelector<HTMLElement>(`[data-sec="${k}"]`);
     let sc = el.parentElement;
     while (sc && !/(auto|scroll)/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
     if (!sec || !sc) return;
@@ -222,15 +313,24 @@ function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
     sc.scrollTop += sec.getBoundingClientRect().top - sc.getBoundingClientRect().top - bar;
   }, [open, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [lo, hi] = a && b ? (a <= b ? [a, b] : [b, a]) : [a, a];
-  const rangeCount = lo && hi ? [...cal.byDay.entries()].filter(([d]) => d >= lo && d <= hi).reduce((n, [, c]) => n + c, 0) : 0;
-  const tapRange = (d: string) => { if (!a || b) { setA(d); setB(null); } else setB(d); };
   const tabs: Array<[Tab, string]> = [['day', '날짜'], ['year', '연도'], ['range', '기간'], ...(birthday ? [['baby', '개월'] as [Tab, string]] : [])];
+  const isRange = tab === 'range';
+  // 칸을 누르면: 날짜 · 연도 · 개월은 바로 보기, 기간은 시작일 → 끝날
+  const pickCell = (c: Cell) => (isRange ? tapRange(c.pick) : onPick(c.pick));
+  const pickAll = (sec: Section) => {
+    if (!sec.all) return;
+    if (!isRange) { onPick(sec.all.pick); return; }
+    const [x, y] = sec.all.pick.split('~');
+    setA(x); setB(y);
+  };
+  const allOn = (sec: Section) => (isRange ? !!sec.all && sec.all.pick === `${lo}~${hi}` : value === sec.all?.pick);
+  const attr = (c: Cell) => (tab === 'year' ? { 'data-year-month': c.pick } : tab === 'baby' ? { 'data-baby-month': c.pick.slice(2) } : isRange ? { 'data-range-day': c.pick } : { 'data-day-pick': c.pick });
+  const allAttr = (sec: Section) => (tab === 'year' ? { 'data-year': sec.key } : tab === 'baby' ? { 'data-baby-year': sec.key.slice(1) } : { 'data-month': sec.key });
 
   return (
     <Sheet open={open} onClose={onClose} title="날짜로 보기" tall>
       <div ref={box} className={s.calBox}>
-        {/* 고르는 방법 · '모든 날짜' · 요일 줄은 위에 붙어 있어요 */}
+        {/* 고르는 방법 · '모든 날짜'는 어느 방법이든 같은 자리에 붙어 있어요 */}
         <div className={s.calTop} data-cal-top>
           <div className={s.tabs} role="tablist">
             {tabs.map(([t, label]) => (
@@ -243,94 +343,46 @@ function DateSheet({ open, onClose, items, value, onPick, unit, birthday }: {
             <small>{items.length}{unit}</small>
             {!value && <Icon name="check" size={20} className={s.check} />}
           </button>
-          {tab === 'range' && <p className={s.rangeHint}>{!a ? '시작하는 날을 눌러 주세요' : !b ? '끝나는 날을 눌러 주세요' : '다시 누르면 새로 골라요'}</p>}
-          {(tab === 'day' || tab === 'range') && <div className={s.weekBar} data-cal-week aria-hidden="true">{WEEKDAYS.map((w) => <span key={w}>{w}</span>)}</div>}
         </div>
 
-        {tab === 'year' && (
-          <ul className={s.list}>
-            {[...cal.byYear.entries()].sort((x, y) => y[0].localeCompare(x[0])).map(([y, n]) => (
-              <li key={y}><button type="button" className={s.option} onClick={() => onPick(y)} aria-pressed={value === y} data-year={y}>
-                <span className={s.allIcon}><b className={s.yearNum}>{y.slice(2)}</b></span>
-                <span className={s.optLabel}>{y}년</span>
-                <small>{n}{unit}</small>
-                {value === y && <Icon name="check" size={20} className={s.check} />}
-              </button></li>
-            ))}
-          </ul>
-        )}
-
-        {tab === 'baby' && birthday && (
-          <ul className={s.list}>
-            {babyRows.map(({ n, count }) => {
-              const [st, en] = periodRange(`m:${n}`, birthday)!;
-              const key = `m:${n}`;
-              return (
-                <li key={n}><button type="button" className={s.option} onClick={() => onPick(key)} aria-pressed={value === key} data-baby-month={n}>
-                  <span className={s.allIcon}><b className={s.yearNum}>{n}</b></span>
-                  <span className={s.optLabel}>{n === 0 ? '생후 첫 달' : `생후 ${n}개월`}<em className={s.sub}>{md(st)} ~ {md(addDays(en, -1))}</em></span>
-                  <small>{count}{unit}</small>
-                  {value === key && <Icon name="check" size={20} className={s.check} />}
-                </button></li>
-              );
-            })}
-          </ul>
-        )}
-
-        {(tab === 'day' || tab === 'range') && cal.months.map(({ k, y, m }) => {
-          const n = cal.byMonth.get(k) || 0;
-          const cells = monthCells(y, m);
-          while (cells.length % 7) cells.push(null);
-          const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7));
-          return (
-            <section key={k} className={s.mon} data-cal-month={k} aria-label={`${y}년 ${m + 1}월`}>
-              <div className={s.monHead}>
-                <h3 className={s.monTitle}>{y}년 {m + 1}월</h3>
-                {tab === 'day' && (
-                  <button type="button" className={`${s.pill} ${value === k ? s.pillOn : ''}`} disabled={!n}
-                    onClick={() => onPick(k)} aria-pressed={value === k} aria-label={`${y}년 ${m + 1}월 전체 ${n}${unit}`} data-month={k}>
-                    {n ? `이 달 전체 ${n}${unit}` : '사진 없음'}
+        {tab === 'baby' && !birthday && <p className={s.calEmpty}>아기 생일을 넣으면 개월로 볼 수 있어요</p>}
+        {sections.map((sec) => (
+          <section key={sec.key} className={s.mon} data-sec={sec.key} data-cal-month={sec.cols === 7 ? sec.key : undefined} aria-label={sec.title}>
+            <div className={s.monHead}>
+              <h3 className={s.monTitle}>{sec.title}{sec.sub && <small>{sec.sub}</small>}</h3>
+              {sec.all && (
+                <button type="button" className={`${s.pill} ${allOn(sec) ? s.pillOn : ''}`} disabled={!sec.all.count}
+                  onClick={() => pickAll(sec)} aria-pressed={allOn(sec)} aria-label={`${sec.title} ${sec.all.label} ${sec.all.count}${unit}`} {...allAttr(sec)}>
+                  {sec.all.count ? `${sec.all.label} ${sec.all.count}${unit}` : '사진 없음'}
+                </button>
+              )}
+            </div>
+            {sec.week && <div className={s.weekBar} aria-hidden="true">{WEEKDAYS.map((w) => <span key={w}>{w}</span>)}</div>}
+            <div className={`${s.cells} ${sec.cols === 4 ? s.cells4 : ''}`}>
+              {sec.cells.map((c, i) => {
+                if (!c) return <span key={`b${i}`} className={s.blank} />;
+                const edge = isRange && (c.pick === lo || c.pick === hi);
+                const inside = isRange && !!lo && !!hi && c.pick > lo && c.pick < hi;
+                const sel = isRange ? edge : value === c.pick;
+                // 기간은 사진이 없는 날도 고를 수 있어요
+                const can = !c.off && (isRange || c.count > 0);
+                const num = <span className={`${s.num} ${sec.cols === 4 ? s.numWide : ''} ${sel ? s.isSel : c.today ? s.isToday : ''} ${sel && c.today ? s.isBoth : ''}`}>{c.label}</span>;
+                return can ? (
+                  <button key={c.key} type="button" className={`${s.cell} ${c.count ? s.has : ''} ${inside ? s.inRange : ''}`} onClick={() => pickCell(c)}
+                    aria-pressed={sel} aria-label={`${sec.cols === 7 ? `${sec.title} ${c.label}일` : c.label} ${c.count}${unit}`} {...attr(c)}>
+                    {num}{c.count ? <i className={s.dot} /> : null}
                   </button>
-                )}
-              </div>
-              {weeks.map((w, wi) => (
-                <div key={wi} className={s.wk}>
-                  {w.map((d, di) => {
-                    if (!d) return <span key={di} className={s.blank} />;
-                    const key = `${k}-${pad(d)}`;
-                    const c = cal.byDay.get(key) || 0;
-                    if (tab === 'range') {
-                      // 기간: 사진이 없는 날도 고를 수 있어요
-                      const edge = key === lo || key === hi;
-                      const inside = !!lo && !!hi && key > lo && key < hi;
-                      return (
-                        <button key={di} type="button" className={`${s.cell} ${c ? s.has : ''} ${inside ? s.inRange : ''}`} onClick={() => tapRange(key)}
-                          aria-pressed={edge} aria-label={`${m + 1}월 ${d}일 ${c}${unit}`} data-range-day={key}>
-                          <span className={`${s.num} ${edge ? s.isSel : key === today ? s.isToday : ''}`}>{d}</span>
-                          {c ? <i className={s.dot} /> : null}
-                        </button>
-                      );
-                    }
-                    const mark = key === today ? s.isToday : value === key ? s.isSel : '';
-                    const num = <span className={`${s.num} ${mark} ${key === today && value === key ? s.isBoth : ''}`}>{d}</span>;
-                    return c ? (
-                      <button key={di} type="button" className={`${s.cell} ${s.has}`} onClick={() => onPick(key)}
-                        aria-pressed={value === key} aria-label={`${m + 1}월 ${d}일 ${c}${unit}`} data-day-pick={key}>
-                        {num}<i className={s.dot} />
-                      </button>
-                    ) : (
-                      <span key={di} className={s.cell}>{num}</span>
-                    );
-                  })}
-                </div>
-              ))}
-            </section>
-          );
-        })}
+                ) : (
+                  <span key={c.key} className={`${s.cell} ${c.off ? s.off : ''}`} {...attr(c)}>{num}</span>
+                );
+              })}
+            </div>
+          </section>
+        ))}
 
-        {tab === 'range' && (
-          <div className={s.rangeBar}>
-            <span>{lo ? (hi && hi !== lo ? `${md(lo)} ~ ${md(hi)}` : md(lo)) : '기간을 골라 주세요'}{lo ? ` · ${rangeCount}${unit}` : ''}</span>
+        {isRange && (
+          <div className={s.rangeBar} data-f="range-bar">
+            <span>{!lo ? '시작하는 날을 눌러 주세요' : !b ? <>{md(lo)}부터 · <em>끝나는 날을 눌러 주세요</em></> : `${md(lo)} ~ ${md(hi!)} · ${rangeCount}${unit}`}</span>
             <button type="button" disabled={!lo} onClick={() => lo && onPick(`${lo}~${hi || lo}`)} data-range-apply>이 기간 보기</button>
           </div>
         )}

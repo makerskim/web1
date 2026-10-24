@@ -7,8 +7,10 @@ import { useSession } from '../state/session';
 import s from './Bars.module.css';
 
 // 위쪽 막대: 스크롤하면 유리처럼 흐려지고 얇은 선이 생겨요
-export function TopBar({ title, left, right, large = false, back = false }: {
+export function TopBar({ title, left, right, large = false, back = false, white = false }: {
   title?: ReactNode; left?: ReactNode; right?: ReactNode; large?: boolean; back?: boolean;
+  /** 아래 게시물과 같은 흰색 (홈) */
+  white?: boolean;
 }) {
   const [scrolled, setScrolled] = useState(false);
   const nav = useNavigate();
@@ -23,7 +25,7 @@ export function TopBar({ title, left, right, large = false, back = false }: {
   }, [sc]);
   if (large) {
     return (
-      <header className={`${s.top} ${s.large} ${scrolled ? s.scrolled : ''}`}>
+      <header className={`${s.top} ${s.large} ${scrolled ? s.scrolled : ''} ${white ? s.white : ''}`}>
         <div className={s.titleLarge}>{title}</div>
         <div className={`${s.side} ${s.right}`}>{right}</div>
       </header>

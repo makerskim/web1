@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 import { FaceStack } from './People';
 import { useSession } from '../state/session';
 import { myReaction, react } from '../state/actions';
-import { fmtDay, timeAgo, ymd } from '../lib/dates';
+import { timeAgo } from '../lib/dates';
 import { postTag } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import { REACTIONS, type Post, type Reaction } from '../lib/types';
@@ -43,11 +43,8 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
   const mine = myReaction(post);
   const first = post.photos[0];
   const ratio = Math.min(1.25, Math.max(0.52, first.h / first.w)); // 4:5 ~ 1.91:1
-  // 아이 나이(모임은 기념일)는 사진을 찍은 날 기준
-  const shotAt = post.takenAt || post.createdAt;
-  const age = postTag(album, shotAt);
-  // 찍은 날이 올린 날과 다르면 같이 보여 줘요 ('8월 20일 (목)에 찍은 사진 · 3일 전')
-  const shot = ymd(shotAt) !== ymd(post.createdAt) ? fmtDay(shotAt) : null;
+  // 아이 나이(출산 D-day · 생후 N일, 모임은 기념일)는 올린 날 기준
+  const age = postTag(album, post.createdAt);
 
   const onTap = () => {
     const now = Date.now();
@@ -201,7 +198,6 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
           <button className={s.cmtLink} onClick={() => h.onComments(post)} data-act="comments-link">댓글 {nComments}개 보기</button>
         )}
         <p className={s.time}>
-          {shot && <><time dateTime={shotAt} data-f="shot-day">{shot}에 찍은 사진</time> · </>}
           <time dateTime={post.createdAt}>{timeAgo(post.createdAt)}</time>
         </p>
       </div>

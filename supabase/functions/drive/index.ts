@@ -371,11 +371,12 @@ async function daily() {
   for (const f of (fams || []) as Fam[]) {
     const cel = celebrations(f, today);
     // N년 전 오늘은 모두에게 보이는 게시물만 ('관리자만' 게시물은 세지 않아요)
-    const { data: posts } = await admin.from('posts').select('id, taken_at, photos').eq('family_id', f.id).eq('visibility', 'all').lt('taken_at', `${today}T00:00:00+09:00`);
-    const old = (posts || []).filter((p: { taken_at: string }) => new Date(new Date(p.taken_at).getTime() + 9 * 3600000).toISOString().slice(5, 10) === md);
+    // 날짜는 올린 날 기준
+    const { data: posts } = await admin.from('posts').select('id, created_at, photos').eq('family_id', f.id).eq('visibility', 'all').lt('created_at', `${today}T00:00:00+09:00`);
+    const old = (posts || []).filter((p: { created_at: string }) => new Date(new Date(p.created_at).getTime() + 9 * 3600000).toISOString().slice(5, 10) === md);
     if (!cel.length && !old.length) continue;
     if (!(await firstTime(`daily:${f.id}:${today}`))) continue;
-    const years = [...new Set(old.map((p: { taken_at: string }) => +today.slice(0, 4) - new Date(new Date(p.taken_at).getTime() + 9 * 3600000).getUTCFullYear()))].sort((a, b) => a - b);
+    const years = [...new Set(old.map((p: { created_at: string }) => +today.slice(0, 4) - new Date(new Date(p.created_at).getTime() + 9 * 3600000).getUTCFullYear()))].sort((a, b) => a - b);
     const shots = old.reduce((n: number, p: { photos: unknown[] }) => n + (p.photos?.length || 0), 0);
     const annivLine = cel.length ? `오늘은 ${isYeyo(cel.join(' · '))} 🎉` : '';
     const memLine = old.length ? `${years[0]}년 전 오늘의 사진 ${shots}장이 있어요 · 눌러서 추억 보기` : '';
