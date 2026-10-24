@@ -144,7 +144,9 @@ export function AlbumHome() {
   const noBabyInfo = isOwner && !isGroup && !all.some((c) => c.birthday);
   const postCount = tiles?.length;
   const base = useMemo(() => (tiles || []).filter((t) => tab === 'all' || t.likedBy.includes(me.id)), [tiles, tab, me.id]);
-  const shown = useMemo(() => base.filter((t) => matches(filter, t)), [base, filter]);
+  // 생후 N개월로 거르기: 태어난 뒤에만 (그 전엔 출산 예정일이에요)
+  const birthday = album.kind === 'baby' && album.babyBirthday && album.babyBirthday <= ymd(new Date()) ? album.babyBirthday : null;
+  const shown = useMemo(() => base.filter((t) => matches(filter, t, birthday)), [base, filter, birthday]);
   const names = isGroup ? album.name : album.babyName || album.name;
   const editProfile = () => nav('/settings/album/info');
 
@@ -260,7 +262,7 @@ export function AlbumHome() {
           </button>
         ))}
       </nav>
-      {!!base.length && <FilterChips value={filter} onChange={setFilter} items={base} unit="개" />}
+      {!!base.length && <FilterChips value={filter} onChange={setFilter} items={base} unit="개" birthday={birthday} />}
 
       {err && !tiles ? (
         <div className={s.empty}><p>사진을 불러오지 못했어요</p><button className={s.link} onClick={() => setReload((n) => n + 1)}>다시 불러오기</button></div>

@@ -1,15 +1,23 @@
-.chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); padding: var(--s-2) var(--gutter); }
+.chips { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--s-2); padding: var(--s-2) var(--gutter); }
+.side { display: flex; min-width: 0; }
+.end { justify-content: flex-end; }
+.middle { display: flex; justify-content: center; }
 .chip {
-  display: inline-flex; align-items: center; height: 2.5rem; border-radius: var(--r-full);
+  display: inline-flex; align-items: center; max-width: 100%; height: 2.5rem; border-radius: var(--r-full);
   background: var(--c-surface); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); color: var(--c-label);
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
-.chipMain { display: inline-flex; align-items: center; gap: 4px; height: 100%; padding: 0 var(--s-3) 0 var(--s-4); font-size: var(--t-sub); font-weight: 600; color: inherit; white-space: nowrap; }
-.chip:not(.on) .chipMain { padding-right: var(--s-3); }
-.chipX { display: grid; place-items: center; width: 40px; height: 100%; margin-left: -8px; color: inherit; }
+.chipMain { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 100%; padding: 0 var(--s-3) 0 var(--s-3); font-size: var(--t-sub); font-weight: 600; color: inherit; white-space: nowrap; }
+.chipText { overflow: hidden; text-overflow: ellipsis; }
+.chipX { display: grid; place-items: center; width: 36px; height: 100%; margin-left: -6px; color: inherit; flex: none; }
 .chip.on { background: var(--c-label); color: var(--c-surface); box-shadow: none; }
+.chip.on .chipMain { padding-right: var(--s-1); }
+/* 고르기 전엔 달력 아이콘만 (홈 위쪽) */
+.iconOnly { width: 2.75rem; height: 2.75rem; justify-content: center; }
+.iconOnly .chipMain { padding: 0; justify-content: center; width: 100%; }
 
-.list { display: flex; flex-direction: column; }
+.list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.list li { margin: 0; padding: 0; }
 .option {
   width: 100%; display: flex; align-items: center; gap: var(--s-3); min-height: 60px; padding: var(--s-2) 0;
   text-align: left; color: var(--c-label);
@@ -68,3 +76,20 @@
 .isToday, .has:active .isToday { background: var(--c-accent-strong); color: #fff; font-weight: 700; }
 .isSel, .has:active .isSel { background: var(--c-label); color: #fff; font-weight: 700; }
 .isBoth { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 4px var(--c-label); }
+
+/* 날짜로 보기: 고르는 방법 (날짜 · 연도 · 기간 · 개월) */
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; padding: 3px; margin: var(--s-1) 0 var(--s-2); border-radius: var(--r-full); background: var(--c-fill); }
+.tabs button { min-height: 2.25rem; border-radius: var(--r-full); font-size: var(--t-sub); font-weight: 600; color: var(--c-label-2); }
+.tabs .tabOn { background: var(--c-surface); color: var(--c-label); box-shadow: 0 1px 3px rgba(40, 20, 30, .12); }
+.option:disabled { opacity: .45; }
+.yearNum { font-size: var(--t-sub); font-weight: 800; color: var(--c-label); font-variant-numeric: tabular-nums; }
+.optLabel em.sub { margin-left: auto; background: none; padding: 0; color: var(--c-label-3); font-size: var(--t-footnote); font-weight: 500; }
+.rangeHint { margin: 0 0 var(--s-1); font-size: var(--t-footnote); color: var(--c-accent-strong); font-weight: 600; text-align: center; }
+.inRange .num { background: var(--c-accent-soft); }
+.rangeBar {
+  position: sticky; bottom: calc(var(--s-4) * -1); z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  margin: var(--s-4) calc(var(--gutter) * -1) 0; padding: var(--s-3) var(--gutter); background: var(--c-surface); border-top: 1px solid var(--c-hairline);
+  font-size: var(--t-sub); font-weight: 600; color: var(--c-label);
+}
+.rangeBar button { min-height: 2.75rem; padding: 0 var(--s-4); border-radius: var(--r-full); background: var(--c-label); color: var(--c-surface); font-weight: 700; white-space: nowrap; }
+.rangeBar button:disabled { opacity: .4; }

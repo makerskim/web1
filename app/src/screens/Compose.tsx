@@ -1,4 +1,4 @@
-// 사진·동영상 올리기: 고르기 → 글 쓰기 → 올리기 (꾸미기 없이, 원본은 항상 함께 저장)
+// 사진·동영상 올리기: 고르기 → 글 쓰기 · 올리기 설정(양옆 배경 · 공개 범위 · 동영상 크기) → 올리기 (원본은 항상 함께 저장)
 // 올리는 사람의 구글 드라이브에 저장돼요 → 드라이브를 연결한 사람만 올릴 수 있어요 (처음 한 번 연결)
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,6 +13,9 @@ import { fmtDur } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { Button } from '../components/Button';
 import { Avatar } from '../components/Avatar';
+import { Segmented } from '../components/Form';
+import { canShrink, prepareShrink, releaseShrink, shrinkEstimate, shrinkVideo } from '../lib/video';
+import type { PhotoBg, Visibility } from '../lib/types';
 import { afterBack, confirm, progress, toast, useBackClose } from '../components/ui';
 import { useSession } from '../state/session';
 import { forgetScroll, scrollPageTop } from '../components/Stack';
@@ -35,8 +38,21 @@ interface ComposeState {
   busy: boolean;
   /** 잠깐 '뒤로' 기록을 내려놓은 상태 (물어보는 중) */
   hold: boolean;
+  /** 세로로 긴 사진 양옆 (흐리게 · 검은색 · 흰색) */
+  bg: PhotoBg;
+  /** 공개 범위 (모든 멤버 · 관리자만) */
+  visibility: Visibility;
+  /** 동영상 크기 줄이기 */
+  shrink: boolean;
 }
-const EMPTY = { stage: 'idle' as Stage, photos: [], caption: '', busy: false, hold: false };
+// 양옆 배경과 동영상 크기는 지난번에 고른 대로, 공개 범위는 매번 '모든 멤버'로 시작해요
+const BG_KEY = 'pm-compose-bg';
+const SHRINK_KEY = 'pm-compose-shrink';
+const read = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* 무시 */ } };
+const lastBg = (): PhotoBg => { const v = read(BG_KEY); return v === 'black' || v === 'white' ? v : 'blur'; };
+const empty = () => ({ stage: 'idle' as Stage, photos: [], caption: '', busy: false, hold: false, bg: lastBg(), visibility: 'all' as Visibility, shrink: read(SHRINK_KEY) === '1' });
+const EMPTY = empty();
 const useCompose = create<ComposeState>(() => ({ ...EMPTY }));
 
 // 닫을 때 미리보기 주소도 비워요
@@ -44,7 +60,7 @@ let confirmed = false; // 닫기(X)에서 이미 물어봤어요
 function closeCompose() {
   confirmed = false;
   useCompose.getState().photos.forEach(releasePhoto);
-  useCompose.setState({ ...EMPTY });
+  useCompose.setState(empty());
 }
 
 // 사진 고르기 창은 버튼을 누른 그 순간에 열어야 해서 input을 미리 만들어 둬요
@@ -94,7 +110,7 @@ async function onPicked() {
     useCompose.setState({ photos: [...st.photos, ...picked].slice(0, MAX_PHOTOS) });
   } else {
     st.photos.forEach(releasePhoto);
-    useCompose.setState({ ...EMPTY, stage: 'write', photos: picked });
+    useCompose.setState({ ...empty(), stage: 'write', photos: picked });
   }
 }
 
@@ -143,6 +159,9 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
   const mine = useSession((st) => st.member(me.id));
   const caption = useCompose((st) => st.caption);
   const busy = useCompose((st) => st.busy);
+  const bg = useCompose((st) => st.bg);
+  const visibility = useCompose((st) => st.visibility);
+  const shrink = useCompose((st) => st.shrink);
   const nav = useNavigate();
   const onHome = /^\/(home)?$/.test(useLocation().pathname);
   const text = useRef<HTMLTextAreaElement>(null);
@@ -185,6 +204,10 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
   const share = async () => {
     if (useCompose.getState().busy) return;
     if (needDrive) { toast('먼저 구글 드라이브와 연동해 주세요'); return; }
+    // 동영상 줄이기는 누른 바로 그 순간에 준비해야 해요 (아이폰은 그때만 소리와 함께 틀 수 있어요)
+    const vids = photos.filter((x) => x.video);
+    const jobs = shrink && vids.length ? prepareShrink(vids.map((x) => x.file)) : [];
+    if (shrink && vids.length && !jobs.length) toast('이 기기에서는 동영상 크기를 줄일 수 없어 원본으로 올려요');
     useCompose.setState({ busy: true });
     // 찍은 날은 기록만 해 두고, 화면의 날짜·아이 나이는 올린 날 기준이에요
     const first = new Date(Math.min(...photos.map((p) => +p.takenAt || Date.now())));
@@ -195,19 +218,38 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
     try {
       const out: api.NewPhoto[] = [];
       let skipped = 0;
+      let kept = 0;
+      // 준비 단계 몫: 동영상을 줄이면 길이만큼 걸려서 더 크게 잡아요
+      const prep = jobs.length ? 0.5 : 0.15;
+      const weight = (i: number) => 1 + (jobs.some((j) => j.file === photos[i].file) ? photos[i].video!.dur : 0);
+      const all = photos.reduce((n, _, i) => n + weight(i), 0);
+      let at = 0;
       // 한 장씩 만들어서 메모리를 아껴요. 원본은 언제나 함께 올려요
       for (let i = 0; i < photos.length; i++) {
         const item: api.NewPhoto = { ...(await exportPhoto(photos[i])) };
         const f = photos[i].file;
         const v = photos[i].video;
-        if (v) { item.orig = f; item.video = { dur: v.dur }; }
-        else if (canKeep(f)) item.orig = f; else skipped++;
+        if (v) {
+          const job = jobs.find((j) => j.file === f);
+          let file = f;
+          if (job) {
+            const n = jobs.indexOf(job) + 1;
+            const from = at;
+            p.set(prep * (from / all), `동영상 크기를 줄이는 중${jobs.length > 1 ? ` (${n}/${jobs.length})` : ''} · 동영상 길이만큼 걸려요`);
+            const small = await shrinkVideo(job, v.dur, (x) => p.set(prep * ((from + 1 + x * v.dur) / all)));
+            if (small) file = small; else kept++;
+          }
+          item.orig = file;
+          item.video = { dur: v.dur };
+        } else if (canKeep(f)) item.orig = f; else skipped++;
         out.push(item);
-        p.set(((i + 1) / photos.length) * 0.15);
+        at += weight(i);
+        p.set(prep * (at / all));
       }
       if (skipped) toast(`${skipped}장은 원본으로 올릴 수 없어 일반 화질로 올려요`);
-      p.set(0.15, '내 구글 드라이브에 올리는 중');
-      const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: first.toISOString(), photos: out }, (f) => p.set(0.15 + f * 0.85));
+      if (kept) toast(kept === jobs.length ? '동영상 크기를 줄이지 못해 원본으로 올려요' : `동영상 ${kept}개는 줄이지 못해 원본으로 올려요`);
+      p.set(prep, '내 구글 드라이브에 올리는 중');
+      const { post, skippedOriginals } = await api.createPost(album, { caption: caption.trim(), takenAt: first.toISOString(), photos: out, bg, visibility }, (f) => p.set(prep + f * (1 - prep)));
       p.close();
       usePosts.getState().prepend(post);
       // 가족에게 알림 (켜 둔 사람에게만)
@@ -223,6 +265,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
       p.close();
       toast((e as Error).message || '올리지 못했어요. 다시 시도해 주세요.');
     } finally {
+      releaseShrink(jobs);
       wake?.release().catch(() => {});
       if (useCompose.getState().busy) useCompose.setState({ busy: false });
     }
@@ -236,12 +279,13 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
         <span />
       </header>
       <div className={s.body}>
-        <Carousel photos={photos} onRemove={remove} />
+        <Carousel photos={photos} onRemove={remove} bg={bg} />
         <label className={s.captionBox}>
           <Avatar src={mine.avatar} name={mine.displayName} size={36} />
           <textarea ref={text} value={caption} onChange={(e) => useCompose.setState({ caption: e.target.value })} maxLength={2000} rows={3}
             placeholder="사진에 이야기를 남겨 보세요" aria-label="사진 이야기" data-w="caption" />
         </label>
+        <Options photos={photos} bg={bg} visibility={visibility} shrink={shrink} owner={album.myRole === 'owner'} />
         {!needDrive && myDrive.email && (
           <p className={s.note} data-w="drive-note"><Icon name="shield" size={16} /> 내 구글 드라이브({myDrive.email})의 ‘Pastel Memories › {album.name}’ 폴더에 저장돼요</p>
         )}
@@ -263,8 +307,53 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
   );
 }
 
-// 고른 사진들: 옆으로 넘겨 보기 + 빼기 + 더 넣기
-function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: string) => void }) {
+// 피드 사진 칸 비율 (PostCard와 같아요: 첫 사진 기준 4:5 ~ 1.91:1)
+const frameOf = (p: PickedPhoto) => Math.min(1.25, Math.max(0.52, p.h / p.w));
+// 피드에서 사진 양옆(위아래)에 빈자리가 생기는지
+const hasGaps = (photos: PickedPhoto[]) => !!photos.length && photos.some((p) => Math.abs(p.h / p.w - frameOf(photos[0])) > 0.02);
+
+// 올리기 설정: 세로 사진 양옆 · 공개 범위 · 동영상 크기
+function Options({ photos, bg, visibility, shrink, owner }: { photos: PickedPhoto[]; bg: PhotoBg; visibility: Visibility; shrink: boolean; owner: boolean }) {
+  const vids = photos.filter((x) => x.video);
+  const size = vids.reduce((n, x) => n + x.file.size, 0);
+  const dur = vids.reduce((n, x) => n + (x.video?.dur || 0), 0);
+  const est = Math.min(size, shrinkEstimate(dur));
+  const can = canShrink();
+  return (
+    <section className={s.opts} aria-label="올리기 설정" data-w="options">
+      {hasGaps(photos) && (
+        <div className={s.opt} data-w="opt-bg">
+          <span className={s.optLabel}>세로 사진 양옆<small>사진 옆 빈자리를 어떻게 채울지 골라요</small></span>
+          <Segmented label="세로 사진 양옆" value={bg} onChange={(v) => { useCompose.setState({ bg: v }); save(BG_KEY, v); }}
+            options={[{ value: 'blur', label: '흐리게' }, { value: 'black', label: '검은색' }, { value: 'white', label: '흰색' }]} />
+        </div>
+      )}
+      <div className={s.opt} data-w="opt-vis">
+        <span className={s.optLabel}>공개 범위
+          <small>{visibility === 'all' ? '이 앨범의 모든 멤버가 봐요' : owner ? '앨범 관리자만 봐요 (다른 멤버에게는 보이지 않아요)' : '앨범 관리자와 나만 봐요'}</small>
+        </span>
+        <Segmented label="공개 범위" value={visibility} onChange={(v) => useCompose.setState({ visibility: v })}
+          options={[{ value: 'all', label: '모든 멤버' }, { value: 'owners', label: <><Icon name="lock" size={13} stroke={2.4} /> 관리자만</> }]} />
+      </div>
+      {vids.length > 0 && (
+        <div className={s.opt} data-w="opt-video">
+          <span className={s.optLabel}>동영상 크기
+            <small>{!can ? `이 브라우저에서는 원본으로만 올릴 수 있어요 · ${fmtBytes(size)}`
+              : shrink ? `약 ${fmtBytes(est)}로 줄여요 (원본 ${fmtBytes(size)}) · 화질 720p, 동영상 길이만큼 걸려요`
+                : `원본 화질 그대로 올려요 · ${fmtBytes(size)}`}</small>
+          </span>
+          {can && (
+            <Segmented label="동영상 크기" value={shrink ? 'small' : 'orig'} onChange={(v) => { useCompose.setState({ shrink: v === 'small' }); save(SHRINK_KEY, v === 'small' ? '1' : '0'); }}
+              options={[{ value: 'orig', label: '원본' }, { value: 'small', label: '크기 줄이기' }]} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// 고른 사진들: 옆으로 넘겨 보기 + 빼기 + 더 넣기 (양옆 배경은 고른 대로 미리 보여요)
+function Carousel({ photos, onRemove, bg }: { photos: PickedPhoto[]; onRemove: (id: string) => void; bg: PhotoBg }) {
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const prevCount = useRef(photos.length);
@@ -301,7 +390,8 @@ function Carousel({ photos, onRemove }: { photos: PickedPhoto[]; onRemove: (id: 
     <section className={s.media} aria-label="고른 사진">
       <div className={s.track} ref={track} onScroll={onScroll} data-w="photos">
         {photos.map((p, i) => (
-          <figure className={s.slide} key={p.id} data-w="slide">
+          <figure className={`${s.slide} ${bg === 'black' ? s.bgBlack : bg === 'white' ? s.bgWhite : s.bgBlur}`} key={p.id} data-w="slide">
+            {bg === 'blur' && !p.video && <span className={s.blurBack} style={{ backgroundImage: `url(${p.url})` }} aria-hidden="true" />}
             {p.video
               ? <><video src={`${p.url}#t=0.1`} muted playsInline preload="metadata" aria-label={`${photos.length}개 중 ${i + 1}번째 동영상`} />
                   <span className={s.vBadge}><Icon name="play" size={14} />{fmtDur(p.video.dur)}</span></>

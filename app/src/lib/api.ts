@@ -5,7 +5,7 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { fnCall } from './fn';
 import { ymd } from './dates';
-import type { ActivityEvent, Album, AlbumKind, Anniversary, Comment, Me, Member, PhotoMeta, Post, StorageKind } from './types';
+import { REACTIONS, type ActivityEvent, type Album, type AlbumKind, type Anniversary, type Comment, type Me, type Member, type PhotoBg, type PhotoMeta, type Post, type Reaction, type StorageKind, type Visibility } from './types';
 import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -45,10 +45,14 @@ const comment = (r: Row): Comment => ({ id: r.id, postId: r.post_id, authorId: r
 const post = (r: Row): Post => ({
   id: r.id, albumId: r.family_id, authorId: r.author_id, caption: r.caption, takenAt: r.taken_at, createdAt: r.created_at,
   photos: r.photos || [],
-  likes: (r.likes || []).map((l: Row) => ({ userId: l.user_id, createdAt: l.created_at })),
+  likes: (r.likes || []).map((l: Row) => ({ userId: l.user_id, createdAt: l.created_at, emoji: toReaction(l.emoji) })),
   comments: (r.comments || []).map(comment).sort((a: Comment, b: Comment) => a.createdAt.localeCompare(b.createdAt)),
+  bg: r.bg === 'black' || r.bg === 'white' ? r.bg : 'blur',
+  visibility: r.visibility === 'owners' ? 'owners' : 'all',
 });
-const POST_COLS = '*, likes(user_id, created_at), comments(id, post_id, author_id, body, created_at)';
+const toReaction = (x: unknown): Reaction => (REACTIONS as readonly unknown[]).includes(x) ? x as Reaction : '❤️';
+// likes(*): 리액션 칸(emoji)이 아직 없는 데이터베이스에서도 읽혀요
+const POST_COLS = '*, likes(*), comments(id, post_id, author_id, body, created_at)';
 
 // ---------- 로그인 ----------
 export function meFrom(u: { id: string; email?: string | null; user_metadata?: Row; app_metadata?: Row } | null): Me | null {
@@ -228,30 +232,32 @@ export const setRole = async (albumId: string, uid: string, role: 'owner' | 'mem
   check(await sb.rpc('set_member_role', { p_family: albumId, p_user: uid, p_role: role }));
 
 // ---------- 게시물 ----------
-/** 홈 타임라인 순서: 올린 순(새로 올린 게 위) · 찍은 날 순(최근에 찍은 게 위) */
-export type FeedOrder = 'upload' | 'taken';
-/** after: 이 게시물 다음부터 · from: 이 시각 이전부터 (날짜로 찾기) */
-export async function posts(albumId: string, opts: { after?: Post | null; from?: string | null; order?: FeedOrder } = {}, limit = 8): Promise<Post[]> {
-  const col = opts.order === 'taken' ? 'taken_at' : 'created_at';
+/** 홈 타임라인: 새로 올린 게 위. range(날짜로 보기)를 주면 그 기간에 찍은 사진만, 최근에 찍은 게 위 ([시작일, 끝 다음날) 'YYYY-MM-DD') */
+export async function posts(albumId: string, opts: { after?: Post | null; range?: [string, string] | null } = {}, limit = 8): Promise<Post[]> {
+  const col = opts.range ? 'taken_at' : 'created_at';
   let q = sb.from('posts').select(POST_COLS).eq('family_id', albumId)
     .order(col, { ascending: false }).order('id', { ascending: false }).limit(limit);
+  if (opts.range) {
+    // 이 휴대폰 시간의 그날 0시 기준
+    const at = (d: string) => new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).toISOString();
+    q = q.gte('taken_at', at(opts.range[0])).lt('taken_at', at(opts.range[1]));
+  }
   if (opts.after) {
     // 같은 시각이 여럿이어도 빠뜨리지 않게 (시각, ID) 순서로 이어서
-    const at = opts.order === 'taken' ? opts.after.takenAt : opts.after.createdAt;
+    const at = opts.range ? opts.after.takenAt : opts.after.createdAt;
     q = q.or(`${col}.lt."${at}",and(${col}.eq."${at}",id.lt.${opts.after.id})`);
-  } else if (opts.from) q = q.lt(col, opts.from);
+  }
   return (check(await q) as Row[]).map(post);
 }
 
-/** 날짜로 찾기: 사진을 찍은 달마다 게시물 수 (최근 달부터) */
-export async function postMonths(albumId: string): Promise<{ month: string; count: number }[]> {
-  const counts = new Map<string, number>();
+/** 날짜로 보기 달력에 쓰는 게시물 날짜들 (올린 사람 · 올린 날 · 찍은 날) */
+export async function postDates(albumId: string): Promise<{ authorId: string; createdAt: string; takenAt: string }[]> {
+  const out: { authorId: string; createdAt: string; takenAt: string }[] = [];
   for (let from = 0; ; from += 1000) {
-    const rows = check(await sb.from('posts').select('taken_at').eq('family_id', albumId).order('taken_at', { ascending: false }).range(from, from + 999)) as Row[];
-    rows.forEach((r) => { const m = ymd(new Date(r.taken_at)).slice(0, 7); counts.set(m, (counts.get(m) || 0) + 1); });
-    if (rows.length < 1000) break;
+    const rows = check(await sb.from('posts').select('author_id, created_at, taken_at').eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
+    rows.forEach((r) => out.push({ authorId: r.author_id, createdAt: r.created_at, takenAt: r.taken_at }));
+    if (rows.length < 1000) return out;
   }
-  return [...counts.entries()].map(([month, count]) => ({ month, count }));
 }
 
 export async function getPost(id: string): Promise<Post | null> {
@@ -321,7 +327,7 @@ const driveOrigName = (f: File, takenAt: string) => `${ymd(takenAt)} ${(f.name |
 // 사진 올리기: 화면용·작은 사진을 먼저 모두, 그다음 원본(실패해도 그 원본만 빼고 계속)
 // 동영상은 첫 장면 사진을 먼저, 그다음 동영상 파일 (동영상은 꼭 올라가야 해요)
 export async function createPost(
-  a: Album, p: { caption: string; takenAt: string; photos: NewPhoto[] }, onProgress?: (f: number) => void,
+  a: Album, p: { caption: string; takenAt: string; photos: NewPhoto[]; bg?: PhotoBg; visibility?: Visibility }, onProgress?: (f: number) => void,
 ): Promise<{ post: Post; skippedOriginals: number }> {
   const id = uuid();
   // 사진·동영상은 언제나 올린 사람의 구글 드라이브에
@@ -373,6 +379,9 @@ export async function createPost(
     }
     const row = check(await sb.from('posts').insert({
       id, family_id: a.id, caption: p.caption, taken_at: p.takenAt, photos: metas,
+      // 기본값이 아닐 때만 보내요 (새 칸이 없는 예전 데이터베이스에서도 기본 올리기는 돼요)
+      ...(p.bg && p.bg !== 'blur' ? { bg: p.bg } : {}),
+      ...(p.visibility === 'owners' ? { visibility: 'owners' } : {}),
     }).select(POST_COLS).single()) as Row;
     return { post: post(row), skippedOriginals };
   } catch (e) {
@@ -384,18 +393,22 @@ export async function createPost(
   }
 }
 
-export async function updatePost(id: string, p: { caption?: string; takenAt?: string }) {
+export async function updatePost(id: string, p: { caption?: string; takenAt?: string; bg?: PhotoBg; visibility?: Visibility }) {
   const row: Row = {};
   if (p.caption !== undefined) row.caption = p.caption;
   if (p.takenAt) row.taken_at = p.takenAt;
+  if (p.bg) row.bg = p.bg;
+  if (p.visibility) row.visibility = p.visibility;
   return post(check(await sb.from('posts').update(row).eq('id', id).select(POST_COLS).single()) as Row);
 }
 
 export const filesOf = (ph: PhotoMeta) => [ph.path, ph.thumb, ph.orig].filter(Boolean) as string[];
 
 export async function deletePost(p: Post, uid?: string) {
-  // 구글 드라이브 파일은 올린 사람만 (자기 드라이브 휴지통으로). 관리자가 남의 게시물을 지우면 파일은 올린 사람 드라이브에 남아요
-  const paths = p.photos.flatMap(filesOf).filter((x) => (isDrive(x) && p.authorId === uid) || x.startsWith(`${p.albumId}/${p.id}/`));
+  // 구글 드라이브의 사진·동영상도 휴지통으로: 서버 기능이 올린 사람의 연동으로 지워요 (관리자가 남의 게시물을 지워도)
+  // 서버 기능에 닿지 않으면, 내가 올린 것만 내 드라이브에서 직접 지워요
+  const viaServer = await fnCall<{ trashed: number }>('trash', { album: p.albumId, post: p.id }).then((r) => r.trashed >= 0, () => false);
+  const paths = p.photos.flatMap(filesOf).filter((x) => (!viaServer && isDrive(x) && p.authorId === uid) || x.startsWith(`${p.albumId}/${p.id}/`));
   const rows = check(await sb.from('posts').delete().eq('id', p.id).select('id')) as Row[];
   if (!rows.length) throw new Error('지울 수 있는 권한이 없어요.');
   await removeFiles(p.albumId, paths).catch(() => {});
@@ -414,13 +427,20 @@ export async function onThisDay(albumId: string, at: Date = new Date()): Promise
   return ((data || []) as Row[]).map((r) => post({ ...r, likes: [], comments: [] }));
 }
 
-// ---------- 좋아요·댓글 ----------
-export async function like(p: Post, on: boolean, uid: string) {
-  if (on) {
-    const { error } = await sb.from('likes').insert({ post_id: p.id });
-    if (error && (error as { code?: string }).code !== '23505') throw new Error(friendly(error));
-  } else {
+// ---------- 리액션·댓글 ----------
+// 한 사람이 게시물마다 리액션 하나: 없으면 남기고, 같은 걸 다시 누르면 없애고, 다른 걸 누르면 바꿔요
+export async function react(p: Post, emoji: Reaction | null, uid: string) {
+  const mine = p.likes.find((l) => l.userId === uid);
+  if (!emoji) {
     check(await sb.from('likes').delete().eq('post_id', p.id).eq('user_id', uid));
+  } else if (mine) {
+    if (mine.emoji !== emoji) check(await sb.from('likes').update({ emoji }).eq('post_id', p.id).eq('user_id', uid));
+  } else {
+    // ❤️는 기본값이라 보내지 않아요 (리액션 칸이 없는 예전 데이터베이스에서도 하트는 돼요)
+    const { error } = await sb.from('likes').insert(emoji === '❤️' ? { post_id: p.id } : { post_id: p.id, emoji });
+    if (!error) return;
+    if ((error as { code?: string }).code !== '23505') throw new Error(friendly(error));
+    if (emoji !== '❤️') check(await sb.from('likes').update({ emoji }).eq('post_id', p.id).eq('user_id', uid));
   }
 }
 
@@ -432,7 +452,7 @@ export async function deleteComment(c: Comment) { check(await sb.from('comments'
 export async function activity(albumId: string): Promise<ActivityEvent[]> {
   const [ps, ls, cs, ms] = await Promise.all([
     sb.from('posts').select('id, author_id, photos, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).limit(30),
-    sb.from('likes').select('post_id, user_id, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).limit(40),
+    sb.from('likes').select('*').eq('family_id', albumId).order('created_at', { ascending: false }).limit(40),
     sb.from('comments').select('id, post_id, author_id, body, created_at').eq('family_id', albumId).order('created_at', { ascending: false }).limit(40),
     sb.from('members').select('user_id, joined_at').eq('family_id', albumId).order('joined_at', { ascending: false }).limit(20),
   ]).then((rs) => rs.map((r) => check(r as { data: Row[]; error: unknown }) as Row[]));
@@ -442,7 +462,7 @@ export async function activity(albumId: string): Promise<ActivityEvent[]> {
   const month = new Date(Date.now() - 30 * 86400000).toISOString();
   const ev: ActivityEvent[] = [
     ...ps.map((p) => ({ type: 'post' as const, at: p.created_at, userId: p.author_id, postId: p.id, post: byId.get(p.id), count: p.photos.length })),
-    ...ls.map((l) => ({ type: 'like' as const, at: l.created_at, userId: l.user_id, postId: l.post_id, post: byId.get(l.post_id) })),
+    ...ls.map((l) => ({ type: 'like' as const, at: l.created_at, userId: l.user_id, postId: l.post_id, post: byId.get(l.post_id), emoji: toReaction(l.emoji) })),
     ...cs.map((c) => ({ type: 'comment' as const, at: c.created_at, userId: c.author_id, postId: c.post_id, post: byId.get(c.post_id), body: c.body })),
     ...ms.filter((m) => m.joined_at > month).map((m) => ({ type: 'join' as const, at: m.joined_at, userId: m.user_id })),
   ];

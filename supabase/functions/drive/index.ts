@@ -282,11 +282,13 @@ async function pushTo(subs: Sub[], note: Note) {
 }
 
 // 앨범 멤버들의 휴대폰 (나는 빼고, 그 종류 알림을 켠 사람만)
-async function subsFor(userIds: string[], kind: 'post' | 'comment' | 'daily') {
+async function subsFor(userIds: string[], kind: 'post' | 'comment' | 'daily' | 'all') {
   if (!userIds.length) return [];
   const { data } = await admin.from('push_subs').select('endpoint, p256dh, auth, prefs').in('user_id', userIds);
-  return ((data || []) as Sub[]).filter((s) => s.prefs?.[kind] !== false);
+  return ((data || []) as Sub[]).filter((s) => kind === 'all' || s.prefs?.[kind] !== false);
 }
+// 매일 아침 알림을 둘로 나눠 골라요: 기념일(anniv) · N년 전 오늘(memory). 예전 설정(daily)은 둘 다에 써요
+const wants = (s: Sub, k: 'anniv' | 'memory') => (s.prefs?.[k] ?? s.prefs?.daily) !== false;
 
 // 처음 보내는 거면 true (두 번 보내지 않게)
 async function firstTime(key: string) {
@@ -368,22 +370,27 @@ async function daily() {
   let sent = 0;
   for (const f of (fams || []) as Fam[]) {
     const cel = celebrations(f, today);
-    const { data: posts } = await admin.from('posts').select('id, taken_at, photos').eq('family_id', f.id).lt('taken_at', `${today}T00:00:00+09:00`);
+    // N년 전 오늘은 모두에게 보이는 게시물만 ('관리자만' 게시물은 세지 않아요)
+    const { data: posts } = await admin.from('posts').select('id, taken_at, photos').eq('family_id', f.id).eq('visibility', 'all').lt('taken_at', `${today}T00:00:00+09:00`);
     const old = (posts || []).filter((p: { taken_at: string }) => new Date(new Date(p.taken_at).getTime() + 9 * 3600000).toISOString().slice(5, 10) === md);
     if (!cel.length && !old.length) continue;
     if (!(await firstTime(`daily:${f.id}:${today}`))) continue;
     const years = [...new Set(old.map((p: { taken_at: string }) => +today.slice(0, 4) - new Date(new Date(p.taken_at).getTime() + 9 * 3600000).getUTCFullYear()))].sort((a, b) => a - b);
     const shots = old.reduce((n: number, p: { photos: unknown[] }) => n + (p.photos?.length || 0), 0);
-    const lines = [
-      cel.length ? `오늘은 ${isYeyo(cel.join(' · '))} 🎉` : '',
-      old.length ? `${years[0]}년 전 오늘의 사진 ${shots}장이 있어요 · 눌러서 추억 보기` : '',
-    ].filter(Boolean);
+    const annivLine = cel.length ? `오늘은 ${isYeyo(cel.join(' · '))} 🎉` : '';
+    const memLine = old.length ? `${years[0]}년 전 오늘의 사진 ${shots}장이 있어요 · 눌러서 추억 보기` : '';
     const { data: mem } = await admin.from('members').select('user_id').eq('family_id', f.id);
-    const subs = await subsFor((mem || []).map((m: { user_id: string }) => m.user_id), 'daily');
-    sent += await pushTo(subs, {
-      title: f.name, body: lines.join('\n'), tag: `daily-${f.id}`,
-      url: old.length ? `#/open?album=${f.id}&to=${encodeURIComponent('/memories')}` : `#/open?album=${f.id}&to=${encodeURIComponent('/home')}`,
-    });
+    const subs = await subsFor((mem || []).map((m: { user_id: string }) => m.user_id), 'all');
+    // 사람마다 고른 알림만 (기념일 · N년 전 오늘)
+    for (const [a, m] of [[true, true], [true, false], [false, true]] as const) {
+      const group = subs.filter((x) => wants(x, 'anniv') === a && wants(x, 'memory') === m);
+      const lines = [a ? annivLine : '', m ? memLine : ''].filter(Boolean);
+      if (!group.length || !lines.length) continue;
+      sent += await pushTo(group, {
+        title: f.name, body: lines.join('\n'), tag: `daily-${f.id}`,
+        url: m && old.length ? `#/open?album=${f.id}&to=${encodeURIComponent('/memories')}` : `#/open?album=${f.id}&to=${encodeURIComponent('/home')}`,
+      });
+    }
   }
   return sent;
 }
@@ -562,6 +569,33 @@ Deno.serve(async (req) => {
       return json({ token: r.t.token, exp: r.t.exp, folder: r.f.id, small: r.f.small });
     }
 
+    // ---------- 게시물을 지울 때: 올린 사람 드라이브의 사진·동영상도 휴지통으로 ----------
+    // 관리자가 다른 사람의 게시물을 지워도, 올린 사람의 연동 정보로 그 사람 드라이브에서 지워요 (이 앱이 만든 파일만)
+    if (route === 'trash') {
+      const id = String(body.post || '');
+      if (!/^[0-9a-f-]{36}$/.test(id)) return fail('bad_id');
+      const { data: p } = await admin.from('posts').select('author_id, photos').eq('id', id).eq('family_id', albumId).maybeSingle();
+      if (!p) return json({ trashed: 0 });
+      if (p.author_id !== user.id && me.role !== 'owner') return fail('not_allowed', 403);
+      const ids = [...new Set(((p.photos || []) as Record<string, string>[]).flatMap((x) => [x.path, x.thumb, x.orig])
+        .filter((v) => typeof v === 'string' && v.startsWith('gd:')).map((v) => v.slice(3)))];
+      const { data: row } = await admin.from('user_drives').select('*').eq('user_id', p.author_id).maybeSingle() as { data: DriveRow | null };
+      if (!ids.length || !row) return json({ trashed: 0, linked: !!row });
+      const trashed = await withToken(row, async (token) => {
+        let n = 0;
+        for (const fid of ids) {
+          if (!/^[A-Za-z0-9_-]{10,200}$/.test(fid)) continue;
+          const r = await fetch(`${DRIVE}/files/${fid}`, {
+            method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }),
+          });
+          if (r.status === 401) throw new Error('drive_auth');
+          if (r.ok || r.status === 404) n++;
+        }
+        return n;
+      }).catch(() => -1);
+      return json({ trashed, linked: true });
+    }
+
     // ---------- 새 사진 · 댓글 알림 ----------
     if (route === 'notify') {
       const type = body.type === 'comment' ? 'comment' : 'post';
@@ -570,13 +604,16 @@ Deno.serve(async (req) => {
       const stale = (at: string) => new Date(at).getTime() < Date.now() - 15 * 60_000;
       const who = me.display_name || '멤버';
       if (type === 'post') {
-        const { data: p } = await admin.from('posts').select('id, author_id, caption, photos, created_at').eq('id', id).eq('family_id', albumId).maybeSingle();
+        const { data: p } = await admin.from('posts').select('id, author_id, caption, photos, created_at, visibility').eq('id', id).eq('family_id', albumId).maybeSingle();
         if (!p || p.author_id !== user.id || stale(p.created_at)) return fail('not_found', 404);
         if (!(await firstTime(`post:${id}`))) return json({ sent: 0 });
         const n = (p.photos || []).length;
         const videos = (p.photos || []).filter((x: { kind?: string }) => x.kind === 'video').length;
         const what = videos === n ? `동영상${n > 1 ? ` ${n}개` : ''}` : videos ? `사진·동영상 ${n}개` : `사진${n > 1 ? ` ${n}장` : ''}`;
-        const { data: mem } = await admin.from('members').select('user_id').eq('family_id', albumId).neq('user_id', user.id);
+        // '관리자만' 게시물은 관리자에게만 알려요
+        let mq = admin.from('members').select('user_id').eq('family_id', albumId).neq('user_id', user.id);
+        if (p.visibility === 'owners') mq = mq.eq('role', 'owner');
+        const { data: mem } = await mq;
         const subs = await subsFor((mem || []).map((m: { user_id: string }) => m.user_id), 'post');
         const cap = String(p.caption || '').replace(/\s+/g, ' ').trim();
         return json({ sent: await pushTo(subs, {

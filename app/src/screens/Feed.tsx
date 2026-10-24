@@ -10,13 +10,13 @@ import { AmpText } from '../components/AlbumBits';
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
 import { babyMonths, fmtMonth, toDate, ymd } from '../lib/dates';
-import { Sheet } from '../components/ui';
 import * as api from '../lib/api';
-import type { FeedOrder } from '../lib/api';
+import { DateFilter, periodLabel, periodRange } from '../components/Filters';
 import { celebrationsToday } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import { memoriesToday } from './Memories';
+import { useHomePrefs } from '../lib/homePrefs';
 import { Photo } from '../components/Photo';
 import type { Album, PhotoMeta } from '../lib/types';
 import { InviteSheet } from './Invite';
@@ -35,51 +35,20 @@ function SkeletonPost() {
   );
 }
 
-// 타임라인의 달 구분: 찍은 날 순이면 그 달(아기 앨범은 몇 개월), 올린 순이면 올린 달
-function monthLabel(month: string, order: FeedOrder, album: Album) {
-  const m = order === 'taken' && album.kind === 'baby' && album.babyBirthday ? babyMonths(album.babyBirthday, toDate(`${month}-15`)) : null;
-  return `${fmtMonth(`${month}-01`)}${order === 'upload' ? '에 올린 사진' : ''}${m !== null && m >= 0 ? ` · ${m === 0 ? '첫 달' : `${m}개월`}` : ''}`;
-}
-
-// 날짜로 찾기: 사진을 찍은 달 목록 → 누르면 그 달부터 (찍은 날 순)
-function JumpSheet({ open, onClose, album, onPick }: { open: boolean; onClose: () => void; album: Album; onPick: (m: string) => void }) {
-  const [months, setMonths] = useState<{ month: string; count: number }[] | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    let live = true;
-    api.postMonths(album.id).then((l) => live && setMonths(l), () => live && setMonths([]));
-    return () => { live = false; };
-  }, [open, album.id]);
-  const years = useMemo(() => {
-    const m = new Map<string, { month: string; count: number }[]>();
-    (months || []).forEach((x) => m.set(x.month.slice(0, 4), [...(m.get(x.month.slice(0, 4)) || []), x]));
-    return [...m.entries()];
-  }, [months]);
-  return (
-    <Sheet open={open} onClose={onClose} title="날짜로 찾기" tall>
-      {!months && <p className={s.jumpMsg}>불러오는 중…</p>}
-      {months && !months.length && <p className={s.jumpMsg}>아직 사진이 없어요</p>}
-      {years.map(([y, list]) => (
-        <section key={y} className={s.jumpYear}>
-          <h4>{y}년</h4>
-          <div className={s.jumpGrid}>
-            {list.map((x) => (
-              <button key={x.month} className={s.jumpMonth} onClick={() => onPick(x.month)} data-jump={x.month}>
-                <b>{Number(x.month.slice(5))}월</b>
-                <small>{x.count}개{album.kind === 'baby' && album.babyBirthday ? (() => { const n = babyMonths(album.babyBirthday!, toDate(`${x.month}-15`)); return n !== null && n >= 0 ? ` · ${n}개월` : ''; })() : ''}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
-    </Sheet>
-  );
+// 타임라인의 달 구분: 날짜로 볼 때는 찍은 달(아기 앨범은 몇 개월), 평소엔 올린 달
+function monthLabel(month: string, taken: boolean, album: Album) {
+  const m = taken && album.kind === 'baby' && album.babyBirthday ? babyMonths(album.babyBirthday, toDate(`${month}-15`)) : null;
+  return `${fmtMonth(`${month}-01`)}${taken ? '' : '에 올린 사진'}${m !== null && m >= 0 ? ` · ${m === 0 ? '첫 달' : `${m}개월`}` : ''}`;
 }
 
 export function Feed() {
   const album = useAlbum()!;
-  const { list, byId, loading, done, error, loadFirst, loadMore, reset, order, from, setOrder, jump } = usePosts();
-  const [jumping, setJumping] = useState(false);
+  const { list, byId, loading, done, error, loadFirst, loadMore, reset, period, range, setPeriod } = usePosts();
+  // 날짜로 보기: 달력에 쓰는 게시물 날짜들 (게시물이 바뀌면 다시)
+  const [dates, setDates] = useState<{ authorId: string; createdAt: string; takenAt: string }[]>([]);
+  useEffect(() => { let live = true; api.postDates(album.id).then((d) => live && setDates(d), () => {}); return () => { live = false; }; }, [album.id, list.length]);
+  const birthday = album.kind === 'baby' && album.babyBirthday && album.babyBirthday <= ymd(new Date()) ? album.babyBirthday : null;
+  const pickPeriod = (p: string | null) => { setPeriod(p, p ? periodRange(p, birthday) : null); root?.scrollTo({ top: 0 }); };
   const posts = useMemo(() => list.map((id) => byId[id]).filter(Boolean), [list, byId]);
   const [params, setParams] = useSearchParams();
   const [switcher, setSwitcher] = useState(false);
@@ -103,6 +72,8 @@ export function Feed() {
 
   // 오늘 챙길 날: 아기 기념일 · 가족/모임 1주년 · 설정한 기념일 (여럿이면 한 줄에)
   const today = celebrationsToday(album);
+  // 설정 → 기념일 · 추억에서 끈 카드는 보이지 않아요
+  const home = useHomePrefs();
   const milestone = today.join(' · ');
   const msKey = `pm-ms-${album.id}-${ymd(new Date())}`;
   const [msHidden, setMsHidden] = useState(() => !!load(msKey, false));
@@ -130,16 +101,16 @@ export function Feed() {
         <button className={s.wordmark} onClick={() => setSwitcher(true)} aria-label="앨범 바꾸기" data-f="switcher">
           <AmpText text={album.name} /><Icon name="down" size={18} stroke={2.2} />
         </button>
-      } />
+      } right={<span data-f="feed-date"><DateFilter value={period} onChange={pickPeriod} items={dates} unit="개" birthday={birthday} compact /></span>} />
 
-      {milestone && !msHidden && (
+      {milestone && !msHidden && home.anniv && (
         <div className={s.milestone}>
           <p data-f="celebrate">오늘은 <b>{milestone}</b>{hasBatchim(milestone) ? '이에요' : '예요'} 🎉</p>
           <button onClick={() => { save(msKey, true); setMsHidden(true); }} aria-label="닫기"><Icon name="close" size={18} /></button>
         </div>
       )}
 
-      {mem && !memHidden && (
+      {mem && !memHidden && home.memory && (
         <div className={s.memory} data-f="memory-card">
           <button className={s.memoryMain} onClick={() => nav('/memories')} data-f="memory-open">
             <Photo albumId={album.id} path={mem.cover.thumb} ph={mem.cover.ph} className={s.memoryThumb} />
@@ -150,32 +121,21 @@ export function Feed() {
         </div>
       )}
 
-      {/* 타임라인 정렬 · 날짜로 찾기 */}
-      {(posts.length > 0 || from) && (
-        <div className={s.tools} data-f="feed-tools">
-          <div className={s.seg} role="radiogroup" aria-label="타임라인 순서">
-            {([['upload', '올린 순'], ['taken', '찍은 날 순']] as const).map(([v, label]) => (
-              <button key={v} role="radio" aria-checked={order === v} className={order === v ? s.segOn : ''} onClick={() => { setOrder(v); root?.scrollTo({ top: 0 }); }} data-order={v}>{label}</button>
-            ))}
-          </div>
-          <button className={s.jumpBtn} onClick={() => setJumping(true)} data-f="feed-jump"><Icon name="calendar" size={16} />날짜로 찾기</button>
-        </div>
-      )}
-      {from && (
-        <div className={s.fromBar} data-f="feed-from">
-          <span><b>{fmtMonth(`${from}-01`)}</b>부터 보는 중</span>
-          <button onClick={() => { jump(null); root?.scrollTo({ top: 0 }); }} data-f="feed-latest">최신으로</button>
+      {period && (
+        <div className={s.fromBar} data-f="feed-period">
+          <span><b>{periodLabel(period)}</b>에 찍은 사진</span>
+          <button onClick={() => pickPeriod(null)} data-f="feed-all">모두 보기</button>
         </div>
       )}
 
       <div className={`${s.posts} ${appear.current ? s.appear : ''}`}>
         {posts.map((p, i) => {
-          const key = (x: typeof p) => ymd(order === 'taken' ? x.takenAt || x.createdAt : x.createdAt).slice(0, 7);
+          const key = (x: typeof p) => ymd(range ? x.takenAt || x.createdAt : x.createdAt).slice(0, 7);
           const k = key(p);
-          const head = i === 0 ? (order === 'taken' || !!from) : key(posts[i - 1]) !== k;
+          const head = i === 0 ? !!range : key(posts[i - 1]) !== k;
           return (
             <Fragment key={p.id}>
-              {head && <h3 className={s.monthDiv} data-feed-month={k}>{monthLabel(k, order, album)}</h3>}
+              {head && <h3 className={s.monthDiv} data-feed-month={k}>{monthLabel(k, !!range, album)}</h3>}
               <PostCard post={p} h={handlers} />
             </Fragment>
           );
@@ -187,8 +147,15 @@ export function Feed() {
       <div ref={end} className={s.end}>
         {loading && posts.length > 0 && <span className={s.spinner} />}
         {!loading && error && <Button variant="secondary" onClick={() => loadFirst()}>다시 불러오기</Button>}
-        {!loading && !error && done && posts.length > 0 && <p className={s.endNote}>처음 사진까지 다 봤어요</p>}
-        {!loading && !error && done && posts.length === 0 && (
+        {!loading && !error && done && posts.length > 0 && <p className={s.endNote}>{period ? '이 기간의 사진을 다 봤어요' : '처음 사진까지 다 봤어요'}</p>}
+        {!loading && !error && done && posts.length === 0 && period && (
+          <div className={s.empty} data-f="feed-period-empty">
+            <div className={s.emptyArt}><Icon name="calendar" size={34} stroke={1.4} /></div>
+            <h2>이 기간에 찍은 사진이 없어요</h2>
+            <Button variant="secondary" onClick={() => pickPeriod(null)}>모두 보기</Button>
+          </div>
+        )}
+        {!loading && !error && done && posts.length === 0 && !period && (
           <div className={s.empty}>
             <div className={s.emptyArt}><Icon name="camera" size={36} stroke={1.4} /></div>
             <h2>첫 사진을 올려 보세요</h2>
@@ -198,7 +165,6 @@ export function Feed() {
       </div>
 
       <AlbumSwitcher open={switcher} onClose={() => setSwitcher(false)} />
-      <JumpSheet open={jumping} onClose={() => setJumping(false)} album={album} onPick={(m) => { setJumping(false); jump(m); root?.scrollTo({ top: 0 }); }} />
       <InviteSheet open={welcome} welcome onClose={() => setParams({}, { replace: true })} />
     </Page>
   );
