@@ -1,6 +1,7 @@
 // 가족 탭과 앨범 설정이 함께 쓰는 것: 가족 목록 시트, 앨범 사진 바꾸기
 import { useEffect, useRef, useState } from 'react';
-import { Sheet, confirm, menu, progress, toast } from './ui';
+import { useNavigate } from 'react-router-dom';
+import { Sheet, afterBack, confirm, menu, progress, toast } from './ui';
 import { PeopleList, PersonRow } from './People';
 import { Photo } from './Photo';
 import { usePhotoURL } from '../hooks/usePhoto';
@@ -9,7 +10,7 @@ import { useAlbum, useSession } from '../state/session';
 import type { Album } from '../lib/types';
 import * as api from '../lib/api';
 import { useMyDrive } from '../lib/drive';
-import { loginThenPick } from '../state/actions';
+import { askDriveLink } from '../state/actions';
 import { squarePhoto } from '../lib/image';
 import { obj } from '../lib/korean';
 import { spaceAmp } from '../lib/kids';
@@ -90,6 +91,7 @@ export function CoverFace({ size = 88, album: given }: { size?: number; album?: 
 // 관리자가 앨범 사진을 바꿀 때: 메뉴 → 앨범 사진에서 고르기 / 휴대폰에서 고르기 / 지우기
 export function useCoverChanger() {
   const album = useAlbum();
+  const nav = useNavigate();
   const [picking, setPicking] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
@@ -120,8 +122,8 @@ export function useCoverChanger() {
       ...(album.cover ? [{ label: '앨범 사진 지우기', value: 'none', icon: 'trash' as const, danger: true }] : []),
     ], '앨범 사진 바꾸기');
     if (v === 'album') setPicking(true);
-    // 휴대폰 사진은 내 구글 드라이브에 올려요 (구글 로그인한 사람만)
-    if (v === 'phone' && !useMyDrive.getState().email) { await loginThenPick(() => file.current?.click()); return; }
+    // 휴대폰 사진은 내 구글 드라이브에 올려요 (연동한 사람만) → 연동 전이면 설정으로
+    if (v === 'phone' && !useMyDrive.getState().email) { if (await askDriveLink()) { await afterBack(); nav('/settings/upload'); } return; }
     if (v === 'phone') file.current?.click();
     if (v === 'none') save('');
   };

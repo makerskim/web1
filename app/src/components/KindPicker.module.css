@@ -11,6 +11,20 @@
 .kindOn { background: var(--c-accent-soft); box-shadow: inset 0 0 0 2px var(--c-accent-strong); }
 .kind:active { transform: scale(.98); }
 
-.sheet { display: flex; flex-direction: column; gap: var(--s-3); padding-bottom: var(--s-2); }
-.note { min-height: 3.2em; padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background: var(--c-surface-2); font-size: var(--t-sub); line-height: 1.6; color: var(--c-label-2); word-break: keep-all; }
-.who { font-size: var(--t-footnote); color: var(--c-label-3); text-align: center; }
+.list { display: flex; flex-direction: column; gap: var(--s-2); padding-bottom: var(--s-2); }
+.row {
+  display: flex; align-items: center; gap: var(--s-3); min-height: 64px; padding: var(--s-3) var(--s-4); border-radius: var(--r-md); text-align: left;
+  background: var(--c-surface); box-shadow: inset 0 0 0 1.5px var(--c-hairline); color: var(--c-label);
+  transition: box-shadow var(--dur-1) var(--ease), background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.row:active:not(:disabled) { transform: scale(.985); }
+.rowOn { background: var(--c-accent-soft); box-shadow: inset 0 0 0 2px var(--c-accent-strong); }
+.rowIcon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--c-surface-2); font-size: 1.35rem; flex: none; }
+.rowOn .rowIcon { background: #fff; }
+.rowText { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.rowText b { font-size: var(--t-callout); font-weight: 700; }
+.rowText small { font-size: var(--t-footnote); color: var(--c-label-2); }
+.now { flex: none; padding: 4px 10px; border-radius: 999px; background: var(--c-accent-strong); color: #fff; font-style: normal; font-size: var(--t-footnote); font-weight: 600; white-space: nowrap; }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--c-hairline-strong); border-top-color: var(--c-accent-strong); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.who { margin-top: var(--s-2); font-size: var(--t-footnote); color: var(--c-label-3); text-align: center; }

@@ -176,6 +176,23 @@ async function shareByLink(token: string, id: string) {
   if (!res.ok) throw new Error(await driveError(res, 'drive_share_failed'));
 }
 const folderName = (v: string) => v.replace(/[\\/\u0000-\u001f]/g, ' ').trim().slice(0, 60) || '앨범';
+// 'Pastel Memories' 폴더도 '링크가 있는 사람 보기'로 (따로 공유 버튼을 누르지 않아도 돼요). 실패해도 사진 올리기는 계속해요
+const rootShared = new Set<string>();
+async function shareRoot(token: string, root: string) {
+  if (rootShared.has(root)) return;
+  try { await shareByLink(token, root); rootShared.add(root); } catch { /* 다음에 다시 */ }
+}
+// 보관해 둔 출입증이 막혔으면(401) 새로 받아 한 번 더
+async function withToken<T>(row: DriveRow, run: (token: string) => Promise<T>): Promise<T> {
+  try {
+    return await run((await userToken(row)).token);
+  } catch (e) {
+    if ((e as Error).message !== 'drive_auth') throw e;
+    tokenCache.delete(row.user_id);
+    return run((await userToken(row)).token);
+  }
+}
+
 // 앨범 폴더 'Pastel Memories › 앨범이름'(링크 공유) + 그 안의 '앱용 작은 사진' (old: 예전에 만든 폴더가 남아 있으면 이어 써요)
 async function albumFolder(token: string, root: string, albumId: string, name: string, old?: { id: string; small: string }) {
   const id = old && (await exists(token, old.id)) ? old.id : await folder(token, folderName(name), root, { pmAlbum: albumId });
@@ -431,6 +448,7 @@ Deno.serve(async (req) => {
       if (!refresh) return fail('drive_no_refresh_token');
       // 'Pastel Memories' 폴더 (내 드라이브 맨 위)
       const root = same && (await exists(t.access_token, old!.root_folder)) ? old!.root_folder! : await folder(t.access_token, ROOT_NAME, null, { pm: 'root' });
+      await shareRoot(t.access_token, root);
       // 그 안에 내가 들어 있는 앨범마다 폴더를 바로 만들어요 (나중에 들어간 앨범은 처음 올릴 때 만들어요)
       const folders: DriveRow['folders'] = { ...(same ? old!.folders || {} : {}) };
       const { data: mine } = await admin.from('members').select('family_id, families(name)').eq('user_id', user.id).order('joined_at').limit(30);
@@ -459,6 +477,53 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // ---------- 내 드라이브 공간: 전체 · 사용 중 · 이 앱이 올린 것 · 이 앱이 휴지통에 넣은 것 ----------
+    // (drive.file 권한으로는 이 앱이 만든 파일만 보여요 → 그 파일들의 크기를 더해요)
+    if (route === 'usage' || route === 'purge') {
+      const { data: row } = await admin.from('user_drives').select('*').eq('user_id', user.id).maybeSingle() as { data: DriveRow | null };
+      if (!row) return fail('drive_not_connected', 409);
+      const list = (token: string, q: string, pageToken: string) =>
+        gget(token, `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=nextPageToken,files(id,size,trashed)&pageSize=1000&spaces=drive${pageToken ? `&pageToken=${pageToken}` : ''}`);
+      if (route === 'usage') {
+        return json(await withToken(row, async (token) => {
+          const a = await gget(token, `${DRIVE}/about?fields=storageQuota`);
+          if (!a.ok) throw new Error(await driveError(a, 'drive_usage_failed'));
+          const q = (await a.json()).storageQuota || {};
+          let appBytes = 0, appFiles = 0, trashBytes = 0, trashFiles = 0, pageToken = '', partial = false;
+          for (let i = 0; ; i++) {
+            if (i >= 20) { partial = true; break; }
+            const r = await list(token, `mimeType != '${FOLDER}'`, pageToken);
+            if (!r.ok) throw new Error(await driveError(r, 'drive_usage_failed'));
+            const b = await r.json();
+            for (const f of b.files || []) {
+              const n = Number(f.size || 0);
+              if (f.trashed) { trashBytes += n; trashFiles++; } else { appBytes += n; appFiles++; }
+            }
+            pageToken = b.nextPageToken || '';
+            if (!pageToken) break;
+          }
+          const num = (v: unknown) => (v === undefined || v === null ? null : Number(v));
+          return { limit: num(q.limit), usage: num(q.usage), inDrive: num(q.usageInDrive), inTrash: num(q.usageInDriveTrash), appBytes, appFiles, trashBytes, trashFiles, partial };
+        }));
+      }
+      // 이 앱이 휴지통에 넣은 파일만 완전히 지워요 (내가 지운 게시물의 사진·동영상). 다른 파일은 건드리지 않아요
+      return json(await withToken(row, async (token) => {
+        let deleted = 0, bytes = 0;
+        for (let i = 0; i < 5; i++) {
+          const r = await list(token, 'trashed = true', '');
+          if (!r.ok) throw new Error(await driveError(r, 'drive_usage_failed'));
+          const files = ((await r.json()).files || []) as { id: string; size?: string }[];
+          if (!files.length) break;
+          for (const f of files) {
+            const d = await fetch(`${DRIVE}/files/${f.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+            if (d.status === 401) throw new Error('drive_auth');
+            if (d.ok || d.status === 404) { deleted++; bytes += Number(f.size || 0); }
+          }
+        }
+        return { deleted, bytes };
+      }));
+    }
+
     // 앨범마다 확인: 그 앨범의 멤버인지
     const albumId: string = url.searchParams.get('album') || body.album || '';
     if (!/^[0-9a-f-]{36}$/.test(albumId)) return fail('bad_album');
@@ -476,11 +541,13 @@ Deno.serve(async (req) => {
         const t = await userToken(row);
         let f = row.folders?.[albumId];
         // 처음이거나, 폴더를 지웠거나 휴지통에 넣었으면 (다시) 만들어요
+        let root = row.root_folder;
         if (!f || !(await exists(t.token, f.id)) || !(await exists(t.token, f.small))) {
-          const root = (await exists(t.token, row.root_folder)) ? row.root_folder! : await folder(t.token, ROOT_NAME, null, { pm: 'root' });
+          root = (await exists(t.token, row.root_folder)) ? row.root_folder! : await folder(t.token, ROOT_NAME, null, { pm: 'root' });
           f = await albumFolder(t.token, root, albumId, fam?.name || '앨범', f);
           await admin.from('user_drives').update({ root_folder: root, folders: { ...(row.folders || {}), [albumId]: f }, updated_at: new Date().toISOString() }).eq('user_id', user.id);
         }
+        if (root) await shareRoot(t.token, root);
         return { t, f };
       };
       let r: Awaited<ReturnType<typeof prepare>>;

@@ -9,7 +9,7 @@ import { useAlbum, useSession } from '../state/session';
 import { usePhotoURL } from '../hooks/usePhoto';
 import { photoURL } from '../lib/storage';
 import { fmtDate, fmtMonth } from '../lib/dates';
-import { monthOf } from '../components/Filters';
+import { dayOf } from '../components/Filters';
 import * as api from '../lib/api';
 import type { PhotoMeta } from '../lib/types';
 import s from './Memories.module.css';
@@ -42,7 +42,8 @@ export function Memories() {
   useEffect(() => {
     let live = true;
     const load = month
-      ? api.allPhotos(album.id).then((list) => list.filter((it) => monthOf(it.createdAt) === month).reverse()
+      ? api.allPhotos(album.id).then((list) => list.filter((it) => dayOf(it).slice(0, 7) === month)
+        .sort((a, b) => (a.takenAt || a.createdAt).localeCompare(b.takenAt || b.createdAt) || a.postId.localeCompare(b.postId) || a.index - b.index)
         .map((it) => ({ ...it, key: `${it.postId}-${it.index}`, caption: '' } as Slide)))
       : memoriesToday(album.id);
     load.then((l) => live && setSlides(l), () => live && setSlides([]));

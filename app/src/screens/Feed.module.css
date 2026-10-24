@@ -36,3 +36,20 @@
 .memoryText small { font-size: var(--t-footnote); color: var(--c-label-2); }
 .memoryPlay { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; padding-left: 2px; background: var(--c-accent-strong); color: #fff; }
 .memoryClose { position: absolute; right: 2px; top: 2px; width: 32px; height: 32px; display: grid; place-items: center; color: var(--c-label-3); }
+
+/* 타임라인: 순서 · 날짜로 찾기 · 달 구분 */
+.tools { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin: 0 var(--gutter) var(--s-2); }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--c-fill); }
+.seg button { min-height: 32px; padding: 0 var(--s-3); border-radius: 999px; font-size: var(--t-footnote); font-weight: 600; color: var(--c-label-2); transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.seg .segOn { background: var(--c-surface); color: var(--c-label); box-shadow: 0 1px 3px rgba(40, 20, 30, .12); }
+.jumpBtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--s-3); border-radius: 999px; font-size: var(--t-footnote); font-weight: 600; color: var(--c-label); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); }
+.fromBar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin: 0 var(--gutter) var(--s-2); padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4); border-radius: var(--r-md); background: var(--c-accent-soft); font-size: var(--t-sub); }
+.fromBar button { min-height: 32px; padding: 0 var(--s-3); border-radius: 999px; background: var(--c-surface); font-size: var(--t-footnote); font-weight: 600; color: var(--c-accent-strong); }
+.monthDiv { position: sticky; top: calc(var(--safe-t) + var(--bar-h)); z-index: 2; margin: 0; padding: var(--s-2) var(--gutter); background: var(--c-glass); -webkit-backdrop-filter: saturate(1.6) blur(14px); backdrop-filter: saturate(1.6) blur(14px); font-size: var(--t-footnote); font-weight: 700; color: var(--c-label-2); letter-spacing: -0.01em; }
+.jumpMsg { padding: var(--s-6) 0; text-align: center; color: var(--c-label-3); }
+.jumpYear h4 { margin: var(--s-3) 0 var(--s-2); font-size: var(--t-sub); color: var(--c-label-2); }
+.jumpGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-2); }
+.jumpMonth { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--s-3) var(--s-1); border-radius: var(--r-sm); background: var(--c-surface-2); }
+.jumpMonth b { font-size: var(--t-callout); }
+.jumpMonth small { font-size: 0.72rem; color: var(--c-label-2); white-space: nowrap; }
+.jumpMonth:active { transform: scale(.97); }

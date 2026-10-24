@@ -38,14 +38,14 @@ export async function deleteComment(p: Post, id: string) {
   usePosts.getState().put({ ...cur, comments: cur.comments.filter((x) => x.id !== id) });
 }
 
-// ---------- 구글 로그인 (내 구글 드라이브 연결) ----------
-// 사진·동영상은 올린 사람의 구글 드라이브에 저장돼요 → 올리려면 한 번 구글 로그인이 필요해요 (카카오로 로그인한 분도)
+// ---------- 구글 드라이브 연동 (사진 올리기 · 공유) ----------
+// 사진·동영상은 올린 사람의 구글 드라이브에 저장돼요 → 올리려면 한 번 연동해요 (카카오로 로그인한 분도)
 
-/** 구글 창을 열어 연결해요 (진행 표시 · 취소). 연결되면 true · choose: 계정 고르기부터 (다른 계정으로 바꿀 때) */
+/** 구글 창을 열어 연동해요 (진행 표시 · 취소). 연동되면 true · choose: 계정 고르기부터 (다른 계정으로 바꿀 때) */
 export async function linkDrive(opts: { choose?: boolean } = {}) {
   const me = useSession.getState().me;
   let cancel = () => {};
-  const cancelled = new Promise<never>((_, reject) => { cancel = () => reject(new Error('구글 로그인을 취소했어요.')); });
+  const cancelled = new Promise<never>((_, reject) => { cancel = () => reject(new Error('구글 드라이브 연동을 취소했어요.')); });
   cancelled.catch(() => {});
   const p = progress('구글 창에서 계정을 골라 주세요', () => cancel());
   try {
@@ -64,29 +64,10 @@ export async function linkDrive(opts: { choose?: boolean } = {}) {
   }
 }
 
-/** + 를 눌렀는데 아직 구글 로그인 전이면: 예 → 바로 구글 창 · 아니요 → 그대로. 연결되면 true */
-export async function askGoogleLogin() {
-  const ok = await confirm({
-    title: '사진을 올리기 위해서는 구글 로그인이 필요해요',
-    message: '구글 로그인을 하면 내 구글 드라이브에 ‘Pastel Memories’ 폴더와 앨범 폴더가 생기고, 사진은 그 폴더에 저장되면서 앱에 올라와요.\n구글 로그인할까요?',
-    ok: '예',
-    cancel: '아니요',
-  });
-  // '예'를 누른 그 순간에 구글 창을 열어요 (늦으면 휴대폰이 팝업을 막아요)
-  return ok ? linkDrive() : false;
-}
-
-/** 올리기 전에: 구글 로그인 전이면 물어보고(예/아니요), 로그인되면 바로 고를 수 있게 한 번 더 물어봐요
- *  (사진 고르기 창은 누른 순간에만 열려서 구글 창을 다녀온 뒤에는 저절로 열 수 없어요) */
-export async function loginThenPick(pick: () => void) {
-  if (!(await askGoogleLogin())) return false;
-  const name = useSession.getState().album()?.name || '앨범';
-  const go = await confirm({
-    title: '구글 로그인이 됐어요',
-    message: `내 구글 드라이브에 ‘Pastel Memories › ${name}’ 폴더를 만들었어요.\n이제 사진·동영상을 골라 올려 보세요.`,
-    ok: '사진 고르기',
-    cancel: '나중에',
-  });
-  if (go) pick();
-  return true;
-}
+/** 사진을 올리려는데 아직 연동 전이면 물어봐요. 확인 → 설정의 '사진 올리기 · 공유'로 가서 연동해요 */
+export const askDriveLink = () => confirm({
+  title: '사진을 올리려면 구글 드라이브와 연동해 주세요',
+  message: '사진·동영상은 올린 사람의 구글 드라이브에 저장되고, 앨범 멤버와 함께 봐요.\n확인을 누르면 연동하는 설정으로 가요.',
+  ok: '확인',
+  cancel: '취소',
+});

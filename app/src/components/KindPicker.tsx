@@ -1,8 +1,7 @@
 // 앨범 종류 고르기: 아기 · 가족 · 친구·모임 (새 앨범 · 설정에서 같이 써요)
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Sheet, toast } from './ui';
-import { Button } from './Button';
-import { KINDS, kindInfo, sinceLabel } from '../lib/album';
+import { KINDS, kindInfo } from '../lib/album';
 import { useAlbum, useSession } from '../state/session';
 import * as api from '../lib/api';
 import type { AlbumKind } from '../lib/types';
@@ -21,43 +20,46 @@ export function KindPicker({ value, onChange }: { value: AlbumKind; onChange: (k
   );
 }
 
-/** 바꾸면 무엇이 달라지는지 한 줄로 */
-function changeNote(from: AlbumKind, to: AlbumKind) {
-  if (from === to) return '지금 이 앨범의 종류예요.';
-  const keep = from === 'baby' ? ' 아이 정보는 지우지 않고 그대로 둬요.' : '';
-  if (to === 'baby') return '출산 예정일까지 남은 날과 임신 주수, 태어난 뒤엔 아이 나이를 보여 줘요. 아래 탭 이름은 ‘가족’이에요.';
-  return `${sinceLabel(to)}부터 함께한 날과 다음 100일 · 1주년을 보여 줘요. 아래 탭 이름은 ‘${to === 'group' ? '모임' : '가족'}’이에요.${keep}`;
-}
-
-/** 설정: 앨범 종류 바꾸기 (고른 뒤 '바꾸기'를 눌러야 바뀌어요. 모든 멤버에게 같이 바뀌어요) */
+/** 설정: 앨범 종류 바꾸기. 누르면 바로 바뀌어요 (모든 멤버에게 같이) · 잘못 눌렀으면 알림의 '되돌리기' */
 export function KindSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const album = useAlbum();
-  const [pick, setPick] = useState<AlbumKind>(album?.kind ?? 'baby');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (open && album) setPick(album.kind); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [busy, setBusy] = useState<AlbumKind | null>(null);
   if (!album) return null;
-  const same = pick === album.kind;
-  const apply = async () => {
-    if (busy || same) return;
-    setBusy(true);
+  const set = async (albumId: string, kind: AlbumKind) => {
+    await api.updateAlbum(albumId, { kind });
+    if (useSession.getState().albumId === albumId) useSession.getState().patchAlbum({ kind });
+  };
+  const change = async (kind: AlbumKind) => {
+    if (busy) return;
+    if (kind === album.kind) { onClose(); return; }
+    setBusy(kind);
     const albumId = album.id;
+    const before = album.kind;
     try {
-      await api.updateAlbum(albumId, { kind: pick });
-      if (useSession.getState().albumId === albumId) useSession.getState().patchAlbum({ kind: pick });
+      await set(albumId, kind);
       onClose();
-      toast(`${kindInfo(pick).label}으로 바꿨어요`);
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+      toast(`${kindInfo(kind).label}으로 바꿨어요`, {
+        action: '되돌리기',
+        onAction: () => set(albumId, before).then(() => toast(`${kindInfo(before).label}으로 되돌렸어요`), (e) => toast((e as Error).message)),
+      });
+    } catch (e) { toast((e as Error).message); } finally { setBusy(null); }
   };
   return (
     <Sheet open={open} onClose={onClose} title="앨범 종류">
-      <div className={s.sheet}>
-        <KindPicker value={pick} onChange={setPick} />
-        <p className={s.note} data-f="kind-note">{changeNote(album.kind, pick)}</p>
-        <p className={s.who}>모든 멤버의 화면이 함께 바뀌어요.</p>
-        <Button block onClick={apply} disabled={busy || same} data-f="kind-apply">
-          {busy ? '바꾸는 중…' : same ? '지금 종류예요' : `${kindInfo(pick).label}으로 바꾸기`}
-        </Button>
+      <div className={s.list} role="radiogroup" aria-label="앨범 종류">
+        {KINDS.map((k) => {
+          const now = album.kind === k.v;
+          return (
+            <button key={k.v} type="button" role="radio" aria-checked={now} className={`${s.row} ${now ? s.rowOn : ''}`} data-kind={k.v}
+              onClick={() => change(k.v)} disabled={!!busy}>
+              <span className={s.rowIcon} aria-hidden="true">{k.icon}</span>
+              <span className={s.rowText}><b>{k.label}</b><small>{k.desc}</small></span>
+              {now ? <em className={s.now} data-f="kind-now">지금 앨범 종류</em> : busy === k.v ? <i className={s.spin} /> : null}
+            </button>
+          );
+        })}
       </div>
+      <p className={s.who}>누르면 바로 바뀌고, 모든 멤버의 화면이 함께 바뀌어요.</p>
     </Sheet>
   );
 }

@@ -136,6 +136,8 @@ create table if not exists public.posts (
   created_at timestamptz not null default now()
 );
 create index if not exists posts_family_created_idx on public.posts (family_id, created_at desc);
+-- 찍은 날 순 타임라인 · 날짜로 찾기
+create index if not exists posts_family_taken_idx on public.posts (family_id, taken_at desc, id desc);
 
 create table if not exists public.likes (
   post_id    uuid not null references public.posts(id) on delete cascade,
