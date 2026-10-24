@@ -157,6 +157,7 @@ export function Settings() {
           <Row icon={<Icon name="refresh" size={22} />} label="저장 공간 정리" detail="이 휴대폰" onClick={async () => {
             if (await confirm({ title: '이 휴대폰에 보관된 사진을 비울까요?', message: '앨범의 사진은 그대로예요. 다시 볼 때 새로 받아요.', ok: '비우기' })) { await clearCache(); toast('비웠어요'); }
           }} />
+          <Row icon={<Icon name="shield" size={22} />} label="개인정보처리방침" onClick={() => window.open('privacy.html', '_blank', 'noopener')} data-row="privacy" />
           <Row icon={<Icon name="info" size={22} />} label="버전" detail={`Pastel Memories ${VERSION}`} />
         </Group>
 
