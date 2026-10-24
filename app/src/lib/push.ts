@@ -1,10 +1,14 @@
-// 알림: 이 휴대폰에서 받을지, 무엇을 받을지 (새 사진 · 댓글 · 기념일·추억)
+// 알림: 이 휴대폰에서 받을지, 무엇을 받을지 (새 사진 · 댓글 · 기념일 · N년 전 오늘)
 import { sb } from './supabase';
 import { driveSetup } from './drive';
 import { isIOS, isStandalone } from './device';
 
-export interface PushPrefs { post: boolean; comment: boolean; daily: boolean }
-export const DEFAULT_PREFS: PushPrefs = { post: true, comment: true, daily: true };
+export interface PushPrefs { post: boolean; comment: boolean; anniv: boolean; memory: boolean }
+export const DEFAULT_PREFS: PushPrefs = { post: true, comment: true, anniv: true, memory: true };
+// 예전 설정(daily: 기념일·추억 한꺼번에)은 둘 다에 써요
+const fromSaved = (d: Partial<PushPrefs> & { daily?: boolean }): PushPrefs => ({
+  post: d.post ?? true, comment: d.comment ?? true, anniv: d.anniv ?? d.daily ?? true, memory: d.memory ?? d.daily ?? true,
+});
 
 /** ok: 받을 수 있어요 · ios-home: 아이폰은 홈 화면에 추가한 앱에서만 · no: 이 브라우저는 못 받아요 */
 export function pushSupport(): 'ok' | 'ios-home' | 'no' {
@@ -34,12 +38,12 @@ export async function pushState(): Promise<{ on: boolean; prefs: PushPrefs; deni
   const sub = await currentSub().catch(() => null);
   if (!sub) return { on: false, prefs: DEFAULT_PREFS, denied };
   const { data } = await sb.rpc('my_push', { p_endpoint: sub.endpoint });
-  return data ? { on: true, prefs: { ...DEFAULT_PREFS, ...(data as Partial<PushPrefs>) }, denied } : { on: false, prefs: DEFAULT_PREFS, denied };
+  return data ? { on: true, prefs: fromSaved(data as Partial<PushPrefs>), denied } : { on: false, prefs: DEFAULT_PREFS, denied };
 }
 
 async function save(sub: PushSubscription, prefs: PushPrefs) {
   const j = sub.toJSON() as { endpoint: string; keys?: { p256dh?: string; auth?: string } };
-  const { error } = await sb.rpc('save_push', { p_endpoint: j.endpoint, p_p256dh: j.keys?.p256dh || '', p_auth: j.keys?.auth || '', p_prefs: prefs });
+  const { error } = await sb.rpc('save_push', { p_endpoint: j.endpoint, p_p256dh: j.keys?.p256dh || '', p_auth: j.keys?.auth || '', p_prefs: { ...prefs, daily: prefs.anniv || prefs.memory } });
   if (error) throw new Error(/function|schema/i.test(error.message) ? 'Supabase에 새 데이터베이스 설정이 필요해요. SQL Editor에서 schema.sql을 한 번 더 실행해 주세요. (설명서 참고)' : '알림을 켜지 못했어요. 잠시 후 다시 해 주세요.');
 }
 

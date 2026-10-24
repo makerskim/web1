@@ -148,6 +148,18 @@ create table if not exists public.likes (
 );
 create index if not exists likes_family_created_idx on public.likes (family_id, created_at desc);
 
+-- 올릴 때 고르는 것: 세로 사진 양옆 배경(흐리게 · 검은색 · 흰색) · 공개 범위(모든 멤버 · 관리자만)
+alter table public.posts add column if not exists bg text not null default 'blur';
+alter table public.posts drop constraint if exists posts_bg_check;
+alter table public.posts add constraint posts_bg_check check (bg in ('blur', 'black', 'white'));
+alter table public.posts add column if not exists visibility text not null default 'all';
+alter table public.posts drop constraint if exists posts_visibility_check;
+alter table public.posts add constraint posts_visibility_check check (visibility in ('all', 'owners'));
+-- 리액션: 하트 말고도 몇 가지 (한 사람이 게시물마다 하나)
+alter table public.likes add column if not exists emoji text not null default '❤️';
+alter table public.likes drop constraint if exists likes_emoji_check;
+alter table public.likes add constraint likes_emoji_check check (emoji in ('❤️', '😍', '😂', '👏', '🥹', '🙏'));
+
 create table if not exists public.comments (
   id         uuid primary key default gen_random_uuid(),
   post_id    uuid not null references public.posts(id) on delete cascade,
@@ -177,6 +189,13 @@ $$;
 create or replace function public.is_owner(fid uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from members where family_id = fid and user_id = auth.uid() and role = 'owner');
+$$;
+
+-- 이 게시물을 볼 수 있는지: 앨범 멤버이고, '관리자만' 게시물이면 관리자나 올린 사람만
+create or replace function public.can_see_post(p_post uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from posts p where p.id = p_post and public.is_member(p.family_id)
+    and (p.visibility = 'all' or p.author_id = auth.uid() or public.is_owner(p.family_id)));
 $$;
 
 create or replace function public.is_member_path(path text)
@@ -558,14 +577,15 @@ grant update (name, baby_name, baby_birthday, storage, cover, children, bio, kin
 grant select, delete on public.members to authenticated;
 grant update (display_name, avatar) on public.members to authenticated;
 grant select, delete on public.posts to authenticated;
-grant insert (id, family_id, caption, taken_at, photos) on public.posts to authenticated;
-grant update (caption, taken_at) on public.posts to authenticated;
+grant insert (id, family_id, caption, taken_at, photos, bg, visibility) on public.posts to authenticated;
+grant update (caption, taken_at, bg, visibility) on public.posts to authenticated;
 grant select, insert, delete on public.likes to authenticated;
+grant update (emoji) on public.likes to authenticated;
 grant select, insert, delete on public.comments to authenticated;
 -- drive_tokens · user_drives · push_subs · app_keys · push_sent: 앱은 표를 직접 못 써요 (위의 기능으로만)
 
 revoke execute on function
-  public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
+  public.is_member(uuid), public.is_owner(uuid), public.can_see_post(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.gen_invite_code(), public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
@@ -575,7 +595,7 @@ revoke execute on function
   public.on_this_day(uuid, int, int, text)
   from public, anon;
 grant execute on function
-  public.is_member(uuid), public.is_owner(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
+  public.is_member(uuid), public.is_owner(uuid), public.can_see_post(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
@@ -602,7 +622,8 @@ create policy members_delete on public.members for delete to authenticated
   using (user_id = auth.uid() or public.is_owner(family_id));
 
 drop policy if exists posts_select on public.posts;
-create policy posts_select on public.posts for select to authenticated using (public.is_member(family_id));
+create policy posts_select on public.posts for select to authenticated
+  using (public.is_member(family_id) and (visibility = 'all' or author_id = auth.uid() or public.is_owner(family_id)));
 drop policy if exists posts_insert on public.posts;
 create policy posts_insert on public.posts for insert to authenticated
   with check (author_id = auth.uid() and public.is_member(family_id));
@@ -614,18 +635,22 @@ create policy posts_delete on public.posts for delete to authenticated
   using (author_id = auth.uid() or public.is_owner(family_id));
 
 drop policy if exists likes_select on public.likes;
-create policy likes_select on public.likes for select to authenticated using (public.is_member(family_id));
+create policy likes_select on public.likes for select to authenticated using (public.is_member(family_id) and public.can_see_post(post_id));
 drop policy if exists likes_insert on public.likes;
 create policy likes_insert on public.likes for insert to authenticated
-  with check (user_id = auth.uid() and public.is_member(family_id));
+  with check (user_id = auth.uid() and public.is_member(family_id) and public.can_see_post(post_id));
+-- 리액션 바꾸기 (❤️ → 😂)
+drop policy if exists likes_update on public.likes;
+create policy likes_update on public.likes for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid() and public.can_see_post(post_id));
 drop policy if exists likes_delete on public.likes;
 create policy likes_delete on public.likes for delete to authenticated using (user_id = auth.uid());
 
 drop policy if exists comments_select on public.comments;
-create policy comments_select on public.comments for select to authenticated using (public.is_member(family_id));
+create policy comments_select on public.comments for select to authenticated using (public.is_member(family_id) and public.can_see_post(post_id));
 drop policy if exists comments_insert on public.comments;
 create policy comments_insert on public.comments for insert to authenticated
-  with check (author_id = auth.uid() and public.is_member(family_id));
+  with check (author_id = auth.uid() and public.is_member(family_id) and public.can_see_post(post_id));
 drop policy if exists comments_delete on public.comments;
 create policy comments_delete on public.comments for delete to authenticated
   using (author_id = auth.uid() or public.is_owner(family_id));

@@ -24,7 +24,7 @@ function bucket(at: string) {
   return '이전';
 }
 
-interface Row extends ActivityEvent { users: string[] }
+interface Row extends ActivityEvent { users: string[]; emojis: string[] }
 
 export function Activity() {
   const album = useAlbum()!;
@@ -45,11 +45,16 @@ export function Activity() {
       if (e.type === 'like') {
         const k = `${e.postId}|${e.at.slice(0, 10)}`;
         const r = likeKey.get(k);
-        if (r) { if (!r.users.includes(e.userId)) r.users.push(e.userId); continue; }
-        const row = { ...e, users: [e.userId] };
+        const em = e.emoji || '❤️';
+        if (r) {
+          if (!r.users.includes(e.userId)) r.users.push(e.userId);
+          if (!r.emojis.includes(em)) r.emojis.push(em);
+          continue;
+        }
+        const row = { ...e, users: [e.userId], emojis: [em] };
         likeKey.set(k, row);
         out.push(row);
-      } else out.push({ ...e, users: [e.userId] });
+      } else out.push({ ...e, users: [e.userId], emojis: [] });
     }
     const groups = new Map<string, Row[]>();
     out.forEach((r) => { const b = bucket(r.at); groups.set(b, [...(groups.get(b) || []), r]); });
@@ -60,7 +65,10 @@ export function Activity() {
     const n = member(r.users[0]).displayName;
     const name = <b>{n}</b>;
     const josa = subj(n).slice(n.length);
-    if (r.type === 'like') return r.users.length > 1 ? <>{name} 외 {r.users.length - 1}명이 사진을 좋아해요</> : <>{name}{josa} 사진을 좋아해요</>;
+    if (r.type === 'like') {
+      const who = r.users.length > 1 ? <>{name} 외 {r.users.length - 1}명이</> : <>{name}{josa}</>;
+      return r.emojis.every((x) => x === '❤️') ? <>{who} 사진을 좋아해요</> : <>{who} 사진에 {r.emojis.join('')} 반응을 남겼어요</>;
+    }
     if (r.type === 'comment') {
       const emojiOnly = /^\p{Extended_Pictographic}+$/u.test((r.body || '').replace(/\s/g, ''));
       return emojiOnly ? <>{name}{josa} {r.body} 반응을 남겼어요</> : <>{name}{josa} 댓글을 남겼어요<span className={s.quote}>{r.body}</span></>;

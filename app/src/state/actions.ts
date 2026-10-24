@@ -4,17 +4,21 @@ import { confirm, progress, toast } from '../components/ui';
 import { connectDrive } from '../lib/drive';
 import { usePosts } from './posts';
 import { useSession } from './session';
-import type { Post } from '../lib/types';
+import type { Post, Reaction } from '../lib/types';
 
-export const liked = (p: Post) => p.likes.some((l) => l.userId === useSession.getState().me?.id);
+export const myReaction = (p: Post): Reaction | null => p.likes.find((l) => l.userId === useSession.getState().me?.id)?.emoji || null;
 
-export async function toggleLike(p: Post, on = !liked(p)) {
+// 리액션 남기기·바꾸기·없애기 (화면 먼저 바꾸고, 실패하면 되돌려요)
+export async function react(p: Post, emoji: Reaction | null) {
   const me = useSession.getState().me!.id;
-  const before = p;
-  const next: Post = { ...p, likes: on ? [...p.likes.filter((l) => l.userId !== me), { userId: me, createdAt: new Date().toISOString() }] : p.likes.filter((l) => l.userId !== me) };
+  const cur = usePosts.getState().byId[p.id] || p;
+  const before = cur;
+  const had = cur.likes.find((l) => l.userId === me);
+  const others = cur.likes.filter((l) => l.userId !== me);
+  const next: Post = { ...cur, likes: emoji ? [...others, { userId: me, createdAt: had?.createdAt || new Date().toISOString(), emoji }] : others };
   usePosts.getState().put(next);
   try {
-    await api.like(p, on, me);
+    await api.react(cur, emoji, me);
   } catch (e) {
     usePosts.getState().put(before);
     toast((e as Error).message);

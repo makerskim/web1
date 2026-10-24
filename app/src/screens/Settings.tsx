@@ -22,6 +22,7 @@ import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlb
 import { KidsForm } from '../components/KidsForm';
 import { KindSheet } from '../components/KindPicker';
 import { DEFAULT_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, type PushPrefs } from '../lib/push';
+import { setHomePref, useHomePrefs } from '../lib/homePrefs';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
@@ -168,6 +169,7 @@ export function Settings() {
         </Group>
 
         <Group title="앱">
+          <Row icon={<Icon name="star" size={22} />} label="기념일 · 추억" detail="홈 화면 카드" onClick={() => nav('/settings/memories')} data-row="memories" />
           <Row icon={<Icon name="bell" size={22} />} label="알림" detail="새 사진 · 댓글 · 기념일" onClick={() => nav('/settings/notify')} data-row="notify" />
           <Row icon={<Icon name="text" size={22} />} label="글자 크기" detail={TEXT_SIZES.find((t) => t.value === textSize)?.label} onClick={() => setSheet('text')} data-row="text" />
           {isStandalone()
@@ -475,6 +477,34 @@ export function AlbumInfo() {
   );
 }
 
+// ---------- 기념일 · 추억: 홈 화면 카드 (이 휴대폰) · 기념일 관리 · 알림 ----------
+export function MemorySettings() {
+  const album = useAlbum()!;
+  const nav = useNavigate();
+  const home = useHomePrefs();
+  const owner = album.myRole === 'owner';
+  return (
+    <Page>
+      <TopBar back title="기념일 · 추억" />
+      <div className={s.page}>
+        <Group title="홈 화면에 보이기" footer="이 휴대폰에서만 바뀌어요. 끄면 그날 카드가 홈 맨 위에 나오지 않아요.">
+          <Row label={<Two title="오늘의 기념일" sub="‘오늘은 백일이에요 🎉’ 같은 카드" />} chevron={false} data-row="home-anniv">
+            <Toggle checked={home.anniv} onChange={(v) => setHomePref('anniv', v)} label="오늘의 기념일 카드" data-home="anniv" />
+          </Row>
+          <Row label={<Two title="N년 전 오늘" sub="지난해 오늘 찍은 사진 모아 보기 카드" />} chevron={false} data-row="home-memory">
+            <Toggle checked={home.memory} onChange={(v) => setHomePref('memory', v)} label="N년 전 오늘 카드" data-home="memory" />
+          </Row>
+        </Group>
+        <Group>
+          <Row icon={<Icon name="play" size={22} />} label="N년 전 오늘 보기" onClick={() => nav('/memories')} data-row="memories-open" />
+          <Row icon={<Icon name="calendar" size={22} />} label="기념일 관리" detail={owner ? undefined : '관리자만'} onClick={owner ? () => nav('/settings/album') : undefined} data-row="days" />
+          <Row icon={<Icon name="bell" size={22} />} label="알림" detail="기념일 · N년 전 오늘" onClick={() => nav('/settings/notify')} data-row="notify-link" />
+        </Group>
+      </div>
+    </Page>
+  );
+}
+
 // ---------- 알림 (이 휴대폰) ----------
 export function NotifySettings() {
   const nav = useNavigate();
@@ -519,10 +549,11 @@ export function NotifySettings() {
               </Row>
             </Group>
             {st?.on && (
-              <Group title="받을 알림" footer="기념일·추억 알림은 매일 아침 9시쯤, 챙길 날이나 N년 전 오늘 사진이 있을 때만 와요.">
+              <Group title="받을 알림" footer="기념일·N년 전 오늘 알림은 매일 아침 9시쯤, 챙길 날이나 그날 찍은 지난 사진이 있을 때만 와요.">
                 <Row label={<Two title="새 사진·동영상" sub="가족이 올리면" />} chevron={false}><Toggle checked={st.prefs.post} onChange={(v) => setPref('post', v)} label="새 사진 알림" data-pref="post" /></Row>
                 <Row label={<Two title="댓글" sub="내 게시물이나 내가 댓글 단 게시물에" />} chevron={false}><Toggle checked={st.prefs.comment} onChange={(v) => setPref('comment', v)} label="댓글 알림" data-pref="comment" /></Row>
-                <Row label={<Two title="기념일 · 추억" sub="백일·돌·기념일, N년 전 오늘" />} chevron={false}><Toggle checked={st.prefs.daily} onChange={(v) => setPref('daily', v)} label="기념일 알림" data-pref="daily" /></Row>
+                <Row label={<Two title="기념일" sub="백일·돌·생일, 앨범에 넣은 기념일" />} chevron={false}><Toggle checked={st.prefs.anniv} onChange={(v) => setPref('anniv', v)} label="기념일 알림" data-pref="anniv" /></Row>
+                <Row label={<Two title="N년 전 오늘" sub="지난해 오늘 찍은 사진이 있으면" />} chevron={false}><Toggle checked={st.prefs.memory} onChange={(v) => setPref('memory', v)} label="N년 전 오늘 알림" data-pref="memory" /></Row>
               </Group>
             )}
           </>

@@ -72,7 +72,7 @@ export interface PhotoMeta {
   mime?: string;
 }
 
-export interface Like { userId: string; createdAt: string }
+export interface Like { userId: string; createdAt: string; emoji: Reaction }
 export interface Comment { id: string; postId: string; authorId: string; body: string; createdAt: string }
 
 export interface Post {
@@ -85,7 +85,16 @@ export interface Post {
   photos: PhotoMeta[];
   likes: Like[];
   comments: Comment[];
+  /** 세로 사진 양옆 배경 */
+  bg: PhotoBg;
+  /** 공개 범위: 모든 멤버 · 관리자만 */
+  visibility: Visibility;
 }
+export type PhotoBg = 'blur' | 'black' | 'white';
+export type Visibility = 'all' | 'owners';
+/** 리액션 (한 사람이 게시물마다 하나) */
+export const REACTIONS = ['❤️', '😍', '😂', '👏', '🥹', '🙏'] as const;
+export type Reaction = typeof REACTIONS[number];
 
 export interface ActivityEvent {
   type: 'post' | 'like' | 'comment' | 'join';
@@ -95,6 +104,8 @@ export interface ActivityEvent {
   post?: { id: string; photos: PhotoMeta[] };
   body?: string;
   count?: number;
+  /** 리액션이면 어떤 것 */
+  emoji?: Reaction;
 }
 
 export interface Me {

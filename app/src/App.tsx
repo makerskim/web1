@@ -17,7 +17,7 @@ import { Grid } from './screens/Grid';
 import { Activity, activitySeenAt } from './screens/Activity';
 import { AlbumHome } from './screens/AlbumHome';
 import { PostPage } from './screens/PostPage';
-import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, UploadSettings, NotifySettings, Install } from './screens/Settings';
+import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, UploadSettings, NotifySettings, MemorySettings, Install } from './screens/Settings';
 import { DayEdit } from './screens/DayEdit';
 import { ComposeHost, startCompose } from './screens/Compose';
 import { Memories } from './screens/Memories';
@@ -154,6 +154,7 @@ function Shell() {
         <Route path="/settings/drive" element={<Navigate to="/settings/upload" replace />} />
         <Route path="/settings/upload" element={<UploadSettings />} />
         <Route path="/settings/notify" element={<NotifySettings />} />
+        <Route path="/settings/memories" element={<MemorySettings />} />
         <Route path="/settings/install" element={<Install />} />
         <Route path="/create" element={<CreateAlbum />} />
         <Route path="/join" element={<JoinAlbum />} />
