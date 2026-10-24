@@ -177,15 +177,15 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 1. GitHub에서 [`supabase/functions/drive/index.ts`](supabase/functions/drive/index.ts) 를 열고 오른쪽 위 **복사(Copy raw file)** 버튼
 2. Supabase → 왼쪽 **Edge Functions**
    - **처음이면**: **Deploy a new function → Via Editor** → 편집기의 내용을 모두 지우고 붙여넣기
-     - 아래 **Function name** 칸에 미리 들어 있는 이름을 지우고 `drive` 입력 (다른 이름이면 앱이 찾지 못해요)
-     - **Deploy function**
+     - 아래 **Function name** 칸에 미리 들어 있는 이름(예: `swift-endpoint`)을 지우고 영어로 `drive` 입력 → 그다음에 **Deploy function**
+     - ⚠ 이 칸은 **처음 만들 때만** 주소가 돼요. 먼저 만든 뒤 Details에서 이름만 `drive`로 바꾸면, 화면의 이름만 바뀌고 주소는 `.../functions/v1/swift-endpoint` 그대로라 앱이 찾지 못해요. 그때는 그 함수를 지우고 새로 만들어요.
    - **이미 `drive`가 있으면**: **drive → Code** 탭 → 내용을 모두 지우고 붙여넣기 → **Deploy updates**
      - 업데이트가 있을 때마다 이렇게 새 코드로 바꿔 주세요. 이번 업데이트에도 꼭 해 주세요.
 3. **맞는 곳에 올라갔는지 확인** (`NOT_FOUND`가 나오면 여기가 문제예요)
    - Supabase 화면 주소창에 `project/nontwyuhvjizyuconxej` 가 들어 있어야 해요. 다른 글자면 **다른 프로젝트**에 올린 거예요.
      - 바로가기: `https://supabase.com/dashboard/project/nontwyuhvjizyuconxej/functions` 를 열면 앱이 쓰는 프로젝트의 함수 목록이 나와요.
    - 그 목록에 **`drive`** 가 있어야 해요. 눌러서 나오는 **Endpoint URL**(또는 URL)이 `https://nontwyuhvjizyuconxej.supabase.co/functions/v1/drive` 로 끝나야 해요.
-     - `drive-xxx`, `hello-world` 처럼 다른 이름이면 앱이 찾지 못해요. 위 '처음이면'대로 이름을 `drive`로 새로 만들어요. (이름이 다른 함수는 지워도 돼요)
+     - `swift-endpoint`, `hello-world` 처럼 주소 끝이 `drive`가 아니면(목록의 이름이 `drive`여도) 앱이 찾지 못해요. 그 함수를 지우고 위 '처음이면'대로 `drive`로 새로 만들어요. 비밀값(6-6)은 프로젝트 전체에 들어 있어서 다시 넣지 않아도 돼요.
    - 주소창에 `https://nontwyuhvjizyuconxej.supabase.co/functions/v1/drive/config` 를 열어 `{"error":"not_signed_in"}` 이 나오면 성공이에요 (6-5까지 한 뒤).
 
 ### 6-5. Verify JWT 끄기
