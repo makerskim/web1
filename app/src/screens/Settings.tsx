@@ -518,6 +518,7 @@ const checkable = (st: DriveSetup['state']) => st === 'unreachable' || st === 'm
 export function MyDriveSettings() {
   const my = useMyDrive();
   const me = useSession((st) => st.me);
+  const owner = useSession((st) => st.isOwner());
   const [setup, setSetup] = useState<DriveSetup | null>(null);
   useEffect(() => { preloadDrive(); loadMyDrive(); driveSetup().then(setSetup); }, []);
   const recheck = () => { setSetup(null); driveSetup(true).then(setSetup); };
@@ -585,6 +586,8 @@ export function MyDriveSettings() {
               </ol>
               <Button onClick={connect} disabled={!setup} className={s.googleBtn} data-f="drive-connect"><GoogleIcon size={18} />{setup ? '구글 로그인' : '확인 중…'}</Button>
               {warn && <p className={s.driveHelp} data-f="drive-warn">{warn}</p>}
+              {/* 관리자용: 구글 창에 'OAuth client was not found'가 뜨면 구글 클라우드의 ID와 한 글자씩 비교해요 */}
+              {owner && setup?.state === 'ready' && <p className={`${s.driveHelp} ${s.clientId}`} data-f="drive-client-id">이 앱이 쓰는 클라이언트 ID<br />{setup.clientId}</p>}
             </div>
           )}
           {me?.provider === 'kakao' && (

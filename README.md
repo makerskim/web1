@@ -347,7 +347,7 @@ $$);
 | 카카오 로그인 후 “Error getting user email” | 3-6번: **Allow users without an email** 켜기 |
 | 구글 **redirect_uri_mismatch** | 4-3 승인된 리디렉션 URI 확인 (JavaScript 원본 칸이 아니에요) |
 | 구글 **액세스 차단됨 · org_internal** | 대상이 '내부'예요. 4-2 아래 상자대로 개인 Gmail 프로젝트로 하거나 '외부로 전환' |
-| 구글 창에 **액세스 차단됨 · The OAuth client was not found · 401 invalid_client** | 6-6 `GOOGLE_CLIENT_ID` 값이 틀렸어요. 4-3 클라이언트 화면의 ID를 다시 복사해서 같은 이름으로 다시 넣고 Save. 클라이언트를 방금 만들었으면 5분쯤 뒤에 다시 해요. (서버 기능을 최신으로 배포하면 앱의 설정 → 내 구글 드라이브가 어느 값이 틀렸는지 알려 줘요) |
+| 구글 창에 **액세스 차단됨 · The OAuth client was not found · 401 invalid_client** (어느 창인지: 오류 화면의 **오류 세부정보**에 `redirect_uri=...supabase.co/auth/v1/callback`이 있으면 첫 화면의 **Google 로그인** → 4-6 **Client IDs** 칸을 고쳐요. 없으면 앱 안의 구글 로그인 → 아래) | 6-6 `GOOGLE_CLIENT_ID` 값이 틀렸어요. 4-3 클라이언트 화면의 ID를 다시 복사해서 같은 이름으로 다시 넣고 Save. 클라이언트를 방금 만들었으면 5분쯤 뒤에 다시 해요. (서버 기능을 최신으로 배포하면 앱의 설정 → 내 구글 드라이브가 어느 값이 틀렸는지 알려 줘요) |
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
 | “새 데이터베이스 설정이 필요해요” · “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 (최신 `schema.sql` 전체를 붙여넣기) |
