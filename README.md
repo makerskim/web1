@@ -181,6 +181,12 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
      - **Deploy function**
    - **이미 `drive`가 있으면**: **drive → Code** 탭 → 내용을 모두 지우고 붙여넣기 → **Deploy updates**
      - 업데이트가 있을 때마다 이렇게 새 코드로 바꿔 주세요. 이번 업데이트에도 꼭 해 주세요.
+3. **맞는 곳에 올라갔는지 확인** (`NOT_FOUND`가 나오면 여기가 문제예요)
+   - Supabase 화면 주소창에 `project/nontwyuhvjizyuconxej` 가 들어 있어야 해요. 다른 글자면 **다른 프로젝트**에 올린 거예요.
+     - 바로가기: `https://supabase.com/dashboard/project/nontwyuhvjizyuconxej/functions` 를 열면 앱이 쓰는 프로젝트의 함수 목록이 나와요.
+   - 그 목록에 **`drive`** 가 있어야 해요. 눌러서 나오는 **Endpoint URL**(또는 URL)이 `https://nontwyuhvjizyuconxej.supabase.co/functions/v1/drive` 로 끝나야 해요.
+     - `drive-xxx`, `hello-world` 처럼 다른 이름이면 앱이 찾지 못해요. 위 '처음이면'대로 이름을 `drive`로 새로 만들어요. (이름이 다른 함수는 지워도 돼요)
+   - 주소창에 `https://nontwyuhvjizyuconxej.supabase.co/functions/v1/drive/config` 를 열어 `{"error":"not_signed_in"}` 이 나오면 성공이에요 (6-5까지 한 뒤).
 
 ### 6-5. Verify JWT 끄기
 1. **Edge Functions → drive → Settings**
@@ -346,7 +352,10 @@ $$);
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
 | “새 데이터베이스 설정이 필요해요” · “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 (최신 `schema.sql` 전체를 붙여넣기) |
 | 설정 → 내 구글 드라이브에 ‘아직 준비 중이에요’ | 카드 아래 안내에 적힌 6번의 단계를 하고 **다시 확인** |
-| “서버 기능(drive)에 닿지 않아요” · “예전 코드예요” | 6-4 함수 이름이 정확히 `drive` 인지, 새 코드로 다시 배포했는지 · 6-5 Verify JWT를 껐는지 |
+| “서버 기능(drive)에 닿지 않아요” · “예전 코드예요” | 6-4 함수 이름이 정확히 `drive` 인지, 새 코드로 다시 배포했는지 · 6-5 Verify JWT를 껐는지. 앱의 **직접 확인하기**로 아래 세 줄 중 어느 것인지 봐요 |
+| 직접 확인에 `NOT_FOUND` (Requested function was not found) | 앱이 쓰는 프로젝트(`nontwyuhvjizyuconxej`)에 `drive` 함수가 없어요. 6-4의 3번(다른 프로젝트·다른 이름인지) 확인 |
+| 직접 확인에 `401` · `JWT` | 6-5 Verify JWT 끄기 → Save changes |
+| 직접 확인에 `{"error":"not_signed_in"}` | 서버 기능은 정상이에요. 앱에서 **다시 확인** (안 바뀌면 새로고침) |
 | “Supabase 비밀값 GOOGLE_API_KEY…이 아직 없어요” | 6-3에서 API 키를 만들고 6-6에 넣기 |
 | “GOOGLE_CLIENT_SECRET이 클라이언트 ID와 맞지 않아요” | 6-6 두 값이 **같은 클라이언트**의 것인지 (앞뒤 빈칸 없이) |
 | “Google Drive API가 아직 꺼져 있어요” | 6-1번 (켠 뒤 몇 분 걸릴 수 있어요) |

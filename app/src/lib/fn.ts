@@ -10,7 +10,7 @@ export async function authHeaders() {
   return { Authorization: `Bearer ${token}`, apikey: config.supabaseKey };
 }
 
-const fnUrl = (route: string) => `${config.supabaseUrl}/functions/v1/drive/${route}`;
+export const fnUrl = (route: string) => `${config.supabaseUrl}/functions/v1/drive/${route}`;
 
 // 오류에는 서버가 보낸 이름(code)도 붙여 둬요 (연결 준비 상태를 가릴 때 써요)
 const fnError = (code: string) => Object.assign(new Error(friendly(code)), { code });

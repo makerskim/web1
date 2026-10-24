@@ -6,7 +6,7 @@
 // 클라이언트 ID·API 키는 앱 코드가 아니라 서버 기능(Supabase 비밀값)에서 받아 와요.
 import { create } from 'zustand';
 import { sb } from './supabase';
-import { fnCall } from './fn';
+import { fnCall, fnUrl } from './fn';
 
 declare global {
   interface Window {
@@ -50,13 +50,23 @@ async function loadSetup(): Promise<DriveSetup> {
   } catch (e) {
     const code = (e as { code?: string }).code || '';
     // 인터넷은 되는데 닿지 않으면, 서버 기능이 없거나 막힌 경우가 많아요 (그 응답엔 CORS 헤더가 없어요)
-    if (code === 'offline') return { state: navigator.onLine === false ? 'offline' : 'unreachable' };
+    if (code === 'offline') return navigator.onLine === false ? { state: 'offline' } : probe();
     if (code === 'drive_404') return { state: 'missing' };
     if (code === 'drive_401') return { state: 'jwt' };
     if (code === 'bad_album' || code === 'unknown_route') return { state: 'old' };
     return { state: 'error' };
   }
 }
+// 머리말 없이 한 번 더 물어봐요: Supabase가 읽을 수 있는 답을 주면 '함수 없음'·'JWT 켜짐'을 가려요
+async function probe(): Promise<DriveSetup> {
+  const r = await fetch(fnUrl('config')).then(async (res) => ({ status: res.status, body: await res.json().catch(() => ({})) as { code?: string; error?: string; message?: string } })).catch(() => null);
+  if (r && (r.status === 404 || r.body.code === 'NOT_FOUND')) return { state: 'missing' };
+  if (r && r.status === 401 && r.body.error !== 'not_signed_in') return { state: 'jwt' };
+  return { state: 'unreachable' };
+}
+/** 앱을 만든 분이 주소창에서 직접 확인하는 주소 (정상이면 {"error":"not_signed_in"}) */
+export const driveCheckUrl = () => fnUrl('config');
+
 /** 준비됐을 때만 기억해요 (설정을 마치고 다시 열면 바로 반영) */
 export function driveSetup(fresh = false) {
   if (!setup || fresh) setup = loadSetup().then((r) => { known = r; if (r.state !== 'ready') setup = null; return r; });
@@ -68,12 +78,12 @@ export const apiKeyNow = () => (known?.state === 'ready' ? known.apiKey : null);
 /** 준비가 안 됐을 때 알려 줄 말 (설명서 6번의 몇 단계인지) */
 export function setupHelp(st: Exclude<DriveSetup, { state: 'ready' }>) {
   switch (st.state) {
-    case 'missing': return '서버 기능(drive)이 아직 없어요. 설명서 6-4를 해 주세요.';
+    case 'missing': return '이 Supabase 프로젝트에 서버 기능 drive가 없어요. 설명서 6-4대로 이름을 정확히 drive로 배포해 주세요.';
     case 'old': return '서버 기능(drive)이 예전 코드예요. 설명서 6-4대로 새 코드로 바꿔 주세요.';
     case 'secrets': return `Supabase 비밀값 ${st.need.join(', ')}이 아직 없어요. 설명서 6-6을 해 주세요.`;
     case 'jwt': return '서버 기능의 Verify JWT가 켜져 있어요. 설명서 6-5를 해 주세요.';
     case 'offline': return '인터넷 연결을 확인해 주세요.';
-    case 'unreachable': return '서버 기능(drive)에 닿지 않아요. 설명서 6-4(배포)와 6-5(Verify JWT 끄기)를 확인해 주세요.';
+    case 'unreachable': return '서버 기능(drive)에 닿지 않아요. drive가 이 프로젝트에 없거나(설명서 6-4) Verify JWT가 켜져 있어요(설명서 6-5).';
     default: return '서버 기능에 문제가 있어요. 잠시 후 다시 확인해 주세요.';
   }
 }
@@ -123,7 +133,7 @@ export function linkFromLogin(refreshToken: string) {
  *  hint: 구글로 로그인한 분의 이메일 (계정 고르기를 건너뛰어요) */
 export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?: () => void; hint?: string } = {}) {
   const st = await driveSetup();
-  if (st.state !== 'ready') throw new Error(setupHelp(st));
+  if (st.state !== 'ready') throw new Error(`아직 구글 로그인 준비가 안 됐어요 (앱을 만든 분이 할 일). ${setupHelp(st)}`);
   await loadGis();
   const asked = new Promise<string>((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initCodeClient({
