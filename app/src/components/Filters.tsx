@@ -9,9 +9,11 @@ import { useSession } from '../state/session';
 import { WEEKDAYS, fmtDay, monthCells, ymd } from '../lib/dates';
 import s from './Filters.module.css';
 
-export interface Filter { who: string | null; period: string | null } // period: 'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD' (올린 날 기준)
+export interface Filter { who: string | null; period: string | null } // period: 'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD' (찍은 날 기준, 없으면 올린 날)
 export const NO_FILTER: Filter = { who: null, period: null };
-export interface Dated { authorId: string; createdAt: string }
+export interface Dated { authorId: string; createdAt: string; takenAt?: string | null }
+/** 이 사진의 날짜: 찍은 날 (없으면 올린 날) */
+export const dayOf = (it: Dated) => ymd(new Date(it.takenAt || it.createdAt));
 
 // 올린 날(내 휴대폰 시간)의 'YYYY-MM-DD' / 'YYYY-MM'
 const localDay = (iso: string) => ymd(new Date(iso));
@@ -20,7 +22,7 @@ export const monthOf = localMonth;
 
 export function matches(f: Filter, it: Dated) {
   if (f.who && it.authorId !== f.who) return false;
-  if (f.period && !localDay(it.createdAt).startsWith(f.period)) return false;
+  if (f.period && !dayOf(it).startsWith(f.period)) return false;
   return true;
 }
 
@@ -105,7 +107,7 @@ function DateSheet({ open, onClose, items, value, onPick, unit }: {
     const byDay = new Map<string, number>();
     const byMonth = new Map<string, number>();
     items.forEach((it) => {
-      const d = localDay(it.createdAt);
+      const d = dayOf(it);
       byDay.set(d, (byDay.get(d) || 0) + 1);
       byMonth.set(d.slice(0, 7), (byMonth.get(d.slice(0, 7)) || 0) + 1);
     });

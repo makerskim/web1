@@ -15,3 +15,9 @@
 .loading { height: 40vh; }
 
 .playMonth { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 4px 10px 4px 8px; border-radius: var(--r-full); background: var(--c-accent-soft); color: var(--c-accent-strong); font-size: var(--t-footnote); font-weight: 700; }
+
+/* 달 막대: 가로로 넘기며 누르면 그 달로 */
+.months { display: flex; gap: 6px; overflow-x: auto; padding: 0 var(--gutter) var(--s-3); scrollbar-width: none; }
+.months::-webkit-scrollbar { display: none; }
+.months button { flex: none; display: inline-flex; align-items: baseline; gap: 4px; min-height: 32px; padding: 0 12px; border-radius: 999px; background: var(--c-surface-2); font-size: var(--t-footnote); font-weight: 600; color: var(--c-label); }
+.months small { font-size: 0.7rem; color: var(--c-label-3); font-weight: 600; }

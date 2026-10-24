@@ -150,7 +150,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
   const myDrive = useMyDrive();
   const needDrive = myDrive.loaded && !myDrive.email;
   useEffect(() => { loadMyDrive(); preloadDrive(); }, []);
-  const login = async () => { if (await linkDrive()) toast('구글 로그인이 됐어요. 이제 공유를 눌러 주세요'); };
+  const login = async () => { if (await linkDrive()) toast('구글 드라이브와 연동했어요. 이제 공유를 눌러 주세요'); };
 
   // 글이 길어지면 칸도 같이 늘어나요
   useEffect(() => {
@@ -184,7 +184,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
 
   const share = async () => {
     if (useCompose.getState().busy) return;
-    if (needDrive) { toast('먼저 구글 로그인을 해 주세요'); return; }
+    if (needDrive) { toast('먼저 구글 드라이브와 연동해 주세요'); return; }
     useCompose.setState({ busy: true });
     // 찍은 날은 기록만 해 두고, 화면의 날짜·아이 나이는 올린 날 기준이에요
     const first = new Date(Math.min(...photos.map((p) => +p.takenAt || Date.now())));
@@ -247,8 +247,8 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
         )}
         {needDrive && (
           <div className={s.driveGate} data-w="drive-gate">
-            <b>사진을 올리기 위해서는 구글 로그인이 필요해요</b>
-            <p>구글 로그인을 하면 내 구글 드라이브의 ‘Pastel Memories › {album.name}’ 폴더에 저장되면서 앱에 올라와요. 한 번만 하면 돼요. (카카오로 로그인했어도 구글 로그인을 하면 올릴 수 있어요)</p>
+            <b>사진을 올리려면 구글 드라이브와 연동해 주세요</b>
+            <p>연동하면 내 구글 드라이브의 ‘Pastel Memories › {album.name}’ 폴더에 저장되면서 앱에 올라와요. 한 번만 하면 돼요. (카카오로 로그인했어도 연동하면 올릴 수 있어요)</p>
             {popupWarning() && <small>{popupWarning()}</small>}
           </div>
         )}
@@ -256,7 +256,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
       <div className={s.foot}>
         {needDrive
           // 아직 연결 전이면 아래 버튼이 바로 '연결'이에요 (연결하면 '공유'로 바뀌어요)
-          ? <Button size="lg" block onClick={login} className={s.googleBtn} data-w="drive-connect-foot"><GoogleIcon size={20} />구글 로그인</Button>
+          ? <Button size="lg" block onClick={login} className={s.googleBtn} data-w="drive-connect-foot"><GoogleIcon size={20} />구글 드라이브 연동</Button>
           : <Button size="lg" block onClick={share} disabled={busy || !myDrive.loaded} data-w="post">공유</Button>}
       </div>
     </motion.div>

@@ -228,10 +228,30 @@ export const setRole = async (albumId: string, uid: string, role: 'owner' | 'mem
   check(await sb.rpc('set_member_role', { p_family: albumId, p_user: uid, p_role: role }));
 
 // ---------- 게시물 ----------
-export async function posts(albumId: string, before?: string, limit = 8): Promise<Post[]> {
-  let q = sb.from('posts').select(POST_COLS).eq('family_id', albumId).order('created_at', { ascending: false }).limit(limit);
-  if (before) q = q.lt('created_at', before);
+/** 홈 타임라인 순서: 올린 순(새로 올린 게 위) · 찍은 날 순(최근에 찍은 게 위) */
+export type FeedOrder = 'upload' | 'taken';
+/** after: 이 게시물 다음부터 · from: 이 시각 이전부터 (날짜로 찾기) */
+export async function posts(albumId: string, opts: { after?: Post | null; from?: string | null; order?: FeedOrder } = {}, limit = 8): Promise<Post[]> {
+  const col = opts.order === 'taken' ? 'taken_at' : 'created_at';
+  let q = sb.from('posts').select(POST_COLS).eq('family_id', albumId)
+    .order(col, { ascending: false }).order('id', { ascending: false }).limit(limit);
+  if (opts.after) {
+    // 같은 시각이 여럿이어도 빠뜨리지 않게 (시각, ID) 순서로 이어서
+    const at = opts.order === 'taken' ? opts.after.takenAt : opts.after.createdAt;
+    q = q.or(`${col}.lt."${at}",and(${col}.eq."${at}",id.lt.${opts.after.id})`);
+  } else if (opts.from) q = q.lt(col, opts.from);
   return (check(await q) as Row[]).map(post);
+}
+
+/** 날짜로 찾기: 사진을 찍은 달마다 게시물 수 (최근 달부터) */
+export async function postMonths(albumId: string): Promise<{ month: string; count: number }[]> {
+  const counts = new Map<string, number>();
+  for (let from = 0; ; from += 1000) {
+    const rows = check(await sb.from('posts').select('taken_at').eq('family_id', albumId).order('taken_at', { ascending: false }).range(from, from + 999)) as Row[];
+    rows.forEach((r) => { const m = ymd(new Date(r.taken_at)).slice(0, 7); counts.set(m, (counts.get(m) || 0) + 1); });
+    if (rows.length < 1000) break;
+  }
+  return [...counts.entries()].map(([month, count]) => ({ month, count }));
 }
 
 export async function getPost(id: string): Promise<Post | null> {

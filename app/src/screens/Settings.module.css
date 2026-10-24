@@ -21,11 +21,6 @@
 .setupBox code { padding: 0 4px; border-radius: 4px; background: var(--c-fill); color: var(--c-label); font-size: .92em; }
 .driveCard p.clientId { word-break: break-all; user-select: all; }
 .setupBtns { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
-.meter { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
-.meter p { font-size: var(--t-sub); color: var(--c-label-2); }
-.bar { height: 6px; border-radius: 3px; background: var(--c-fill); overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 3px; background: var(--c-accent-gradient); }
-.bar i.warn { background: var(--c-danger); }
 .install { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-3); padding: var(--s-6) var(--s-4); color: var(--c-accent-strong); }
 .install p { color: var(--c-label-2); font-size: var(--t-callout); line-height: 1.6; }
 .kakao { background: #fee500; }
@@ -99,3 +94,23 @@
 .howCard ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; }
 .howCard li b { color: var(--c-label); font-weight: 600; }
 .kakaoNote { margin: 0 var(--s-2); font-size: var(--t-footnote); color: var(--c-label-2); line-height: 1.6; text-align: center; }
+
+/* 사진 올리기 · 공유: 연동됨 · 드라이브 공간 */
+.linked { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4); border-radius: var(--r-md); background: var(--c-surface); box-shadow: var(--e-1); }
+.linkedIcon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--c-surface-2); flex: none; }
+.linked small { word-break: break-all; }
+.usage { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
+.usageTop { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.usageTop b { font-size: var(--t-title3, 1.25rem); font-weight: 700; color: var(--c-label); letter-spacing: -0.01em; }
+.usageTop span { font-size: var(--t-sub); color: var(--c-label-2); }
+.meter { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--c-fill); }
+.meter i { display: block; height: 100%; }
+.mApp { background: var(--c-accent); }
+.mOther { background: #b9b0c9; }
+.mFree { background: var(--c-fill); box-shadow: inset 0 0 0 1px var(--c-hairline-strong); }
+.legend { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--t-sub); color: var(--c-label-2); }
+.legend li { display: flex; align-items: center; gap: var(--s-2); }
+.legend li > i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.legend b { margin-left: auto; color: var(--c-label); font-weight: 600; font-variant-numeric: tabular-nums; }
+.usageHint { margin: 0; font-size: var(--t-footnote); color: var(--c-label-2); }
+.inlineBtn { color: var(--c-accent-strong); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }

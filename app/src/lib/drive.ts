@@ -1,5 +1,5 @@
 // 각자 구글 드라이브
-// - 연결: 앱의 '구글 로그인' 창에서 내 계정을 고르면, 서버 기능이 연결 정보를 보관해요 (한 번만)
+// - 연동: 설정의 '구글 드라이브 연동' 창에서 내 계정을 고르면, 서버 기능이 연동 정보를 보관해요 (한 번만)
 //         구글로 앱에 로그인할 때 드라이브도 허락했으면 저절로 연결돼요
 // - 올리기: 앱이 내 드라이브 'Pastel Memories/앨범이름' 폴더에 바로 올려요 (Supabase를 거치지 않아요)
 // - 보기: 앨범 폴더는 '링크가 있는 사람 보기'로 공유돼서, 가족은 구글 드라이브에서 바로 받아 봐요
@@ -114,9 +114,9 @@ export const preloadDrive = () => { driveSetup().then((r) => { if (r.state === '
 /** 아이폰 홈 화면 앱 · 카카오톡 안에서는 구글 창이 안 열릴 수 있어요 */
 export function popupWarning() {
   const ua = navigator.userAgent;
-  if (/KAKAOTALK/i.test(ua)) return '카카오톡 안에서는 구글 로그인 창이 열리지 않아요. 오른쪽 아래 ⋯ → 다른 브라우저로 열기에서 해 주세요.';
+  if (/KAKAOTALK/i.test(ua)) return '카카오톡 안에서는 구글 창이 열리지 않아요. 오른쪽 아래 ⋯ → 다른 브라우저로 열기에서 연동해 주세요.';
   const standalone = (navigator as { standalone?: boolean }).standalone === true;
-  if (standalone && /iPhone|iPad|iPod/.test(ua)) return '홈 화면 앱에서 구글 창이 안 열리면, Safari에서 앱 주소를 열고 구글 로그인해 주세요. 한 번만 하면 돼요.';
+  if (standalone && /iPhone|iPad|iPod/.test(ua)) return '홈 화면 앱에서 구글 창이 안 열리면, Safari에서 앱 주소를 열고 연동해 주세요. 한 번만 하면 돼요.';
   return '';
 }
 
@@ -153,7 +153,7 @@ export function linkFromLogin(refreshToken: string) {
  *  hint: 구글로 로그인한 분의 이메일 (계정 고르기를 건너뛰어요) */
 export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?: () => void; hint?: string } = {}) {
   const st = await driveSetup();
-  if (st.state !== 'ready') throw new Error(`아직 구글 로그인 준비가 안 됐어요 (앱을 만든 분이 할 일). ${setupHelp(st)}`);
+  if (st.state !== 'ready') throw new Error(`아직 구글 드라이브 연동 준비가 안 됐어요 (앱을 만든 분이 할 일). ${setupHelp(st)}`);
   await loadGis();
   const asked = new Promise<string>((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initCodeClient({
@@ -162,14 +162,14 @@ export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?:
       ux_mode: 'popup',
       ...(hooks.hint ? { login_hint: hooks.hint } : { select_account: true }),
       callback: (r: { code?: string; scope?: string; error?: string }) => {
-        if (!r.code) return reject(new Error('구글 로그인을 취소했어요.'));
+        if (!r.code) return reject(new Error('구글 드라이브 연동을 취소했어요.'));
         // 구글 화면에서 드라이브 항목 체크를 풀었으면
         if (r.scope && !r.scope.split(' ').includes(SCOPE)) return reject(new Error('구글 화면에서 ‘Google Drive 파일’ 항목에 체크한 뒤 계속을 눌러 주세요.'));
         resolve(r.code);
       },
       error_callback: (e: { type?: string }) => reject(new Error(e?.type === 'popup_failed_to_open'
         ? (popupWarning() || '구글 창이 열리지 않았어요. 팝업 차단을 풀고 다시 눌러 주세요.')
-        : '구글 로그인을 취소했어요.')),
+        : '구글 드라이브 연동을 취소했어요.')),
     });
     client.requestCode();
   });
@@ -311,3 +311,23 @@ export async function fetchDriveFile(id: string): Promise<Blob> {
   return res.blob();
 }
 export const driveViewLink = (id: string) => `https://drive.google.com/file/d/${id}/view`;
+
+// ---------- 드라이브 공간 ----------
+/** 바이트. limit이 null이면 공간 제한이 없는 계정이에요 · app*: 이 앱으로 올린 파일 · trash*: 이 앱이 휴지통에 넣은 파일 */
+export interface DriveUsage {
+  limit: number | null; usage: number | null; inDrive: number | null; inTrash: number | null;
+  appBytes: number; appFiles: number; trashBytes: number; trashFiles: number; partial: boolean;
+}
+let usageHit: { at: number; v: DriveUsage } | null = null;
+/** 설정을 열 때마다 드라이브를 다 세지 않게 5분 동안 기억해요 */
+export async function driveUsage(fresh = false) {
+  if (!fresh && usageHit && Date.now() - usageHit.at < 5 * 60_000) return usageHit.v;
+  const v = await fnCall<DriveUsage>('usage');
+  usageHit = { at: Date.now(), v };
+  return v;
+}
+export const usageNow = () => usageHit?.v ?? null;
+/** 이 앱이 휴지통에 넣은 파일(지운 게시물의 사진·동영상)만 완전히 지워요 */
+export const purgeDriveTrash = () => fnCall<{ deleted: number; bytes: number }>('purge', {});
+/** 구글 계정의 저장공간 관리 화면 */
+export const STORAGE_MANAGE_URL = 'https://one.google.com/storage/management';

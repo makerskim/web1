@@ -1,9 +1,9 @@
 import { Component, useEffect, useMemo, type ReactNode } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
-import { OverlayHosts } from './components/ui';
+import { OverlayHosts, afterBack } from './components/ui';
 import { loadMyDrive, preloadDrive, useMyDrive } from './lib/drive';
-import { loginThenPick } from './state/actions';
+import { askDriveLink } from './state/actions';
 import { TabBar } from './components/Bars';
 import { Stack, forgetScroll } from './components/Stack';
 import { PostHubOverlays } from './components/PostHub';
@@ -17,7 +17,7 @@ import { Grid } from './screens/Grid';
 import { Activity, activitySeenAt } from './screens/Activity';
 import { AlbumHome } from './screens/AlbumHome';
 import { PostPage } from './screens/PostPage';
-import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, MyDriveSettings, NotifySettings, Install } from './screens/Settings';
+import { Settings, AccountSettings, DeleteAccount, AlbumSettings, AlbumInfo, UploadSettings, NotifySettings, Install } from './screens/Settings';
 import { DayEdit } from './screens/DayEdit';
 import { ComposeHost, startCompose } from './screens/Compose';
 import { Memories } from './screens/Memories';
@@ -105,10 +105,14 @@ function Shell() {
 
   // 내 구글 드라이브 연결 상태 (+ 버튼을 누를 때 써요). 아직이면 구글 창을 미리 불러 둬요 (누르자마자 열리게)
   useEffect(() => { loadMyDrive().then((d) => { if (!d.email) preloadDrive(); }); }, [me.id]);
-  // 사진·동영상은 올린 사람의 구글 드라이브에 저장돼요 → 구글 로그인을 한 사람만 올려요 (카카오로 로그인했어도 + 를 누르면 구글 로그인)
+  // 사진·동영상은 올린 사람의 구글 드라이브에 저장돼요 → 연동한 사람만 올려요
+  // (연동 전이면 물어보고, 확인 → 설정의 '사진 올리기 · 공유'에서 연동 → 끝나면 바로 사진 고르기)
   const compose = async () => {
     const d = useMyDrive.getState();
-    if (d.loaded && !d.email) { await loginThenPick(startCompose); return; }
+    if (d.loaded && !d.email) {
+      if (await askDriveLink()) { await afterBack(); nav('/settings/upload?then=pick'); }
+      return;
+    }
     startCompose();
   };
 
@@ -146,8 +150,9 @@ function Shell() {
         {/* 고치는 화면은 앨범마다 새로 (다른 앨범으로 바뀌면 이전 앨범 값을 저장하지 않게) */}
         <Route path="/settings/album/info" element={<AlbumInfo key={album?.id} />} />
         <Route path="/settings/album/day/:id" element={<DayEdit key={album?.id} />} />
-        <Route path="/settings/storage" element={<Navigate to="/settings/drive" replace />} />
-        <Route path="/settings/drive" element={<MyDriveSettings />} />
+        <Route path="/settings/storage" element={<Navigate to="/settings/upload" replace />} />
+        <Route path="/settings/drive" element={<Navigate to="/settings/upload" replace />} />
+        <Route path="/settings/upload" element={<UploadSettings />} />
         <Route path="/settings/notify" element={<NotifySettings />} />
         <Route path="/settings/install" element={<Install />} />
         <Route path="/create" element={<CreateAlbum />} />
