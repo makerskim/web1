@@ -6,7 +6,7 @@
 // 클라이언트 ID·API 키는 앱 코드가 아니라 서버 기능(Supabase 비밀값)에서 받아 와요.
 import { create } from 'zustand';
 import { sb } from './supabase';
-import { fnCall } from './fn';
+import { fnCall, fnUrl } from './fn';
 
 declare global {
   interface Window {
@@ -35,28 +35,41 @@ function loadGis() {
 export type DriveSetup =
   | { state: 'ready'; clientId: string; apiKey: string; vapid: string | null }
   | { state: 'secrets'; need: string[]; vapid: string | null }
+  /** 세 값은 다 있는데 틀렸어요 (서버 기능이 구글에 물어보고 알려 줘요) */
+  | { state: 'bad'; problem: string; clientId: string }
   | { state: 'missing' | 'old' | 'jwt' | 'offline' | 'unreachable' | 'error' };
 
 let setup: Promise<DriveSetup> | null = null;
 let known: DriveSetup | null = null;
 async function loadSetup(): Promise<DriveSetup> {
   try {
-    const r = await fnCall<{ clientId?: string; apiKey?: string; ready?: boolean; need?: string[]; vapid?: string | null }>('config');
+    const r = await fnCall<{ clientId?: string; apiKey?: string; ready?: boolean; need?: string[]; problem?: string | null; vapid?: string | null }>('config');
     // 예전 서버 기능은 API 키·알림 키를 몰라요
     if (!Array.isArray(r.need)) return { state: 'old' };
+    if (!r.need.length && r.problem) return { state: 'bad', problem: r.problem, clientId: r.clientId || '' };
     return r.ready && r.clientId && r.apiKey
       ? { state: 'ready', clientId: r.clientId, apiKey: r.apiKey, vapid: r.vapid ?? null }
       : { state: 'secrets', need: r.need, vapid: r.vapid ?? null };
   } catch (e) {
     const code = (e as { code?: string }).code || '';
     // 인터넷은 되는데 닿지 않으면, 서버 기능이 없거나 막힌 경우가 많아요 (그 응답엔 CORS 헤더가 없어요)
-    if (code === 'offline') return { state: navigator.onLine === false ? 'offline' : 'unreachable' };
+    if (code === 'offline') return navigator.onLine === false ? { state: 'offline' } : probe();
     if (code === 'drive_404') return { state: 'missing' };
     if (code === 'drive_401') return { state: 'jwt' };
     if (code === 'bad_album' || code === 'unknown_route') return { state: 'old' };
     return { state: 'error' };
   }
 }
+// 머리말 없이 한 번 더 물어봐요: Supabase가 읽을 수 있는 답을 주면 '함수 없음'·'JWT 켜짐'을 가려요
+async function probe(): Promise<DriveSetup> {
+  const r = await fetch(fnUrl('config')).then(async (res) => ({ status: res.status, body: await res.json().catch(() => ({})) as { code?: string; error?: string; message?: string } })).catch(() => null);
+  if (r && (r.status === 404 || r.body.code === 'NOT_FOUND')) return { state: 'missing' };
+  if (r && r.status === 401 && r.body.error !== 'not_signed_in') return { state: 'jwt' };
+  return { state: 'unreachable' };
+}
+/** 앱을 만든 분이 주소창에서 직접 확인하는 주소 (정상이면 {"error":"not_signed_in"}) */
+export const driveCheckUrl = () => fnUrl('config');
+
 /** 준비됐을 때만 기억해요 (설정을 마치고 다시 열면 바로 반영) */
 export function driveSetup(fresh = false) {
   if (!setup || fresh) setup = loadSetup().then((r) => { known = r; if (r.state !== 'ready') setup = null; return r; });
@@ -68,13 +81,30 @@ export const apiKeyNow = () => (known?.state === 'ready' ? known.apiKey : null);
 /** 준비가 안 됐을 때 알려 줄 말 (설명서 6번의 몇 단계인지) */
 export function setupHelp(st: Exclude<DriveSetup, { state: 'ready' }>) {
   switch (st.state) {
-    case 'missing': return '서버 기능(drive)이 아직 없어요. 설명서 6-4를 해 주세요.';
+    case 'missing': return '이 Supabase 프로젝트에 서버 기능 drive가 없어요. 설명서 6-4대로 이름을 정확히 drive로 배포해 주세요.';
     case 'old': return '서버 기능(drive)이 예전 코드예요. 설명서 6-4대로 새 코드로 바꿔 주세요.';
     case 'secrets': return `Supabase 비밀값 ${st.need.join(', ')}이 아직 없어요. 설명서 6-6을 해 주세요.`;
     case 'jwt': return '서버 기능의 Verify JWT가 켜져 있어요. 설명서 6-5를 해 주세요.';
+    case 'bad': return badSecret(st.problem, st.clientId);
     case 'offline': return '인터넷 연결을 확인해 주세요.';
-    case 'unreachable': return '서버 기능(drive)에 닿지 않아요. 설명서 6-4(배포)와 6-5(Verify JWT 끄기)를 확인해 주세요.';
+    case 'unreachable': return '서버 기능(drive)에 닿지 않아요. drive가 이 프로젝트에 없거나(설명서 6-4) Verify JWT가 켜져 있어요(설명서 6-5).';
     default: return '서버 기능에 문제가 있어요. 잠시 후 다시 확인해 주세요.';
+  }
+}
+
+// Supabase 비밀값이 틀렸을 때: 어느 칸에 무엇을 넣어야 하는지
+function badSecret(problem: string, clientId: string) {
+  const ID = '클라이언트 ID(숫자-글자.apps.googleusercontent.com)';
+  switch (problem) {
+    case 'client_is_secret': return `GOOGLE_CLIENT_ID 칸에 보안 비밀번호(GOCSPX-…)가 들어 있어요. ${ID}를 넣어 주세요. (설명서 6-6 ①)`;
+    case 'client_is_apikey': return `GOOGLE_CLIENT_ID 칸에 API 키(AIza…)가 들어 있어요. ${ID}를 넣어 주세요. (설명서 6-6 ①)`;
+    case 'client_format': return `GOOGLE_CLIENT_ID 값이 클라이언트 ID 모양이 아니에요. ${ID} 전체를 넣어 주세요. (설명서 6-6 ①)`;
+    case 'apikey_is_client': return 'GOOGLE_API_KEY 칸에 클라이언트 ID가 들어 있어요. AIza로 시작하는 API 키를 넣어 주세요. (설명서 6-6 ③)';
+    case 'apikey_is_secret': return 'GOOGLE_API_KEY 칸에 보안 비밀번호(GOCSPX-…)가 들어 있어요. AIza로 시작하는 API 키를 넣어 주세요. (설명서 6-6 ③)';
+    case 'apikey_format': return 'GOOGLE_API_KEY 값이 API 키 모양이 아니에요. AIza로 시작하는 39글자를 넣어 주세요. (설명서 6-6 ③)';
+    case 'client_not_found': return `구글에 이 클라이언트 ID가 없어요: ${clientId || '(비어 있음)'}. 구글 클라우드 → 클라이언트의 ID와 한 글자씩 같은지 확인하고 다시 넣어 주세요. 방금 만든 클라이언트면 5분쯤 뒤에 다시 확인해 주세요. (설명서 6-6 ①)`;
+    case 'secret_wrong': return 'GOOGLE_CLIENT_SECRET이 이 클라이언트의 보안 비밀번호가 아니에요. 같은 클라이언트에서 Add secret으로 새로 만들어 넣어 주세요. (설명서 6-6 ②)';
+    default: return 'Supabase 비밀값 중 틀린 값이 있어요. 설명서 6-6을 다시 확인해 주세요.';
   }
 }
 
@@ -123,7 +153,7 @@ export function linkFromLogin(refreshToken: string) {
  *  hint: 구글로 로그인한 분의 이메일 (계정 고르기를 건너뛰어요) */
 export async function connectDrive(hooks: { cancelled?: Promise<never>; onCode?: () => void; hint?: string } = {}) {
   const st = await driveSetup();
-  if (st.state !== 'ready') throw new Error(setupHelp(st));
+  if (st.state !== 'ready') throw new Error(`아직 구글 로그인 준비가 안 됐어요 (앱을 만든 분이 할 일). ${setupHelp(st)}`);
   await loadGis();
   const asked = new Promise<string>((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initCodeClient({

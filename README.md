@@ -92,11 +92,34 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 4. **연락처 정보**: 내 Gmail → **다음** → 정책 동의 체크 → **계속** → **만들기**
 5. 앱 로고는 **올리지 마세요** (로고를 올리면 구글 심사가 필요해져요)
 
+### 4-2-1. 브랜딩 채우기 (외부 · 프로덕션으로 바꾸려면 꼭 필요)
+구글은 누구나 로그인하는 앱(외부 · 프로덕션)에 **앱 이름 · 지원 이메일 · 홈페이지 주소 · 개인정보처리방침 주소**를 요구해요.
+홈페이지와 개인정보처리방침은 이 앱에 이미 들어 있어요 (5번으로 앱을 올린 뒤에 열려요).
+
+왼쪽 **브랜딩** 화면에서 아래처럼 채우고 맨 아래 **저장**:
+
+| 칸 | 넣을 값 |
+|---|---|
+| 앱 이름 | `Pastel Memories` |
+| 사용자 지원 이메일 | 내 Gmail (목록에서 고르기) |
+| 앱 로고 | **비워 두기** (올리면 구글 심사가 필요해져요) |
+| 애플리케이션 홈페이지 | `https://makerskim.github.io/web1/album/` |
+| 애플리케이션 개인정보처리방침 링크 | `https://makerskim.github.io/web1/album/privacy.html` |
+| 애플리케이션 서비스 약관 링크 | 비워 둬도 돼요 |
+| 승인된 도메인 → **+ 도메인 추가** | `makerskim.github.io` |
+| 승인된 도메인 → **+ 도메인 추가** (하나 더) | `nontwyuhvjizyuconxej.supabase.co` |
+| 개발자 연락처 정보 | 내 Gmail |
+
+- 승인된 도메인에는 `https://` 와 `/` 없이 이름만 넣어요.
+- 저장한 뒤 **대상**으로 가서 '외부로 설정' 또는 '앱 게시'를 해요 (아래 상자 · 4-5).
+
 > **왼쪽 '대상'에 사용자 유형이 '내부'로 되어 있다면**
 > - '내부'는 **회사·학교 구글 계정(조직)으로 만든 프로젝트**에서만 생겨요. 그 조직 계정만 로그인할 수 있어서, 가족의 Gmail 계정은 `액세스 차단됨 (org_internal)` 오류가 나요.
 > - '내부'에는 '테스트 / 프로덕션' 게시 상태가 없어서 **앱 게시** 버튼도 보이지 않아요.
 > - **고치는 방법 1 (추천)**: 4-1로 돌아가 **개인 Gmail 계정**으로 새 프로젝트를 만들고 4-2부터 다시 해요. 회사 계정을 정리해도 앱이 멈추지 않아요.
-> - **고치는 방법 2**: **대상** 화면에서 사용자 유형 옆 **외부로 전환**(영어 화면은 *Make external*) → 게시 상태 **프로덕션 단계** → **확인**. 버튼이 없거나 회사 정책으로 막혀 있으면 방법 1로 해요.
+> - **고치는 방법 2**: **대상** 화면에서 **외부로 설정**(영어 화면은 *Make external*) → 게시 상태 **프로덕션 단계** → **확인**.
+>   - '유효한 앱 이름, 지원 이메일, 홈페이지 URL, 개인정보처리방침 URL이 필요합니다'가 나오면 **4-2-1 브랜딩**을 먼저 채우고 다시 해요.
+>   - 버튼이 없거나 회사 정책으로 막혀 있으면 방법 1로 해요.
 
 ### 4-3. 클라이언트 만들기 (왼쪽 '클라이언트' 화면이 비어 있으면 여기부터)
 1. 왼쪽 **클라이언트** → **+ 클라이언트 만들기**
@@ -118,6 +141,7 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 ### 4-5. 대상: 앱 게시 (프로덕션)
 1. 왼쪽 **대상** → 사용자 유형이 **외부**인지 확인 ('내부'면 4-2 아래 상자대로)
 2. 게시 상태가 **테스트 중**이면 **앱 게시** → **확인** → **프로덕션 단계**가 되면 OK
+   - 'URL이 필요합니다'가 나오면 4-2-1 브랜딩을 먼저 채워요.
    - 테스트 상태로 두면 '테스트 사용자'로 등록한 사람만 로그인되고, 드라이브 연결도 **7일마다 끊겨요**.
    - 이 앱은 이름·이메일·프로필 사진과 `drive.file`만 써서 심사 없이 바로 게시돼요.
 
@@ -177,10 +201,16 @@ Supabase 왼쪽 메뉴 **Authentication → URL Configuration**
 1. GitHub에서 [`supabase/functions/drive/index.ts`](supabase/functions/drive/index.ts) 를 열고 오른쪽 위 **복사(Copy raw file)** 버튼
 2. Supabase → 왼쪽 **Edge Functions**
    - **처음이면**: **Deploy a new function → Via Editor** → 편집기의 내용을 모두 지우고 붙여넣기
-     - 아래 **Function name** 칸에 미리 들어 있는 이름을 지우고 `drive` 입력 (다른 이름이면 앱이 찾지 못해요)
-     - **Deploy function**
+     - 아래 **Function name** 칸에 미리 들어 있는 이름(예: `swift-endpoint`)을 지우고 영어로 `drive` 입력 → 그다음에 **Deploy function**
+     - ⚠ 이 칸은 **처음 만들 때만** 주소가 돼요. 먼저 만든 뒤 Details에서 이름만 `drive`로 바꾸면, 화면의 이름만 바뀌고 주소는 `.../functions/v1/swift-endpoint` 그대로라 앱이 찾지 못해요. 그때는 그 함수를 지우고 새로 만들어요.
    - **이미 `drive`가 있으면**: **drive → Code** 탭 → 내용을 모두 지우고 붙여넣기 → **Deploy updates**
      - 업데이트가 있을 때마다 이렇게 새 코드로 바꿔 주세요. 이번 업데이트에도 꼭 해 주세요.
+3. **맞는 곳에 올라갔는지 확인** (`NOT_FOUND`가 나오면 여기가 문제예요)
+   - Supabase 화면 주소창에 `project/nontwyuhvjizyuconxej` 가 들어 있어야 해요. 다른 글자면 **다른 프로젝트**에 올린 거예요.
+     - 바로가기: `https://supabase.com/dashboard/project/nontwyuhvjizyuconxej/functions` 를 열면 앱이 쓰는 프로젝트의 함수 목록이 나와요.
+   - 그 목록에 **`drive`** 가 있어야 해요. 눌러서 나오는 **Endpoint URL**(또는 URL)이 `https://nontwyuhvjizyuconxej.supabase.co/functions/v1/drive` 로 끝나야 해요.
+     - `swift-endpoint`, `hello-world` 처럼 주소 끝이 `drive`가 아니면(목록의 이름이 `drive`여도) 앱이 찾지 못해요. 그 함수를 지우고 위 '처음이면'대로 `drive`로 새로 만들어요. 비밀값(6-6)은 프로젝트 전체에 들어 있어서 다시 넣지 않아도 돼요.
+   - 주소창에 `https://nontwyuhvjizyuconxej.supabase.co/functions/v1/drive/config` 를 열어 `{"error":"not_signed_in"}` 이 나오면 성공이에요 (6-5까지 한 뒤).
 
 ### 6-5. Verify JWT 끄기
 1. **Edge Functions → drive → Settings**
@@ -341,12 +371,15 @@ $$);
 | 카카오 로그인 후 “Error getting user email” | 3-6번: **Allow users without an email** 켜기 |
 | 구글 **redirect_uri_mismatch** | 4-3 승인된 리디렉션 URI 확인 (JavaScript 원본 칸이 아니에요) |
 | 구글 **액세스 차단됨 · org_internal** | 대상이 '내부'예요. 4-2 아래 상자대로 개인 Gmail 프로젝트로 하거나 '외부로 전환' |
-| 구글 **invalid_client** · 구글 창이 바로 닫혀요 | 4-3 클라이언트가 있는지, 6-6 `GOOGLE_CLIENT_ID`가 그 클라이언트 ID인지 |
+| 구글 창에 **액세스 차단됨 · The OAuth client was not found · 401 invalid_client** (어느 창인지: 오류 화면의 **오류 세부정보**에 `redirect_uri=...supabase.co/auth/v1/callback`이 있으면 첫 화면의 **Google 로그인** → 4-6 **Client IDs** 칸을 고쳐요. 없으면 앱 안의 구글 로그인 → 아래) | 6-6 `GOOGLE_CLIENT_ID` 값이 틀렸어요. 4-3 클라이언트 화면의 ID를 다시 복사해서 같은 이름으로 다시 넣고 Save. 클라이언트를 방금 만들었으면 5분쯤 뒤에 다시 해요. (서버 기능을 최신으로 배포하면 앱의 설정 → 내 구글 드라이브가 어느 값이 틀렸는지 알려 줘요) |
 | 로그인 후 다시 첫 화면으로 와요 | 2번 Redirect URLs 확인 |
 | 카카오톡 안에서 구글 로그인이 안 돼요 | 구글이 카카오톡 안 브라우저를 막아요. 버튼을 누르면 휴대폰 브라우저로 열려요 |
 | “새 데이터베이스 설정이 필요해요” · “데이터베이스 설정이 아직 안 되어 있어요” | 1번 다시 실행 (최신 `schema.sql` 전체를 붙여넣기) |
 | 설정 → 내 구글 드라이브에 ‘아직 준비 중이에요’ | 카드 아래 안내에 적힌 6번의 단계를 하고 **다시 확인** |
-| “서버 기능(drive)에 닿지 않아요” · “예전 코드예요” | 6-4 함수 이름이 정확히 `drive` 인지, 새 코드로 다시 배포했는지 · 6-5 Verify JWT를 껐는지 |
+| “서버 기능(drive)에 닿지 않아요” · “예전 코드예요” | 6-4 함수 이름이 정확히 `drive` 인지, 새 코드로 다시 배포했는지 · 6-5 Verify JWT를 껐는지. 앱의 **직접 확인하기**로 아래 세 줄 중 어느 것인지 봐요 |
+| 직접 확인에 `NOT_FOUND` (Requested function was not found) | 앱이 쓰는 프로젝트(`nontwyuhvjizyuconxej`)에 `drive` 함수가 없어요. 6-4의 3번(다른 프로젝트·다른 이름인지) 확인 |
+| 직접 확인에 `401` · `JWT` | 6-5 Verify JWT 끄기 → Save changes |
+| 직접 확인에 `{"error":"not_signed_in"}` | 서버 기능은 정상이에요. 앱에서 **다시 확인** (안 바뀌면 새로고침) |
 | “Supabase 비밀값 GOOGLE_API_KEY…이 아직 없어요” | 6-3에서 API 키를 만들고 6-6에 넣기 |
 | “GOOGLE_CLIENT_SECRET이 클라이언트 ID와 맞지 않아요” | 6-6 두 값이 **같은 클라이언트**의 것인지 (앞뒤 빈칸 없이) |
 | “Google Drive API가 아직 꺼져 있어요” | 6-1번 (켠 뒤 몇 분 걸릴 수 있어요) |

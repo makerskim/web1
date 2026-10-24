@@ -5,13 +5,22 @@
 .pic { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); }
 .pic span { font-size: var(--t-sub); font-weight: 600; color: var(--c-accent-strong); }
 .driveCard { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s-3); padding: var(--s-6) var(--s-5); border-radius: var(--r-md); background: var(--c-surface); box-shadow: var(--e-1); color: var(--c-accent-strong); }
-.driveCard b { font-size: var(--t-headline); color: var(--c-label); }
+.driveCard > b { font-size: var(--t-headline); color: var(--c-label); }
+.driveCard p b { font-size: inherit; color: var(--c-label); font-weight: 600; }
 .driveCard p { font-size: var(--t-sub); color: var(--c-label-2); line-height: 1.6; }
 .driveSteps { align-self: stretch; margin: 0; padding: var(--s-3) var(--s-4) var(--s-3) calc(var(--s-4) + 1.2em); border-radius: var(--r-sm); background: var(--c-surface-2); text-align: left; font-size: var(--t-sub); color: var(--c-label-2); line-height: 1.7; }
 .driveSteps b { font-size: inherit; color: var(--c-label); font-weight: 600; }
 .googleBtn { display: inline-flex; align-items: center; gap: var(--s-2); }
 .driveCard p.driveHelp { font-size: var(--t-footnote); color: var(--c-label-3); }
 .driveHelp button { color: var(--c-accent-strong); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.setupBox { align-self: stretch; padding: var(--s-3) var(--s-4); border-radius: var(--r-sm); background: var(--c-surface-2); text-align: left; font-size: var(--t-sub); color: var(--c-label-2); line-height: 1.6; }
+.setupBox > b { display: block; font-size: var(--t-sub); color: var(--c-label); }
+.setupBox > p { margin: 2px 0 0; font-size: var(--t-sub); color: var(--c-label-2); }
+.setupBox ol { margin: var(--s-2) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; }
+.setupBox li b { font-size: inherit; color: var(--c-label); font-weight: 600; }
+.setupBox code { padding: 0 4px; border-radius: 4px; background: var(--c-fill); color: var(--c-label); font-size: .92em; }
+.driveCard p.clientId { word-break: break-all; user-select: all; }
+.setupBtns { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
 .meter { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
 .meter p { font-size: var(--t-sub); color: var(--c-label-2); }
 .bar { height: 6px; border-radius: 3px; background: var(--c-fill); overflow: hidden; }

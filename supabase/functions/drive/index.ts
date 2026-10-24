@@ -28,9 +28,13 @@ function serviceKey(): string {
   return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 }
 const SERVICE_KEY = serviceKey();
-const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
-const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
-const API_KEY = Deno.env.get('GOOGLE_API_KEY') ?? '';
+// 붙여넣을 때 딸려 온 빈칸·줄바꿈·따옴표는 떼어 내요
+const secret = (k: string) => (Deno.env.get(k) ?? '').trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+const CLIENT_ID = secret('GOOGLE_CLIENT_ID');
+const CLIENT_SECRET = secret('GOOGLE_CLIENT_SECRET');
+const API_KEY = secret('GOOGLE_API_KEY');
+const CLIENT_ID_OK = /^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(CLIENT_ID);
+const API_KEY_OK = /^AIza[0-9A-Za-z_-]{30,}$/.test(API_KEY);
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const ROOT_NAME = 'Pastel Memories';
@@ -67,6 +71,34 @@ async function googleToken(params: Record<string, string>) {
     throw new Error(`google_token: ${e}`);
   }
   return body as { access_token: string; refresh_token?: string; expires_in: number; scope?: string };
+}
+
+// 비밀값이 맞는지 미리 확인해요 (틀리면 구글 창에 'OAuth client was not found'가 떠요)
+// 모양: 클라이언트 ID는 '숫자-글자.apps.googleusercontent.com', API 키는 'AIza…'(39글자)
+// 구글에 확인: 가짜 인증 코드로 물어보면, 클라이언트가 없으면 'not found', 비밀번호가 틀리면 'Unauthorized',
+// 둘 다 맞으면 '코드가 틀렸다(invalid_grant)'고 답해요
+let checked: { at: number; problem: string | null } | null = null;
+async function secretProblem(): Promise<string | null> {
+  // 자리를 바꿔 넣은 경우가 많아서 무엇을 넣었는지도 알려 줘요 (값 자체는 앱에 보내지 않아요)
+  const kind = (v: string) => (/^GOCSPX-/.test(v) ? 'secret' : /^AIza/.test(v) ? 'apikey' : /googleusercontent\.com/.test(v) ? 'client' : '');
+  if (!CLIENT_ID_OK) return kind(CLIENT_ID) === 'secret' ? 'client_is_secret' : kind(CLIENT_ID) === 'apikey' ? 'client_is_apikey' : 'client_format';
+  if (!API_KEY_OK) return kind(API_KEY) === 'client' ? 'apikey_is_client' : kind(API_KEY) === 'secret' ? 'apikey_is_secret' : 'apikey_format';
+  if (/^AIza|googleusercontent\.com/.test(CLIENT_SECRET)) return 'secret_wrong';
+  if (checked && Date.now() - checked.at < (checked.problem ? 20_000 : 30 * 60_000)) return checked.problem;
+  let problem: string | null = null;
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: 'authorization_code', code: 'pm-self-check', redirect_uri: 'postmessage' }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (body.error === 'invalid_client' || body.error === 'unauthorized_client') {
+      problem = /not\s*found/i.test(String(body.error_description || '')) ? 'client_not_found' : 'secret_wrong';
+    } else if (body.error === 'deleted_client') problem = 'client_not_found';
+  } catch { return null; /* 구글에 닿지 않으면 다음에 다시 */ }
+  checked = { at: Date.now(), problem };
+  return problem;
 }
 
 // 구글에 연결 정보 돌려주기 (끊을 때 · 다른 계정으로 바꿀 때). 실패해도 괜찮아요
@@ -365,8 +397,11 @@ Deno.serve(async (req) => {
     // 앱이 처음에 물어봐요: 구글 연결에 쓰는 공개값과 준비 상태, 알림 공개 키
     if (route === 'config') {
       const need = [!CLIENT_ID && 'GOOGLE_CLIENT_ID', !CLIENT_SECRET && 'GOOGLE_CLIENT_SECRET', !API_KEY && 'GOOGLE_API_KEY'].filter(Boolean);
+      // 세 값이 다 있으면, 맞는 값인지도 확인해요 (어느 값이 틀렸는지 앱이 알려 줘요)
+      const problem = need.length ? null : await secretProblem();
       const v = await vapid().catch(() => null);
-      return json({ clientId: CLIENT_ID, apiKey: API_KEY, ready: !need.length, need, vapid: v?.publicKey || null });
+      // 모양이 맞는 값만 보내요 (자리를 바꿔 넣은 보안 비밀번호가 앱으로 나가지 않게)
+      return json({ clientId: CLIENT_ID_OK ? CLIENT_ID : '', apiKey: API_KEY_OK ? API_KEY : '', ready: !need.length && !problem, need, problem, vapid: v?.publicKey || null });
     }
 
     // ---------- 내 구글 드라이브 연결 ----------

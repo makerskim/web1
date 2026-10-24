@@ -11,7 +11,7 @@ import { GoogleIcon, KakaoIcon, providerName } from '../components/ProviderIcon'
 import { useAlbum, useSession, type TextSize } from '../state/session';
 import { linkDrive, loginThenPick } from '../state/actions';
 import * as api from '../lib/api';
-import { disconnectDrive, driveFolderLink, driveSetup, loadMyDrive, popupWarning, preloadDrive, setupHelp, useMyDrive, type DriveSetup } from '../lib/drive';
+import { disconnectDrive, driveCheckUrl, driveFolderLink, driveSetup, loadMyDrive, popupWarning, preloadDrive, setupHelp, useMyDrive, type DriveSetup } from '../lib/drive';
 import { clearCache } from '../lib/photoCache';
 import { squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
@@ -157,6 +157,7 @@ export function Settings() {
           <Row icon={<Icon name="refresh" size={22} />} label="저장 공간 정리" detail="이 휴대폰" onClick={async () => {
             if (await confirm({ title: '이 휴대폰에 보관된 사진을 비울까요?', message: '앨범의 사진은 그대로예요. 다시 볼 때 새로 받아요.', ok: '비우기' })) { await clearCache(); toast('비웠어요'); }
           }} />
+          <Row icon={<Icon name="shield" size={22} />} label="개인정보처리방침" onClick={() => window.open('privacy.html', '_blank', 'noopener')} data-row="privacy" />
           <Row icon={<Icon name="info" size={22} />} label="버전" detail={`Pastel Memories ${VERSION}`} />
         </Group>
 
@@ -513,9 +514,12 @@ export function NotifySettings() {
 }
 
 // ---------- 내 구글 드라이브 (누구나): 연결 · 폴더 열기 · 다른 계정 · 끊기 ----------
+// 주소창으로 직접 확인할 수 있는 문제 (서버 기능이 없거나 · 닿지 않거나 · JWT)
+const checkable = (st: DriveSetup['state']) => st === 'unreachable' || st === 'missing' || st === 'jwt';
 export function MyDriveSettings() {
   const my = useMyDrive();
   const me = useSession((st) => st.me);
+  const owner = useSession((st) => st.isOwner());
   const [setup, setSetup] = useState<DriveSetup | null>(null);
   useEffect(() => { preloadDrive(); loadMyDrive(); driveSetup().then(setSetup); }, []);
   const recheck = () => { setSetup(null); driveSetup(true).then(setSetup); };
@@ -549,24 +553,44 @@ export function MyDriveSettings() {
           </Group>
         ) : (
           <>
-          <div className={s.driveCard} data-drive={setup?.state ?? 'loading'}>
-            <Icon name="shield" size={28} />
-            <b>구글 로그인하고 사진 올리기</b>
-            <p>구글 로그인을 하면 내 구글 드라이브에 <b>Pastel Memories</b> 폴더와 앨범 폴더가 생기고, 내가 올리는 사진·동영상이 거기에 저장되면서 앱에 올라와요. 비용은 들지 않아요.</p>
-            <ol className={s.driveSteps}>
-              <li>아래 <b>구글 로그인</b>을 누르고 <b>구글 계정</b>을 골라요</li>
-              <li><b>‘Google Drive’</b> 항목에 체크하고 <b>계속</b></li>
-            </ol>
-            {setup && setup.state !== 'ready' ? (
-              <>
-                <Button variant="secondary" disabled>아직 준비 중이에요</Button>
-                <p className={s.driveHelp} data-f="drive-help">{setupHelp(setup)} <button type="button" onClick={recheck}>다시 확인</button></p>
-              </>
-            ) : (
+          {setup && setup.state !== 'ready' ? (
+            // 아직 준비 전: 무엇이 문제인지 · 누가 할 일인지 · 직접 확인하는 방법
+            <div className={s.driveCard} data-drive={setup.state}>
+              <Icon name="shield" size={28} />
+              <b>아직 구글 로그인을 할 수 없어요</b>
+              <p>앱을 만든 분이 Supabase 설정을 마치면 여기에 <b>구글 로그인</b> 버튼이 생겨요. 가족은 기다려 주세요.</p>
+              <div className={s.setupBox} data-f="drive-help">
+                <b>지금 문제</b>
+                <p>{setupHelp(setup)}</p>
+                {checkable(setup.state) && (
+                  <ol>
+                    <li><b>직접 확인하기</b>를 누르면 새 창에 글자가 나와요</li>
+                    <li><code>not_signed_in</code>: 정상이에요 → 여기서 <b>다시 확인</b></li>
+                    <li><code>NOT_FOUND</code>: 이 프로젝트에 <b>drive</b> 함수가 없어요 → 설명서 6-4</li>
+                    <li><code>401</code> · <code>JWT</code>: Verify JWT가 켜져 있어요 → 설명서 6-5</li>
+                  </ol>
+                )}
+              </div>
+              <div className={s.setupBtns}>
+                {checkable(setup.state) && <Button variant="secondary" onClick={() => window.open(driveCheckUrl(), '_blank', 'noopener')} data-f="drive-check">직접 확인하기</Button>}
+                <Button onClick={recheck} data-f="drive-recheck">다시 확인</Button>
+              </div>
+            </div>
+          ) : (
+            <div className={s.driveCard} data-drive={setup?.state ?? 'loading'}>
+              <Icon name="shield" size={28} />
+              <b>구글 로그인하고 사진 올리기</b>
+              <p>구글 로그인을 하면 내 구글 드라이브에 <b>Pastel Memories</b> 폴더와 앨범 폴더가 생기고, 내가 올리는 사진·동영상이 거기에 저장되면서 앱에 올라와요. 비용은 들지 않아요.</p>
+              <ol className={s.driveSteps}>
+                <li>아래 <b>구글 로그인</b>을 누르고 <b>구글 계정</b>을 골라요</li>
+                <li><b>‘Google Drive’</b> 항목에 체크하고 <b>계속</b></li>
+              </ol>
               <Button onClick={connect} disabled={!setup} className={s.googleBtn} data-f="drive-connect"><GoogleIcon size={18} />{setup ? '구글 로그인' : '확인 중…'}</Button>
-            )}
-            {warn && <p className={s.driveHelp} data-f="drive-warn">{warn}</p>}
-          </div>
+              {warn && <p className={s.driveHelp} data-f="drive-warn">{warn}</p>}
+              {/* 관리자용: 구글 창에 'OAuth client was not found'가 뜨면 구글 클라우드의 ID와 한 글자씩 비교해요 */}
+              {owner && setup?.state === 'ready' && <p className={`${s.driveHelp} ${s.clientId}`} data-f="drive-client-id">이 앱이 쓰는 클라이언트 ID<br />{setup.clientId}</p>}
+            </div>
+          )}
           {me?.provider === 'kakao' && (
             <p className={s.kakaoNote} data-f="kakao-note">카카오로 로그인한 분은 지금처럼 사진·동영상을 보고, 좋아요·댓글을 할 수 있어요. 사진을 올리려면 여기서 구글 로그인을 한 번 해 주세요. 카카오 로그인은 그대로예요.</p>
           )}
