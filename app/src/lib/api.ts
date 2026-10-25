@@ -5,7 +5,7 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { fnCall } from './fn';
 import { ymd } from './dates';
-import { REACTIONS, type ActivityEvent, type Album, type AlbumKind, type Anniversary, type Comment, type Me, type Member, type PhotoBg, type PhotoMeta, type Post, type Reaction, type StorageKind, type Visibility } from './types';
+import { REACTIONS, type ActivityEvent, type Album, type AlbumKind, type Anniversary, type Comment, type DayRepeat, type LunarDate, type Me, type Member, type PhotoBg, type PhotoMeta, type Post, type Reaction, type StorageKind, type Visibility } from './types';
 import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -17,10 +17,27 @@ function check<T>({ data, error }: { data: T; error: unknown }): T {
 
 export const toKind = (v: unknown): AlbumKind => (v === 'group' || v === 'family' ? v : 'baby');
 // 기념일 목록 (모양이 이상한 건 빼요)
+const REPEAT_VALUES: DayRepeat[] = ['yearly', 'monthly', 'weekly', 'days', 'count', 'once'];
+const toLunar = (l: unknown): LunarDate | undefined => {
+  const x = l as Row;
+  return x && typeof x === 'object' && Number.isInteger(x.y) && Number.isInteger(x.m) && Number.isInteger(x.d) && x.m >= 1 && x.m <= 12 && x.d >= 1 && x.d <= 30
+    ? { y: x.y, m: x.m, d: x.d, leap: x.leap === true } : undefined;
+};
 export const toDays = (v: unknown): Anniversary[] => (Array.isArray(v) ? v : []).filter((x) => x && typeof x === 'object'
   && typeof x.name === 'string' && typeof x.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.date))
   // id가 없던 기념일은 늘 같은 id로 (불러올 때마다 바뀌면 고치던 기념일이 새로 추가돼요)
-  .map((x, i) => ({ id: typeof x.id === 'string' && x.id ? x.id : `d${i}-${x.date}`, name: x.name, date: x.date, yearly: x.yearly === true }));
+  .map((x, i) => {
+    // 예전 기념일: yearly(해마다) = 생일 · 아니면 100일·주년
+    const repeat: DayRepeat = REPEAT_VALUES.includes(x.repeat) ? x.repeat : x.yearly === true ? 'yearly' : 'count';
+    const lunar = toLunar(x.lunar);
+    return {
+      id: typeof x.id === 'string' && x.id ? x.id : `d${i}-${x.date}`, name: x.name, date: x.date,
+      birthday: typeof x.birthday === 'boolean' ? x.birthday : !('repeat' in x) && x.yearly === true,
+      repeat, yearly: repeat === 'yearly',
+      ...(repeat === 'days' ? { every: Number.isInteger(x.every) && x.every >= 2 ? x.every : 100 } : {}),
+      ...(lunar ? { lunar } : {}),
+    };
+  });
 const album = (r: Row, m?: Row): Album => {
   const children = kidsFrom(r.children, r.baby_name || '', r.baby_birthday || null);
   return {
@@ -153,7 +170,13 @@ export async function updateAlbum(id: string, patch: { name?: string; children?:
   if (patch.cover !== undefined) row.cover = patch.cover;
   if (patch.kind !== undefined) row.kind = patch.kind;
   if (patch.since !== undefined) row.since = patch.since;
-  if (patch.days !== undefined) row.days = patch.days.map((d) => ({ id: d.id, name: d.name.trim(), date: d.date, yearly: d.yearly }));
+  if (patch.days !== undefined) {
+    row.days = patch.days.map((d) => ({
+      id: d.id, name: d.name.trim(), date: d.date, yearly: d.repeat === 'yearly', birthday: d.birthday, repeat: d.repeat,
+      ...(d.repeat === 'days' ? { every: d.every || 100 } : {}),
+      ...(d.lunar ? { lunar: { y: d.lunar.y, m: d.lunar.m, d: d.lunar.d, leap: d.lunar.leap } } : {}),
+    }));
+  }
   const rows = check(await sb.from('families').update(row).eq('id', id).select('id')) as Row[];
   if (!rows.length) throw new Error('앨범 관리자만 바꿀 수 있어요.');
 }

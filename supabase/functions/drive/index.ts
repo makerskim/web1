@@ -18,6 +18,8 @@
 // (새 키 방식이면 SUPABASE_SECRET_KEYS, 예전 방식이면 SUPABASE_SERVICE_ROLE_KEY)
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+// 음력 → 양력 (한국천문연구원 자료, 음력 1000년 ~ 2050년). 앱과 같은 판이에요 (app/package.json)
+import LunarModule from 'npm:korean-lunar-calendar@0.3.6';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 function serviceKey(): string {
@@ -336,7 +338,61 @@ function togetherMilestone(since: string, today: string) {
   return y ? `${y}주년` : '';
 }
 
-type Fam = { id: string; name: string; kind: string; since: string | null; created_at: string; children: Array<{ nickname?: string; name?: string; birthday?: string | null; born?: boolean }>; days: Array<{ name: string; date: string; yearly?: boolean }> };
+// ---------- 기념일 셈 (앱의 lib/days.ts와 같아요): 매년 · 매월 · 매주 · N일마다 · 100일·주년 · 한 번, 음력 ----------
+type Lunar = { y: number; m: number; d: number; leap?: boolean };
+type Day = { name: string; date: string; yearly?: boolean; birthday?: boolean; repeat?: string; every?: number; lunar?: Lunar };
+type LunarCal = {
+  setSolarDate(y: number, m: number, d: number): boolean; setLunarDate(y: number, m: number, d: number, leap: boolean): boolean;
+  getLunarCalendar(): { year: number; month: number; day: number; intercalation?: boolean };
+};
+// CommonJS 꾸러미라 default가 한 번 더 싸여 올 때도 있어요
+const LunarClass = ((LunarModule as unknown as { default?: unknown }).default ?? LunarModule) as new () => LunarCal;
+const lcal = new LunarClass();
+function solarToLunar(day: string): Lunar | null {
+  if (!lcal.setSolarDate(+day.slice(0, 4), +day.slice(5, 7), +day.slice(8, 10))) return null;
+  const l = lcal.getLunarCalendar();
+  return { y: l.year, m: l.month, d: l.day, leap: !!l.intercalation };
+}
+const lunarMonthDays = (y: number, m: number, leap = false) => {
+  if (!lcal.setLunarDate(y, m, 30, leap)) return 29;
+  const b = lcal.getLunarCalendar();
+  return b.day === 30 && !!b.intercalation === leap ? 30 : 29;
+};
+// 음력 30일은 29일까지인 달엔 29일에
+const lunarMatch = (want: Lunar, l: Lunar) => l.d === want.d || (want.d === 30 && l.d === 29 && lunarMonthDays(l.y, l.m, !!l.leap) === 29);
+function dayLabelOn(d: Day, day: string): string {
+  if (!d?.date || !/^\d{4}-\d{2}-\d{2}$/.test(d.date) || day < d.date) return '';
+  const repeat = d.repeat || (d.yearly ? 'yearly' : 'count');
+  const birthday = d.birthday ?? (!d.repeat && d.yearly === true);
+  const lunar = d.lunar && Number.isInteger(d.lunar.m) && Number.isInteger(d.lunar.d) ? d.lunar : null;
+  if (repeat === 'once') return day === d.date ? d.name : '';
+  if (repeat === 'yearly') {
+    let n: number | null = null;
+    if (lunar) { const l = solarToLunar(day); if (l && !l.leap && l.m === lunar.m && lunarMatch(lunar, l)) n = l.y - lunar.y; }
+    else if (sameDayIn(d.date, +day.slice(0, 4)) === day) n = +day.slice(0, 4) - +d.date.slice(0, 4);
+    if (n === null) return '';
+    return birthday || n === 0 ? d.name : `${d.name} ${n}주년`;
+  }
+  if (repeat === 'monthly') {
+    if (lunar) { const l = solarToLunar(day); return l && lunarMatch(lunar, l) ? d.name : ''; }
+    const n = (+day.slice(0, 4) - +d.date.slice(0, 4)) * 12 + (+day.slice(5, 7) - +d.date.slice(5, 7));
+    const y = +d.date.slice(0, 4), m0 = +d.date.slice(5, 7) - 1 + n;
+    const last = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+    const mark = new Date(Date.UTC(y, m0, Math.min(+d.date.slice(8, 10), last))).toISOString().slice(0, 10);
+    return mark === day ? (n === 0 || birthday ? d.name : `${d.name} ${n}개월`) : '';
+  }
+  if (repeat === 'weekly') return dayCount(d.date, day) % 7 === 0 ? d.name : '';
+  if (repeat === 'days') {
+    if (day === d.date) return d.name;
+    const k = dayCount(d.date, day) + 1;
+    return k % Math.max(2, d.every || 100) === 0 ? `${d.name} ${k.toLocaleString()}일` : '';
+  }
+  if (day === d.date) return d.name;
+  const m = togetherMilestone(d.date, day);
+  return m ? `${d.name} ${m}` : '';
+}
+
+type Fam = { id: string; name: string; kind: string; since: string | null; created_at: string; children: Array<{ nickname?: string; name?: string; birthday?: string | null; born?: boolean }>; days: Day[] };
 function celebrations(f: Fam, today: string) {
   const out: string[] = [];
   if (f.kind === 'baby') {
@@ -354,10 +410,8 @@ function celebrations(f: Fam, today: string) {
     if (m) out.push(`우리 ${f.kind === 'family' ? '가족' : '모임'}의 ${m}`);
   }
   for (const d of f.days || []) {
-    if (!d?.date || !/^\d{4}-\d{2}-\d{2}$/.test(d.date) || d.date > today) continue;
-    if (d.yearly) { if (sameDayIn(d.date, +today.slice(0, 4)) === today) out.push(d.name); continue; }
-    if (d.date === today) out.push(d.name);
-    else { const m = togetherMilestone(d.date, today); if (m) out.push(`${d.name} ${m}`); }
+    const l = dayLabelOn(d, today);
+    if (l) out.push(l);
   }
   return out;
 }
