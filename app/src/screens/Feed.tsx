@@ -9,10 +9,10 @@ import { usePageScroll } from '../components/Stack';
 import { AmpText } from '../components/AlbumBits';
 import { useAlbum } from '../state/session';
 import { usePosts } from '../state/posts';
-import { babyMonths, fmtMonth, toDate, ymd } from '../lib/dates';
+import { babyMonths, fmtDay, fmtMonth, toDate, ymd } from '../lib/dates';
 import * as api from '../lib/api';
 import { DateFilter, FilterSummary, periodRange } from '../components/Filters';
-import { celebrationsToday } from '../lib/album';
+import { noticesFor } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import { memoriesToday } from './Memories';
@@ -66,10 +66,10 @@ export function Feed() {
     return () => io.disconnect();
   }, [loadMore, posts.length, root]);
 
-  // 오늘 챙길 날: 아기 기념일 · 가족/모임 1주년 · 넣은 기념일 · 생일 (여럿이면 한 줄에)
-  // 그날은 늘 맨 위에, 내려도 앨범 이름 아래에 붙어 있어요
-  const today = celebrationsToday(album);
-  const milestone = today.join(' · ');
+  // 공지: 생일 · 기념일 · 아기 백일 · 돌 … 7일 전부터 그날까지 (그날은 '축하해요', 지나면 사라져요)
+  // 늘 맨 위에, 내려도 앨범 이름 아래에 붙어 있어요
+  const notices = noticesFor(album);
+  const noticeKey = notices.map((n) => `${n.key}:${n.daysLeft}`).join();
   const celRef = useRef<HTMLDivElement>(null);
   const [celH, setCelH] = useState(0);
   useLayoutEffect(() => {
@@ -79,7 +79,7 @@ export function Feed() {
     ro.observe(el);
     setCelH(el.offsetHeight);
     return () => ro.disconnect();
-  }, [milestone]);
+  }, [noticeKey]);
 
   // N년 전 오늘: 몇 해 전 같은 날 올린 사진이 있으면 '추억 보기' (늘 보여요)
   const nav = useNavigate();
@@ -103,10 +103,18 @@ export function Feed() {
           <AmpText text={album.name} /><Icon name="down" size={18} stroke={2.2} />
         </button>
       } right={<span data-f="feed-date"><DateFilter value={period} onChange={pickPeriod} items={dates} unit="개" birthday={birthday} /></span>} />
-      {milestone && (
+      {notices.length > 0 && (
         <div ref={celRef} className={s.celWrap} data-f="celebrate-bar">
-          <div className={s.milestone}>
-            <p data-f="celebrate">오늘은 <b>{milestone}</b>{hasBatchim(milestone) ? '이에요' : '예요'} 🎉</p>
+          <div className={s.milestone} data-f="celebrate">
+            {notices.slice(0, 4).map((n) => (
+              <p key={n.key} className={n.daysLeft ? s.soon : s.today} data-notice={n.key} data-days={n.daysLeft}>
+                <span className={s.noticeIcon} aria-hidden="true">{n.emoji}</span>
+                {n.daysLeft
+                  ? <span><b>{n.label}</b> <em className={s.dday}>D-{n.daysLeft}</em> <small>{fmtDay(n.date)}</small></span>
+                  : <span>오늘은 <b>{n.label}</b>{hasBatchim(n.label) ? '이에요' : '예요'}! {n.birthday ? '생일 축하해요 🎂' : '축하해요 🎉'}</span>}
+              </p>
+            ))}
+            {notices.length > 4 && <p className={s.soon}><span className={s.noticeIcon} aria-hidden="true">＋</span><span>외 {notices.length - 4}개</span></p>}
           </div>
         </div>
       )}

@@ -11,11 +11,11 @@ import { useAlbum, useSession } from '../state/session';
 import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { ageLabel, babyDay, fmtDate, nextMilestone, spanLabel, ymd } from '../lib/dates';
-import { albumSince, upcomingDays } from '../lib/album';
+import { albumSince } from '../lib/album';
 import { bornWeeks, childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, weeksText, type Child } from '../lib/kids';
 import { DatePickerSheet } from '../components/DatePicker';
 import { toast } from '../components/ui';
-import { hasBatchim, subj } from '../lib/korean';
+import { subj } from '../lib/korean';
 import { InviteSheet } from './Invite';
 import { ProfileSheet } from './Settings';
 import s from './AlbumHome.module.css';
@@ -124,7 +124,6 @@ export function AlbumHome() {
     return null;
   })();
   // 다가오는 기념일 (설정에서 넣은 것): 가까운 두 개
-  const upcoming = upcomingDays(album, 2);
   const pct = journey ? Math.round(journey.progress * 1000) / 10 : 0;
   // 다른 아이들(형·누나, 예정일이 다른 동생)은 작게 한 줄씩 (많으면 3줄까지)
   const otherGroups = new Map<string, Child[]>();
@@ -203,16 +202,7 @@ export function AlbumHome() {
             <p className={s.jSub} data-f="j-sub">{journey.sub}</p>
           </div>
         )}
-        {upcoming.length > 0 && (
-          <ul className={s.days} data-f="upcoming">
-            {upcoming.map((u) => (
-              <li key={u.id} data-day-id={u.id}>
-                <span aria-hidden="true">{u.birthday ? '🎂' : '🎉'}</span>
-                {u.daysLeft ? <><b>{u.label}</b><small>{shortDate(u.date)} · D-{u.daysLeft.toLocaleString()}</small></> : <b>오늘은 {u.label}{hasBatchim(u.label) ? '이에요' : '예요'}</b>}
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* 생일 · 기념일은 홈 맨 위 공지로 (7일 전부터 그날까지) */}
         {otherLines.length > 0 && (
           <ul className={s.dates}>
             {otherLines.map((l) => <li key={l.key} data-kid-line>{l.text}</li>)}
