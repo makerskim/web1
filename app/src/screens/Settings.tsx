@@ -15,6 +15,7 @@ import { STORAGE_MANAGE_URL, disconnectDrive, driveCheckUrl, driveFolderLink, dr
 import { clearCache } from '../lib/photoCache';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
+import { installApp, useInstall } from '../lib/install';
 import { fmtDate, fmtShort, ymd } from '../lib/dates';
 import { lunarLabel, repeatLabel } from '../lib/days';
 import { albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
@@ -129,6 +130,14 @@ export function Settings() {
   useEffect(() => { loadMyDrive(); }, []);
   useEffect(() => { if (myDrive.email) driveUsage().then(setUsage, () => {}); }, [myDrive.email]);
 
+  // 홈 화면에 추가: 안드로이드는 바로 '추가' 창, 아이폰 · 안 되는 브라우저는 방법 안내
+  const install = useInstall();
+  const addToHome = async () => {
+    const r = await installApp();
+    if (r === 'accepted') toast('홈 화면에 추가했어요. 이제 아이콘을 눌러 열어요');
+    else if (r === 'unavailable') nav('/settings/install');
+  };
+
   const logout = async () => {
     if (!(await confirm({ title: '로그아웃할까요?', message: '이 휴대폰에서만 로그아웃돼요. 다시 들어올 때는 같은 계정으로 로그인하면 돼요.', ok: '로그아웃' }))) return;
     await api.signOut();
@@ -172,11 +181,8 @@ export function Settings() {
           <Row icon={<Icon name="bell" size={22} />} label="알림 · 기념일" detail="알림 · 홈 카드 · 기념일" onClick={() => nav('/settings/notify')} data-row="notify" />
           <Row icon={<Icon name="text" size={22} />} label="글자 크기" detail={TEXT_SIZES.find((t) => t.value === textSize)?.label} onClick={() => setSheet('text')} data-row="text" />
           {isStandalone()
-            ? <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail="추가됨" />
-            : <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" onClick={() => nav('/settings/install')} />}
-          <Row icon={<Icon name="refresh" size={22} />} label="저장 공간 정리" detail="이 휴대폰" onClick={async () => {
-            if (await confirm({ title: '이 휴대폰에 보관된 사진을 비울까요?', message: '앨범의 사진은 그대로예요. 다시 볼 때 새로 받아요.', ok: '비우기' })) { await clearCache(); toast('비웠어요'); }
-          }} />
+            ? <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail="추가됨" data-row="install" />
+            : <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail={install.installed ? '추가됨' : undefined} onClick={addToHome} data-row="install" />}
           <Row icon={<Icon name="shield" size={22} />} label="개인정보처리방침" onClick={() => window.open('privacy.html', '_blank', 'noopener')} data-row="privacy" />
           <Row icon={<Icon name="info" size={22} />} label="버전" detail={`Pastel Memories ${VERSION}`} />
         </Group>
@@ -715,18 +721,30 @@ export function UploadSettings() {
 }
 
 export function Install() {
+  const install = useInstall();
+  const kakao = /KAKAOTALK/i.test(navigator.userAgent);
+  const add = async () => { if ((await installApp()) === 'accepted') toast('홈 화면에 추가했어요. 이제 아이콘을 눌러 열어요'); };
   return (
     <Page>
       <TopBar back title="홈 화면에 추가" />
       <div className={s.page}>
-        <div className={s.install}>
+        <div className={s.install} data-f="install-guide">
           <Icon name="phone" size={32} />
           <p>홈 화면에 추가하면 앱처럼 아이콘을 눌러 바로 열 수 있어요.</p>
+          {/* 안드로이드에서 브라우저가 준비되면 버튼 한 번으로 */}
+          {install.ready && <Button onClick={add} data-f="install-now">홈 화면에 추가</Button>}
+          {install.installed && !install.ready && <small>이 휴대폰에는 이미 추가했어요. 홈 화면의 Pastel Memories 아이콘으로 열어 주세요.</small>}
         </div>
-        <Group title={isIOS() ? '아이폰 (사파리)' : '안드로이드 (크롬·삼성 인터넷)'}>
+        {kakao && (
+          <Group title="카카오톡에서 열었다면">
+            {['오른쪽 아래(또는 위) ⋮ 메뉴를 눌러요', `‘다른 브라우저로 열기’를 눌러요 (${isIOS() ? '사파리' : '크롬'})`, '열린 브라우저에서 다시 설정 → 홈 화면에 추가'].map((t, i) => <Row key={i} icon={<b>{i + 1}</b>} label={t} />)}
+          </Group>
+        )}
+        <Group title={isIOS() ? '아이폰 (사파리)' : '안드로이드 (크롬 · 삼성 인터넷)'}
+          footer={isIOS() ? '아이폰은 사파리에서만, 애플이 정해 둔 이 순서로만 추가할 수 있어요.' : '버튼이 안 보이면 이 순서로 추가해요.'}>
           {(isIOS()
             ? ['아래쪽 공유 버튼(네모에 화살표)을 눌러요', '목록을 올려 ‘홈 화면에 추가’를 눌러요', '오른쪽 위 ‘추가’를 눌러요']
-            : ['오른쪽 위 ⋮ 메뉴를 눌러요', '‘홈 화면에 추가’ 또는 ‘앱 설치’를 눌러요', '‘추가’를 눌러요']
+            : ['오른쪽 위 ⋮ 메뉴를 눌러요', '‘홈 화면에 추가’ 또는 ‘앱 설치’를 눌러요', '‘추가’ 또는 ‘설치’를 눌러요']
           ).map((t, i) => <Row key={i} icon={<b>{i + 1}</b>} label={t} />)}
         </Group>
       </div>

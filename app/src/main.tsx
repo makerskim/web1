@@ -2,6 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles/global.css';
+import { listenInstall } from './lib/install';
+
+// '홈 화면에 추가' 신호는 앱이 열리자마자 와요 → 미리 받아 둬요
+listenInstall();
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
 

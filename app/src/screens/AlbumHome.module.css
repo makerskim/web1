@@ -63,16 +63,11 @@
 .jTrack { position: relative; height: 8px; border-radius: var(--r-full); background: rgba(176, 66, 98, .14); overflow: hidden; }
 .jFill { position: absolute; left: 0; top: 0; bottom: 0; min-width: 8px; border-radius: inherit; background: linear-gradient(90deg, #f6b1c5, #d2668c); }
 .jSub { font-size: var(--t-callout); font-weight: 600; color: var(--c-label); word-break: keep-all; }
-/* 다가오는 기념일 */
-.days { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.days li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: var(--t-sub); color: var(--c-label); }
-.days li b { font-weight: 700; }
-.days li small { font-size: var(--t-sub); color: var(--c-label-2); font-variant-numeric: tabular-nums; }
 .dates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .dates li { font-size: var(--t-sub); font-weight: 600; color: var(--c-label-2); line-height: 1.45; }
 .bio { font-size: var(--t-callout); line-height: 1.55; color: var(--c-label); white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; margin-top: var(--s-1); }
 /* 날짜 카드가 있으면 그 아래 글(기념일 · 날짜 · 소개)은 카드 속 글자와 같은 줄에서 시작해요 */
-.journey ~ .days, .journey ~ .dates, .journey ~ .bio { padding-inline: var(--s-4); }
+.journey ~ .dates, .journey ~ .bio { padding-inline: var(--s-4); }
 .link { align-self: flex-start; min-height: 2.75rem; color: #b04262; font-size: var(--t-sub); font-weight: 700; text-align: left; }
 /* 태어났나요? · 이름 넣기: 한 줄짜리 알림 */
 .banner {

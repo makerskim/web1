@@ -4,8 +4,13 @@
 .wordmark i { color: inherit; font-weight: inherit; }
 /* 오늘 기념일: 앨범 이름 바로 아래에 붙어 있어요 (내려도 그대로) */
 .celWrap { position: sticky; top: calc(var(--safe-t) + var(--bar-h)); z-index: 4; padding: 0 var(--gutter) var(--s-2); background: var(--c-surface); box-shadow: 0 1px 0 var(--c-hairline); }
-.milestone { display: flex; align-items: center; gap: var(--s-2); min-height: 2.75rem; padding: var(--s-2) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #ffeef3, #f1ecff); }
-.milestone p { flex: 1; font-size: var(--t-sub); line-height: 1.45; }
+.milestone { display: flex; flex-direction: column; gap: 4px; min-height: 2.75rem; justify-content: center; padding: var(--s-2) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #ffeef3, #f1ecff); }
+.milestone p { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--t-sub); line-height: 1.45; color: var(--c-label); }
+.noticeIcon { flex: none; width: 1.25em; text-align: center; }
+.today b { color: #a8405e; }
+.soon { color: var(--c-label-2); }
+.soon small { font-size: var(--t-footnote); color: var(--c-label-3); white-space: nowrap; }
+.dday { font-style: normal; display: inline-block; padding: 0 7px; border-radius: var(--r-full); background: var(--c-surface); color: var(--c-accent-strong); font-size: var(--t-footnote); font-weight: 700; white-space: nowrap; }
 .posts { display: flex; flex-direction: column; }
 .headGap { height: var(--s-3); }
 .end { display: grid; place-items: center; padding: var(--s-6) var(--gutter); min-height: 80px; }

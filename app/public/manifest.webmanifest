@@ -1,4 +1,5 @@
 {
+  "id": "./",
   "name": "Pastel Memories",
   "short_name": "Pastel Memories",
   "description": "우리 아이의 하루를, 가족과 함께 간직해요.",
@@ -10,8 +11,21 @@
   "background_color": "#FBF7F6",
   "theme_color": "#FBF7F6",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
