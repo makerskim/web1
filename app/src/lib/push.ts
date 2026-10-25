@@ -5,6 +5,8 @@ import { isIOS, isStandalone } from './device';
 
 export interface PushPrefs { post: boolean; comment: boolean; anniv: boolean; memory: boolean }
 export const DEFAULT_PREFS: PushPrefs = { post: true, comment: true, anniv: true, memory: true };
+/** 이 휴대폰이 알림을 받지 않을 때 (모두 꺼짐) */
+export const NO_PREFS: PushPrefs = { post: false, comment: false, anniv: false, memory: false };
 // 예전 설정(daily: 기념일·추억 한꺼번에)은 둘 다에 써요
 const fromSaved = (d: Partial<PushPrefs> & { daily?: boolean }): PushPrefs => ({
   post: d.post ?? true, comment: d.comment ?? true, anniv: d.anniv ?? d.daily ?? true, memory: d.memory ?? d.daily ?? true,

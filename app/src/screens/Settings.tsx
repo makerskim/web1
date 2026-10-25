@@ -15,14 +15,14 @@ import { STORAGE_MANAGE_URL, disconnectDrive, driveCheckUrl, driveFolderLink, dr
 import { clearCache } from '../lib/photoCache';
 import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
-import { fmtDate, ymd } from '../lib/dates';
+import { fmtDate, fmtShort, ymd } from '../lib/dates';
+import { lunarLabel, repeatLabel } from '../lib/days';
 import { albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
 import { DatePickerSheet } from '../components/DatePicker';
 import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlbumName, termDays, type Child } from '../lib/kids';
 import { KidsForm } from '../components/KidsForm';
 import { KindSheet } from '../components/KindPicker';
-import { DEFAULT_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, type PushPrefs } from '../lib/push';
-import { setHomePref, useHomePrefs } from '../lib/homePrefs';
+import { DEFAULT_PREFS, NO_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, type PushPrefs } from '../lib/push';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
@@ -466,28 +466,34 @@ export function NotifySettings() {
   const nav = useNavigate();
   const album = useAlbum()!;
   const isOwner = album.myRole === 'owner';
-  const home = useHomePrefs();
-  const upcoming = new Map(upcomingDays(album, 10).map((u) => [u.id, u]));
+  const upcoming = new Map(upcomingDays(album, 30).map((u) => [u.id, u]));
   const support = pushSupport();
   const [st, setSt] = useState<{ on: boolean; prefs: PushPrefs; denied: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (support === 'ok') pushState().then(setSt, () => setSt({ on: false, prefs: DEFAULT_PREFS, denied: false })); }, [support]);
 
-  const toggle = async (on: boolean) => {
-    if (busy) return;
+  // 항목만 켜고 끄면 돼요: 하나라도 켜면 이 휴대폰으로 받고, 모두 끄면 이 휴대폰은 그만 받아요
+  const shown: PushPrefs = st?.on ? st.prefs : NO_PREFS;
+  const setPref = async (k: keyof PushPrefs, v: boolean) => {
+    if (!st || busy) return;
+    const prefs = { ...shown, [k]: v };
+    const any = Object.values(prefs).some(Boolean);
     setBusy(true);
+    setSt({ ...st, on: any, prefs });
     try {
-      if (on) { await enablePush(st?.prefs || DEFAULT_PREFS); toast('알림을 켰어요'); }
-      else { await disablePush(); toast('알림을 껐어요'); }
+      // 처음 켤 때는 누른 그 순간에 허락을 물어봐야 아이폰이 창을 띄워요
+      if (!st.on && any) { await enablePush(prefs); toast('이 휴대폰으로 알림을 받아요'); }
+      else if (!any) { await disablePush(); toast('이 휴대폰은 알림을 받지 않아요'); }
+      else await savePushPrefs(prefs);
       setSt(await pushState());
     } catch (e) { toast((e as Error).message); setSt(await pushState().catch(() => st)); } finally { setBusy(false); }
   };
-  const setPref = async (k: keyof PushPrefs, v: boolean) => {
-    if (!st) return;
-    const prefs = { ...st.prefs, [k]: v };
-    setSt({ ...st, prefs });
-    try { await savePushPrefs(prefs); } catch (e) { toast((e as Error).message); }
-  };
+  const can = support === 'ok' && !!st && !busy;
+  const item = (k: keyof PushPrefs, title: string, sub: string, label: string) => (
+    <Row label={<Two title={title} sub={sub} />} chevron={false} data-row={`pref-${k}`}>
+      <Toggle checked={shown[k]} onChange={(v) => setPref(k, v)} label={label} disabled={!can} data-pref={k} />
+    </Row>
+  );
 
   return (
     <Page>
@@ -501,40 +507,21 @@ export function NotifySettings() {
           </div>
         )}
         {support === 'no' && <p className={s.ownerOnly}>이 브라우저는 알림을 받을 수 없어요. 크롬·사파리에서 열어 주세요.</p>}
-        {support === 'ok' && (
-          <>
-            <Group footer={st?.denied ? '알림이 막혀 있어요. 휴대폰 설정 → 알림에서 이 앱(또는 브라우저)을 허용해 주세요.' : '이 휴대폰에서만 켜져요. 다른 휴대폰은 거기서 따로 켜 주세요.'}>
-              <Row label="이 휴대폰에서 알림 받기" chevron={false} data-row="push-on">
-                <Toggle checked={!!st?.on} onChange={toggle} label="알림 받기" disabled={!st || busy} data-f="push-toggle" />
-              </Row>
-            </Group>
-            {st?.on && (
-              <Group title="받을 알림" footer="기념일 · N년 전 오늘 알림은 매일 아침 9시쯤, 챙길 날이나 몇 해 전 같은 날 올린 사진이 있을 때만 와요.">
-                <Row label={<Two title="새 사진·동영상" sub="가족이 올리면" />} chevron={false}><Toggle checked={st.prefs.post} onChange={(v) => setPref('post', v)} label="새 사진 알림" data-pref="post" /></Row>
-                <Row label={<Two title="댓글" sub="내 게시물이나 내가 댓글 단 게시물에" />} chevron={false}><Toggle checked={st.prefs.comment} onChange={(v) => setPref('comment', v)} label="댓글 알림" data-pref="comment" /></Row>
-                <Row label={<Two title="기념일" sub="백일·돌·생일, 앨범에 넣은 기념일" />} chevron={false}><Toggle checked={st.prefs.anniv} onChange={(v) => setPref('anniv', v)} label="기념일 알림" data-pref="anniv" /></Row>
-                <Row label={<Two title="N년 전 오늘" sub="1년 전 · 2년 전 … 같은 날 올린 사진이 있으면" />} chevron={false}><Toggle checked={st.prefs.memory} onChange={(v) => setPref('memory', v)} label="N년 전 오늘 알림" data-pref="memory" /></Row>
-              </Group>
-            )}
-          </>
-        )}
-
-        {/* 홈 맨 위 카드 (이 휴대폰에서만) */}
-        <Group title="홈 화면에 보이기" footer="이 휴대폰에서만 바뀌어요. 끄면 그날 카드가 홈 맨 위에 나오지 않아요.">
-          <Row label={<Two title="오늘의 기념일" sub="백일 · 돌 · 생일, 아래 기념일" />} chevron={false} data-row="home-anniv">
-            <Toggle checked={home.anniv} onChange={(v) => setHomePref('anniv', v)} label="오늘의 기념일 카드" data-home="anniv" />
-          </Row>
-          <Row label={<Two title="N년 전 오늘" sub="1년 전 · 2년 전 … 같은 날 올린 사진" />} chevron={false} data-row="home-memory">
-            <Toggle checked={home.memory} onChange={(v) => setHomePref('memory', v)} label="N년 전 오늘 카드" data-home="memory" />
-          </Row>
+        <Group title="알림" footer={st?.denied
+          ? '알림이 막혀 있어요. 휴대폰 설정 → 알림에서 이 앱(또는 브라우저)을 허용해 주세요.'
+          : '켠 알림만 이 휴대폰으로 와요. 기념일 · N년 전 오늘은 매일 아침 9시쯤, 그런 날에만 와요.'}>
+          {item('post', '새 사진·동영상', '가족이 올리면', '새 사진 알림')}
+          {item('comment', '댓글', '내 게시물이나 내가 댓글 단 게시물에', '댓글 알림')}
+          {item('anniv', '기념일', '백일 · 돌 · 생일, 아래 기념일', '기념일 알림')}
+          {item('memory', 'N년 전 오늘', '1년 전 · 2년 전 … 같은 날 올린 사진이 있으면', 'N년 전 오늘 알림')}
         </Group>
 
-        {/* 기념일: 모든 앨범 (앨범 만든 날 · 결혼기념일 · 가족 생일 …) */}
         <Group title="기념일 관리" footer={`기념일 당일엔 홈 맨 위에 축하가 뜨고, ${album.kind === 'group' ? '모임' : '가족'} 탭에 다가오는 기념일이 보여요.`}>
           {album.days.map((d) => {
             const u = upcoming.get(d.id);
             return (
-              <Row key={d.id} icon={<Emoji e={d.yearly ? '🎂' : '🎉'} />} label={<Two title={d.name} sub={`${fmtDate(d.date)}${d.yearly ? ' · 해마다' : ''}`} />}
+              <Row key={d.id} icon={<Emoji e={d.birthday ? '🎂' : '🎉'} />}
+                label={<Two title={d.name} sub={`${d.lunar ? lunarLabel(d.lunar) : fmtDate(d.date)} · ${repeatLabel(d)}${d.lunar && u ? ` · 다음 양력 ${fmtShort(u.date)}` : ''}`} />}
                 detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
                 onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
             );

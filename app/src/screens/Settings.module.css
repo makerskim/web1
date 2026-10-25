@@ -83,6 +83,27 @@
 .dayPreview { padding: var(--s-4); border-radius: var(--r-md); background: var(--c-accent-soft); font-size: var(--t-sub); line-height: 1.6; color: var(--c-label-2); text-align: center; }
 .dayPreview b { color: var(--c-label); font-size: var(--t-callout); }
 .dDay { display: inline-block; white-space: nowrap; margin-left: var(--s-1); padding: 0 var(--s-2); border-radius: var(--r-full); background: var(--c-surface); color: var(--c-accent-strong); font-weight: 700; }
+/* 기념일: 양력 · 음력 · 반복 */
+.calSeg { padding: var(--s-3) var(--s-4) var(--s-1); }
+.lunarRow { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: var(--s-2); padding: var(--s-2) var(--s-4); }
+.lunarRow select {
+  width: 100%; min-height: 2.75rem; padding: 0 var(--s-3); border: 0; border-radius: var(--r-sm); background: var(--c-surface-2);
+  font: inherit; font-size: var(--t-callout); font-weight: 600; color: var(--c-label); -webkit-appearance: none; appearance: none; text-align: center;
+}
+.solarNote { padding: var(--s-1) var(--s-4) var(--s-3); font-size: var(--t-sub); color: var(--c-label-2); }
+.solarNote b { color: var(--c-accent-strong); }
+.repeatGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); padding: var(--s-3) var(--s-4); }
+.repeatBtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 3.75rem; padding: var(--s-2) var(--s-1);
+  border-radius: var(--r-sm); background: var(--c-surface-2); color: var(--c-label); text-align: center;
+}
+.repeatBtn b { font-size: var(--t-callout); font-weight: 700; }
+.repeatBtn small { font-size: var(--t-caption); color: var(--c-label-3); line-height: 1.3; word-break: keep-all; }
+.repeatOn { background: var(--c-accent-soft); box-shadow: inset 0 0 0 1.5px var(--c-accent-strong); }
+.repeatOn b { color: var(--c-accent-strong); }
+.everyRow { display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-4) var(--s-3); font-size: var(--t-sub); color: var(--c-label-2); }
+.everyRow input { width: 6.5rem; min-height: 2.75rem; padding: 0 var(--s-3); border: 0; border-radius: var(--r-sm); background: var(--c-surface-2); font: inherit; font-size: var(--t-callout); font-weight: 700; text-align: center; color: var(--c-label); }
+.nextMore { margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid rgba(176, 66, 98, .14); }
 .dayRemove { min-height: 2.75rem; border-radius: var(--r-md); background: var(--c-surface); color: var(--c-danger); font-size: var(--t-callout); font-weight: 600; }
 
 /* 설정 줄의 이모지: 줄 아이콘(22px)과 같은 자리·크기로 */

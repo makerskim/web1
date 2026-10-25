@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
+    "korean-lunar-calendar": "0.3.6",
     "motion": "^12.43.0",
     "qrcode-generator": "^1.4.4",
     "react": "^19.3.1",

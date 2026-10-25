@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
 import { PostCard } from '../components/PostCard';
@@ -16,14 +16,10 @@ import { celebrationsToday } from '../lib/album';
 import { hasBatchim } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
 import { memoriesToday } from './Memories';
-import { useHomePrefs } from '../lib/homePrefs';
 import { Photo } from '../components/Photo';
 import type { Album, PhotoMeta } from '../lib/types';
 import { InviteSheet } from './Invite';
 import s from './Feed.module.css';
-
-const load = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
-const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 
 function SkeletonPost() {
   return (
@@ -70,23 +66,27 @@ export function Feed() {
     return () => io.disconnect();
   }, [loadMore, posts.length, root]);
 
-  // 오늘 챙길 날: 아기 기념일 · 가족/모임 1주년 · 설정한 기념일 (여럿이면 한 줄에)
+  // 오늘 챙길 날: 아기 기념일 · 가족/모임 1주년 · 넣은 기념일 · 생일 (여럿이면 한 줄에)
+  // 그날은 늘 맨 위에, 내려도 앨범 이름 아래에 붙어 있어요
   const today = celebrationsToday(album);
-  // 설정 → 기념일 · 추억에서 끈 카드는 보이지 않아요
-  const home = useHomePrefs();
   const milestone = today.join(' · ');
-  const msKey = `pm-ms-${album.id}-${ymd(new Date())}`;
-  const [msHidden, setMsHidden] = useState(() => !!load(msKey, false));
+  const celRef = useRef<HTMLDivElement>(null);
+  const [celH, setCelH] = useState(0);
+  useLayoutEffect(() => {
+    const el = celRef.current;
+    if (!el) { setCelH(0); return; }
+    const ro = new ResizeObserver(() => setCelH(el.offsetHeight));
+    ro.observe(el);
+    setCelH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, [milestone]);
 
-  // N년 전 오늘: 지난해 같은 날 찍은 사진이 있으면 '추억 보기'
+  // N년 전 오늘: 몇 해 전 같은 날 올린 사진이 있으면 '추억 보기' (늘 보여요)
   const nav = useNavigate();
   const [mem, setMem] = useState<{ count: number; years: string; cover: PhotoMeta } | null>(null);
-  const memKey = `pm-mem-${album.id}-${ymd(new Date())}`;
-  const [memHidden, setMemHidden] = useState(() => !!load(memKey, false));
   useEffect(() => {
     let live = true;
     setMem(null);
-    setMemHidden(!!load(memKey, false));
     memoriesToday(album.id).then((l) => {
       if (!live || !l.length) return;
       // 1년 전 · 2년 전 … (가까운 해부터)
@@ -103,30 +103,29 @@ export function Feed() {
           <AmpText text={album.name} /><Icon name="down" size={18} stroke={2.2} />
         </button>
       } right={<span data-f="feed-date"><DateFilter value={period} onChange={pickPeriod} items={dates} unit="개" birthday={birthday} /></span>} />
-      {/* 맨 위 앨범 이름과 첫 사진 사이 띄우기 */}
-      <div className={s.headGap} aria-hidden="true" />
-
-      {milestone && !msHidden && home.anniv && (
-        <div className={s.milestone}>
-          <p data-f="celebrate">오늘은 <b>{milestone}</b>{hasBatchim(milestone) ? '이에요' : '예요'} 🎉</p>
-          <button onClick={() => { save(msKey, true); setMsHidden(true); }} aria-label="닫기"><Icon name="close" size={18} /></button>
+      {milestone && (
+        <div ref={celRef} className={s.celWrap} data-f="celebrate-bar">
+          <div className={s.milestone}>
+            <p data-f="celebrate">오늘은 <b>{milestone}</b>{hasBatchim(milestone) ? '이에요' : '예요'} 🎉</p>
+          </div>
         </div>
       )}
+      {/* 맨 위와 첫 사진 사이 띄우기 */}
+      <div className={s.headGap} aria-hidden="true" />
 
-      {mem && !memHidden && home.memory && (
+      {mem && (
         <div className={s.memory} data-f="memory-card">
           <button className={s.memoryMain} onClick={() => nav('/memories')} data-f="memory-open">
             <Photo albumId={album.id} path={mem.cover.thumb} ph={mem.cover.ph} className={s.memoryThumb} />
             <span className={s.memoryText}><b>{mem.years}년 전 오늘</b><small>사진 {mem.count}장 · 눌러서 추억 보기</small></span>
             <span className={s.memoryPlay}><Icon name="play" size={16} /></span>
           </button>
-          <button className={s.memoryClose} onClick={() => { save(memKey, true); setMemHidden(true); }} aria-label="오늘은 그만 보기"><Icon name="close" size={16} /></button>
         </div>
       )}
 
       <FilterSummary value={{ who: null, period }} onClear={() => pickPeriod(null)} />
 
-      <div className={`${s.posts} ${appear.current ? s.appear : ''}`}>
+      <div className={`${s.posts} ${appear.current ? s.appear : ''}`} style={{ '--cel-h': `${celH}px` } as CSSProperties}>
         {posts.map((p, i) => {
           const key = (x: typeof p) => ymd(x.createdAt).slice(0, 7);
           const k = key(p);

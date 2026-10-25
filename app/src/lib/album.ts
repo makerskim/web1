@@ -1,30 +1,14 @@
 // 앨범 종류에 따라 달라지는 것: 기준 날짜, 게시물 옆 꼬리표, 기념일
-import { babyMilestone, groupMilestone, isYearlyDay, nextMilestone, nextYearly, postAge, toDate, ymd, daysBetween } from './dates';
+import { babyMilestone, groupMilestone, postAge, toDate, ymd } from './dates';
+import { dayLabelOn, nextDay } from './days';
 import { callName } from './korean';
-import type { Album, Anniversary } from './types';
+import type { Album } from './types';
 
 /** 가족·모임 앨범의 시작일 (넣지 않았으면 앨범을 만든 날) */
 export const albumSince = (a: Pick<Album, 'since' | 'createdAt'>) => a.since || (a.createdAt ? ymd(a.createdAt) : null);
 
-/** 그날이 이 기념일이면 '결혼기념일 6주년' · '처음 만난 날 100일' · '아빠 생일' (아니면 '') */
-export function dayLabelOn(d: Anniversary, at: string | Date) {
-  if (d.yearly) return isYearlyDay(d.date, at) ? d.name : '';
-  if (ymd(at) === d.date) return d.name;
-  const m = groupMilestone(d.date, at);
-  return m ? `${d.name} ${m}` : '';
-}
-
-/** 다음 기념일: 앞으로의 날짜면 그날, 지난 날짜면 다음 100일 · 1주년 (생일은 다음 생일) */
-export function nextDay(d: Anniversary, at: Date = new Date()) {
-  if (d.yearly) {
-    const n = nextYearly(d.date, at);
-    return n ? { id: d.id, label: d.name, date: n.date, daysLeft: n.daysLeft, yearly: true } : null;
-  }
-  const left = daysBetween(at, d.date);
-  if (left !== null && left >= 0) return { id: d.id, label: d.name, date: d.date, daysLeft: left, yearly: false };
-  const n = nextMilestone(d.date, 'together', at);
-  return n ? { id: d.id, label: `${d.name} ${n.label}`, date: n.date, daysLeft: n.daysLeft, yearly: false } : null;
-}
+// 그날이 이 기념일인지 · 다음 그날 (매년 · 매월 · 매주 · N일마다 · 100일·주년 · 한 번, 음력도): lib/days.ts
+export { dayLabelOn, nextDay } from './days';
 
 /** 가까운 기념일부터 n개 */
 export function upcomingDays(a: Pick<Album, 'days'>, n = 2, at: Date = new Date()) {

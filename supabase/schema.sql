@@ -49,14 +49,23 @@ alter table public.families add column if not exists since date;
 alter table public.families add column if not exists days jsonb not null default '[]';
 create or replace function public.valid_days(d jsonb)
 returns boolean language sql immutable as $$
-  select jsonb_typeof(d) = 'array' and jsonb_array_length(d) <= 10 and pg_column_size(d) < 4000
+  -- 기념일 30개까지: 이름 · 양력 날짜 · 생일인지 · 반복(매년 · 매월 · 매주 · N일마다 · 100일·주년 · 한 번) · 음력
+  select jsonb_typeof(d) = 'array' and jsonb_array_length(d) <= 30 and pg_column_size(d) < 16000
     and not exists (
       select 1 from jsonb_array_elements(d) x
       where jsonb_typeof(x) <> 'object'
          or char_length(coalesce(x->>'id', '')) > 40
          or jsonb_typeof(x->'name') is distinct from 'string' or char_length(x->>'name') not between 1 and 20
          or jsonb_typeof(x->'date') is distinct from 'string' or (x->>'date') !~ '^\d{4}-\d{2}-\d{2}$'
-         or (x ? 'yearly' and jsonb_typeof(x->'yearly') <> 'boolean'))
+         or (x ? 'yearly' and jsonb_typeof(x->'yearly') <> 'boolean')
+         or (x ? 'birthday' and jsonb_typeof(x->'birthday') <> 'boolean')
+         or (x ? 'repeat' and coalesce(x->>'repeat', '') not in ('yearly', 'monthly', 'weekly', 'days', 'count', 'once'))
+         or (x ? 'every' and case when jsonb_typeof(x->'every') = 'number' then (x->>'every')::numeric not between 2 and 10000 else true end)
+         or (x ? 'lunar' and case when jsonb_typeof(x->'lunar') = 'object'
+               and jsonb_typeof(x->'lunar'->'y') = 'number' and jsonb_typeof(x->'lunar'->'m') = 'number' and jsonb_typeof(x->'lunar'->'d') = 'number'
+               and coalesce(jsonb_typeof(x->'lunar'->'leap'), 'boolean') = 'boolean'
+             then (x->'lunar'->>'y')::numeric not between 1000 and 2100 or (x->'lunar'->>'m')::numeric not between 1 and 12 or (x->'lunar'->>'d')::numeric not between 1 and 30
+             else true end))
 $$;
 alter table public.families drop constraint if exists families_days_check;
 alter table public.families add constraint families_days_check check (public.valid_days(days));

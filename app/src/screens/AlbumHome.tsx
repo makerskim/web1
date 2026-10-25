@@ -207,7 +207,7 @@ export function AlbumHome() {
           <ul className={s.days} data-f="upcoming">
             {upcoming.map((u) => (
               <li key={u.id} data-day-id={u.id}>
-                <span aria-hidden="true">{u.yearly ? '🎂' : '🎉'}</span>
+                <span aria-hidden="true">{u.birthday ? '🎂' : '🎉'}</span>
                 {u.daysLeft ? <><b>{u.label}</b><small>{shortDate(u.date)} · D-{u.daysLeft.toLocaleString()}</small></> : <b>오늘은 {u.label}{hasBatchim(u.label) ? '이에요' : '예요'}</b>}
               </li>
             ))}

@@ -2,9 +2,10 @@
 .wordmark > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* '&'도 이름과 같은 색 · 굵기로 */
 .wordmark i { color: inherit; font-weight: inherit; }
-.milestone { display: flex; align-items: center; gap: var(--s-2); margin: 0 var(--gutter) var(--s-4); padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #ffeef3, #f1ecff); }
-.milestone p { flex: 1; font-size: var(--t-sub); }
-.milestone button { width: 36px; height: 36px; display: grid; place-items: center; color: var(--c-label-3); }
+/* 오늘 기념일: 앨범 이름 바로 아래에 붙어 있어요 (내려도 그대로) */
+.celWrap { position: sticky; top: calc(var(--safe-t) + var(--bar-h)); z-index: 4; padding: 0 var(--gutter) var(--s-2); background: var(--c-surface); box-shadow: 0 1px 0 var(--c-hairline); }
+.milestone { display: flex; align-items: center; gap: var(--s-2); min-height: 2.75rem; padding: var(--s-2) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #ffeef3, #f1ecff); }
+.milestone p { flex: 1; font-size: var(--t-sub); line-height: 1.45; }
 .posts { display: flex; flex-direction: column; }
 .headGap { height: var(--s-3); }
 .end { display: grid; place-items: center; padding: var(--s-6) var(--gutter); min-height: 80px; }
@@ -32,13 +33,12 @@
 
 /* N년 전 오늘: 추억 보기 */
 .memory { position: relative; margin: 0 var(--gutter) var(--s-4); border-radius: var(--r-md); background: linear-gradient(120deg, #fff4e8, #ffeef3); box-shadow: var(--e-1); }
-.memoryMain { width: 100%; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) 44px var(--s-3) var(--s-3); text-align: left; }
+.memoryMain { width: 100%; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3); text-align: left; }
 .memoryThumb { width: 52px; height: 52px; border-radius: 12px; flex: none; }
 .memoryText { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .memoryText b { font-size: var(--t-callout); font-weight: 800; }
 .memoryText small { font-size: var(--t-footnote); color: var(--c-label-2); }
 .memoryPlay { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; padding-left: 2px; background: var(--c-accent-strong); color: #fff; }
-.memoryClose { position: absolute; right: 2px; top: 2px; width: 32px; height: 32px; display: grid; place-items: center; color: var(--c-label-3); }
 
 /* 타임라인: 날짜로 볼 때 · 달 구분 */
-.monthDiv { position: sticky; top: calc(var(--safe-t) + var(--bar-h)); z-index: 2; margin: 0; padding: var(--s-2) var(--gutter); background: var(--c-glass); -webkit-backdrop-filter: saturate(1.6) blur(14px); backdrop-filter: saturate(1.6) blur(14px); font-size: var(--t-footnote); font-weight: 700; color: var(--c-label-2); letter-spacing: -0.01em; }
+.monthDiv { position: sticky; top: calc(var(--safe-t) + var(--bar-h) + var(--cel-h, 0px)); z-index: 2; margin: 0; padding: var(--s-2) var(--gutter); background: var(--c-glass); -webkit-backdrop-filter: saturate(1.6) blur(14px); backdrop-filter: saturate(1.6) blur(14px); font-size: var(--t-footnote); font-weight: 700; color: var(--c-label-2); letter-spacing: -0.01em; }

@@ -7,12 +7,23 @@ export type Role = 'owner' | 'member';
 export type AlbumKind = 'baby' | 'family' | 'group';
 
 /** 기념일: 결혼기념일(100일 · 1주년 …) 또는 생일처럼 해마다 */
+/** 반복: 매년 · 매월 · 매주 · N일마다 · 100일·주년(100·200·300·500·1000일, N주년) · 한 번 */
+export type DayRepeat = 'yearly' | 'monthly' | 'weekly' | 'days' | 'count' | 'once';
+/** 음력 날짜 (leap: 윤달) */
+export interface LunarDate { y: number; m: number; d: number; leap: boolean }
 export interface Anniversary {
   id: string;
   name: string;
-  /** 'YYYY-MM-DD' */
+  /** 양력 'YYYY-MM-DD' (음력으로 넣었으면 그 음력 날의 양력) */
   date: string;
-  /** true: 생일처럼 해마다 그날만 · false: 100일 · 200일 · 300일 · 500일 · 1000일 · N주년 */
+  /** 생일 (🎂) · 아니면 기념일 (🎉) */
+  birthday: boolean;
+  repeat: DayRepeat;
+  /** N일마다의 N */
+  every?: number;
+  /** 음력으로 넣었으면 그 음력 날 (매년 · 매월은 해마다 · 달마다 음력으로 다시 셈) */
+  lunar?: LunarDate;
+  /** 예전 앱과 맞추려고: 매년이면 true */
   yearly: boolean;
 }
 
