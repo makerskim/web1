@@ -1,6 +1,6 @@
 # Folio — 브라우저에서 끝내는 PDF 편집
 
-사이트 주소(배포 후): **https://makerskim.github.io/web1/pdf/**
+사이트 주소(배포 후): **https://makerskim.github.io/<저장소 이름>/** (예: 저장소 이름이 `folio`면 https://makerskim.github.io/folio/)
 
 PDF를 올리면 페이지를 정리하고, 합치고, 나누고, 다른 형식으로 바꿔서 내려받는 사이트예요.
 **파일은 서버로 올라가지 않아요.** PDF를 읽고(pdf.js), 새로 만들고(pdf-lib), PPTX로 바꾸는(PptxGenJS) 일이 모두 방문자의 브라우저 안에서 일어나요. 그래서 서버 · 데이터베이스 · 저장 공간이 필요 없고, 정적 파일만 올려 두면 운영돼요.
@@ -35,20 +35,20 @@ Node.js 20 이상이 필요해요.
 
 ## 사이트 운영하기 (GitHub Pages, 무료)
 
-이 저장소에는 이미 자동 배포가 들어 있어요(`.github/workflows/pages.yml`). `master`에 합쳐지면 앨범 앱과 함께 이 편집기도 빌드되어 `/pdf/` 주소로 올라가요.
+이 폴더는 앨범 앱과 상관없이 **혼자서 하나의 저장소**가 되도록 만들어져 있어요. 폴더 안의 `.github/workflows/deploy.yml` 이 자동 배포를 해 줘요.
 
-1. **처음 한 번**: GitHub 저장소 → **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 바꿔요. (앨범 앱 때문에 이미 바꿨다면 건너뛰세요.)
-2. 이 브랜치의 Pull Request를 만들고 `master`에 **Merge** 해요.
-3. 저장소의 **Actions** 탭에서 'Deploy site'가 초록 ✓ 이 될 때까지 기다려요(2~3분).
-4. **https://makerskim.github.io/web1/pdf/** 를 열어요.
+1. GitHub에서 새 저장소를 만들어요(예: `folio`, Public). README 추가 등은 체크하지 않아요.
+2. 이 폴더의 **안에 있는 파일들**(`package.json` 이 맨 위에 오게)을 저장소에 올려요. `node_modules` · `dist` 는 올리지 않아요.
+3. 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 바꿔요.
+4. **Actions** 탭 → **Deploy** 가 초록 ✓ 이 되면(2~3분) `https://makerskim.github.io/folio/` 에서 열려요. (처음 올릴 때 Pages 설정 전이라 빨간 ✗ 가 났다면 Deploy → **Run workflow** 로 다시 실행해요.)
 
-이후에는 코드를 고쳐서 `master`에 합칠 때마다 자동으로 다시 올라가요.
+이후에는 `main` 브랜치에 고친 파일을 올릴 때마다 자동으로 다시 배포돼요.
 
 ### 내 도메인으로 운영하고 싶다면
 
-- **GitHub Pages 그대로**: Settings → Pages → **Custom domain** 에 `pdf.내도메인.com` 을 적고, 도메인 관리 화면(가비아 · 카페24 · Cloudflare 등)에서 `CNAME` 레코드를 `makerskim.github.io` 로 추가해요. **Enforce HTTPS** 를 켜요. 이때 주소는 `pdf.내도메인.com/pdf/` 가 돼요.
-- **편집기만 따로 올리기** (주소를 `pdf.내도메인.com/` 처럼 깔끔하게): Cloudflare Pages · Netlify · Vercel 중 하나에서 이 저장소를 연결하고 아래처럼 적어요. 모두 무료 요금제로 충분해요.
-  - Root directory: `pdf`
+- **GitHub Pages 그대로**: Settings → Pages → **Custom domain** 에 `pdf.내도메인.com` 을 적고, 도메인 관리 화면(가비아 · 카페24 · Cloudflare 등)에서 `CNAME` 레코드를 `makerskim.github.io` 로 추가해요. **Enforce HTTPS** 를 켜요. 별도 저장소라서 주소는 `pdf.내도메인.com/` 그대로예요.
+- **다른 무료 호스팅**: Cloudflare Pages · Netlify · Vercel 중 하나에서 이 저장소를 연결하고 아래처럼 적어요. 모두 무료 요금제로 충분해요.
+  - Root directory: 비워 두기(저장소 맨 위)
   - Build command: `npm run build`
   - Output directory: `dist`
   - 그다음 각 서비스의 'Custom domain' 메뉴에서 도메인을 연결해요.
