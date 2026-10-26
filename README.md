@@ -2,6 +2,7 @@
 
 - `index.html`, `1.html` ~ `3.html` : 생활코딩 WEB1 연습 페이지
 - `app/` : 🤍 **Pastel Memories** — 멀리 있는 가족과 함께 보는 아이 사진 앨범 (React + TypeScript)
+- `pdf/` : 📄 **Folio** — 올린 PDF를 정리 · 합치기 · 나누기 · 골라 만들기 · PPTX 변환하는 편집기. 파일은 브라우저 밖으로 나가지 않아요 → [pdf/README.md](pdf/README.md) · 주소: **https://makerskim.github.io/web1/pdf/**
 - `supabase/` : 데이터베이스 설정(`schema.sql`)과 구글 드라이브 서버 기능(`functions/drive`)
 
 앱 주소: **https://makerskim.github.io/web1/album/**
