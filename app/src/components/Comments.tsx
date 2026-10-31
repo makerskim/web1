@@ -31,7 +31,7 @@ export function Comments({ post, open, onClose }: { post: Post | null; open: boo
   const live = usePosts((st) => (post ? st.byId[post.id] : undefined)) || post;
   const member = useSession((st) => st.member);
   const me = useSession((st) => st.me);
-  const isOwner = useSession((st) => st.isOwner());
+  const isAdmin = useSession((st) => st.isAdmin());
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const list = useRef<HTMLDivElement>(null);
@@ -75,7 +75,7 @@ export function Comments({ post, open, onClose }: { post: Post | null; open: boo
             <AnimatePresence initial={false}>
               {live.comments.map((c) => {
                 const m = member(c.authorId);
-                const canDel = c.authorId === me?.id || isOwner;
+                const canDel = c.authorId === me?.id || isAdmin;
                 return (
                   <motion.div key={c.id} className={s.row} data-cmt={c.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}>
                     <Avatar src={m.avatar} name={m.displayName} size={32} />

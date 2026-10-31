@@ -29,7 +29,8 @@ self.addEventListener('push', (e) => {
   e.waitUntil(self.registration.showNotification(d.title || 'Pastel Memories', {
     body: d.body || '',
     icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png',
+    // 안드로이드 위쪽 상태 표시줄의 작은 아이콘: 모양만 보여서 흰 실루엣으로 (컬러 아이콘이면 흰 네모가 돼요)
+    badge: './icons/badge-96.png',
     tag: d.tag || undefined,
     renotify: !!d.tag,
     data: { url: d.url || '#/home' },

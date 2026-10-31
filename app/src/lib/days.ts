@@ -7,6 +7,8 @@ import type { Anniversary, DayRepeat, LunarDate } from './types';
 
 const cal = new KoreanLunarCalendar();
 const pad = (n: number) => String(n).padStart(2, '0');
+/** 앨범마다 넣을 수 있는 기념일 수 (데이터베이스의 valid_days와 같아요) */
+export const MAX_DAYS = 30;
 export const LUNAR_MIN_YEAR = 1900;
 export const LUNAR_MAX_YEAR = 2050;
 

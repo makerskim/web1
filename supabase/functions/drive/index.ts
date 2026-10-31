@@ -265,20 +265,26 @@ async function vapidHeader(endpoint: string) {
 type Sub = { endpoint: string; p256dh: string; auth: string; prefs: Record<string, boolean> | null };
 type Note = { title: string; body: string; url: string; tag: string };
 
+// 휴대폰 하나에 보내고, 알림 서버(애플 · 구글 등)의 답 번호를 돌려줘요 (닿지 않으면 0)
+async function pushOne(s: Sub, note: Note) {
+  try {
+    const res = await fetch(s.endpoint, {
+      method: 'POST',
+      headers: { Authorization: await vapidHeader(s.endpoint), TTL: '86400', Urgency: 'normal', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream' },
+      body: await encryptPayload(s.p256dh, s.auth, enc.encode(JSON.stringify(note))),
+    });
+    // 앱을 지웠거나 알림을 끈 휴대폰은 목록에서 빼요
+    if (res.status === 404 || res.status === 410) await admin.from('push_subs').delete().eq('endpoint', s.endpoint);
+    return res.status;
+  } catch { return 0; }
+}
+
 async function pushTo(subs: Sub[], note: Note) {
   let sent = 0;
-  const payload = enc.encode(JSON.stringify(note));
+  // 한 휴대폰이 안 돼도 나머지는 보내요
   for (const s of subs) {
-    try {
-      const res = await fetch(s.endpoint, {
-        method: 'POST',
-        headers: { Authorization: await vapidHeader(s.endpoint), TTL: '86400', Urgency: 'normal', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream' },
-        body: await encryptPayload(s.p256dh, s.auth, payload),
-      });
-      // 앱을 지웠거나 알림을 끈 휴대폰은 목록에서 빼요
-      if (res.status === 404 || res.status === 410) await admin.from('push_subs').delete().eq('endpoint', s.endpoint);
-      else if (res.ok) sent++;
-    } catch { /* 한 휴대폰이 안 돼도 나머지는 보내요 */ }
+    const st = await pushOne(s, note);
+    if (st >= 200 && st < 300) sent++;
   }
   return sent;
 }
@@ -586,6 +592,16 @@ Deno.serve(async (req) => {
       }));
     }
 
+    // ---------- 테스트 알림: 이 휴대폰에만 하나 보내 봐요 ----------
+    // 알림 서버의 답 번호를 그대로 돌려줘요 (201 보냄 · 403 서명이 안 맞음 · 404/410 연결이 끊김 · 0 닿지 않음)
+    if (route === 'test-push') {
+      const endpoint = String(body.endpoint || '');
+      const { data: s } = await admin.from('push_subs').select('endpoint, p256dh, auth, prefs').eq('endpoint', endpoint).eq('user_id', user.id).maybeSingle();
+      if (!s) return json({ status: -1 });
+      const status = await pushOne(s as Sub, { title: 'Pastel Memories', body: '알림이 잘 와요! 가족이 사진이나 댓글을 올리면 이렇게 알려 드려요.', url: '#/settings/notify', tag: 'test' });
+      return json({ status });
+    }
+
     // 앨범마다 확인: 그 앨범의 멤버인지
     const albumId: string = url.searchParams.get('album') || body.album || '';
     if (!/^[0-9a-f-]{36}$/.test(albumId)) return fail('bad_album');
@@ -631,7 +647,7 @@ Deno.serve(async (req) => {
       if (!/^[0-9a-f-]{36}$/.test(id)) return fail('bad_id');
       const { data: p } = await admin.from('posts').select('author_id, photos').eq('id', id).eq('family_id', albumId).maybeSingle();
       if (!p) return json({ trashed: 0 });
-      if (p.author_id !== user.id && me.role !== 'owner') return fail('not_allowed', 403);
+      if (p.author_id !== user.id && me.role !== 'owner' && me.role !== 'admin') return fail('not_allowed', 403);
       const ids = [...new Set(((p.photos || []) as Record<string, string>[]).flatMap((x) => [x.path, x.thumb, x.orig])
         .filter((v) => typeof v === 'string' && v.startsWith('gd:')).map((v) => v.slice(3)))];
       const { data: row } = await admin.from('user_drives').select('*').eq('user_id', p.author_id).maybeSingle() as { data: DriveRow | null };
@@ -665,9 +681,9 @@ Deno.serve(async (req) => {
         const n = (p.photos || []).length;
         const videos = (p.photos || []).filter((x: { kind?: string }) => x.kind === 'video').length;
         const what = videos === n ? `동영상${n > 1 ? ` ${n}개` : ''}` : videos ? `사진·동영상 ${n}개` : `사진${n > 1 ? ` ${n}장` : ''}`;
-        // '관리자만' 게시물은 관리자에게만 알려요
+        // '관리자만' 게시물은 관리자 · 부관리자에게만 알려요
         let mq = admin.from('members').select('user_id').eq('family_id', albumId).neq('user_id', user.id);
-        if (p.visibility === 'owners') mq = mq.eq('role', 'owner');
+        if (p.visibility === 'owners') mq = mq.in('role', ['owner', 'admin']);
         const { data: mem } = await mq;
         const subs = await subsFor((mem || []).map((m: { user_id: string }) => m.user_id), 'post');
         const cap = String(p.caption || '').replace(/\s+/g, ' ').trim();
@@ -681,9 +697,13 @@ Deno.serve(async (req) => {
       if (!c || c.author_id !== user.id || stale(c.created_at)) return fail('not_found', 404);
       if (!(await firstTime(`comment:${id}`))) return json({ sent: 0 });
       // 게시물을 올린 사람과 그 게시물에 댓글을 단 사람들에게
-      const { data: p } = await admin.from('posts').select('author_id').eq('id', c.post_id).maybeSingle();
+      // 지금 이 앨범 멤버이고 그 게시물을 볼 수 있는 사람만 (나간 사람 · '관리자만' 게시물을 못 보는 멤버는 빼요)
+      const { data: p } = await admin.from('posts').select('author_id, visibility').eq('id', c.post_id).maybeSingle();
       const { data: others } = await admin.from('comments').select('author_id').eq('post_id', c.post_id);
-      const to = [...new Set([p?.author_id, ...(others || []).map((o: { author_id: string }) => o.author_id)].filter((u): u is string => !!u && u !== user.id))];
+      const { data: mem } = await admin.from('members').select('user_id, role').eq('family_id', albumId);
+      const canSee = new Set(((mem || []) as { user_id: string; role: string }[])
+        .filter((m) => p?.visibility !== 'owners' || m.role === 'owner' || m.role === 'admin' || m.user_id === p?.author_id).map((m) => m.user_id));
+      const to = [...new Set([p?.author_id, ...(others || []).map((o: { author_id: string }) => o.author_id)].filter((u): u is string => !!u && u !== user.id && canSee.has(u)))];
       const subs = await subsFor(to, 'comment');
       return json({ sent: await pushTo(subs, {
         title: `${fam?.name || 'Pastel Memories'} · 댓글`, tag: `comment-${c.post_id}`,

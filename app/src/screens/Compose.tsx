@@ -15,7 +15,7 @@ import { Button } from '../components/Button';
 import { Avatar } from '../components/Avatar';
 import { Segmented } from '../components/Form';
 import { canShrink, prepareShrink, releaseShrink, shrinkEstimate, shrinkVideo } from '../lib/video';
-import type { PhotoBg, Visibility } from '../lib/types';
+import { canManage, type PhotoBg, type Visibility } from '../lib/types';
 import { afterBack, confirm, progress, toast, useBackClose } from '../components/ui';
 import { useSession } from '../state/session';
 import { forgetScroll, scrollPageTop } from '../components/Stack';
@@ -285,7 +285,7 @@ function Write({ photos, onDone }: { photos: PickedPhoto[]; onDone: () => void }
           <textarea ref={text} value={caption} onChange={(e) => useCompose.setState({ caption: e.target.value })} maxLength={2000} rows={3}
             placeholder="사진에 이야기를 남겨 보세요" aria-label="사진 이야기" data-w="caption" />
         </label>
-        <Options photos={photos} bg={bg} visibility={visibility} shrink={shrink} owner={album.myRole === 'owner'} />
+        <Options photos={photos} bg={bg} visibility={visibility} shrink={shrink} owner={canManage(album.myRole)} />
         {!needDrive && myDrive.email && (
           <p className={s.note} data-w="drive-note"><Icon name="shield" size={16} /> 내 구글 드라이브({myDrive.email})의 ‘Pastel Memories › {album.name}’ 폴더에 저장돼요</p>
         )}
@@ -330,7 +330,7 @@ function Options({ photos, bg, visibility, shrink, owner }: { photos: PickedPhot
       )}
       <div className={s.opt} data-w="opt-vis">
         <span className={s.optLabel}>공개 범위
-          <small>{visibility === 'all' ? '이 앨범의 모든 멤버가 봐요' : owner ? '앨범 관리자만 봐요 (다른 멤버에게는 보이지 않아요)' : '앨범 관리자와 나만 봐요'}</small>
+          <small>{visibility === 'all' ? '이 앨범의 모든 멤버가 봐요' : owner ? '관리자 · 부관리자만 봐요 (다른 멤버에게는 보이지 않아요)' : '관리자 · 부관리자와 나만 봐요'}</small>
         </span>
         <Segmented label="공개 범위" value={visibility} onChange={(v) => useCompose.setState({ visibility: v })}
           options={[{ value: 'all', label: '모든 멤버' }, { value: 'owners', label: <><Icon name="lock" size={13} stroke={2.4} /> 관리자만</> }]} />

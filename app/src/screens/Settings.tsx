@@ -17,13 +17,14 @@ import { fmtBytes, squarePhoto } from '../lib/image';
 import { isIOS, isStandalone } from '../lib/device';
 import { installApp, useInstall } from '../lib/install';
 import { fmtDate, fmtShort, ymd } from '../lib/dates';
-import { lunarLabel, repeatLabel } from '../lib/days';
+import { MAX_DAYS, lunarLabel, repeatLabel } from '../lib/days';
 import { albumSince, kindInfo, sinceLabel, upcomingDays } from '../lib/album';
 import { DatePickerSheet } from '../components/DatePicker';
 import { childName, isBorn, kidsLabel, kidsPatch, newChild, spaceAmp, suggestAlbumName, termDays, type Child } from '../lib/kids';
+import { canManage } from '../lib/types';
 import { KidsForm } from '../components/KidsForm';
 import { KindSheet } from '../components/KindPicker';
-import { DEFAULT_PREFS, NO_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, type PushPrefs } from '../lib/push';
+import { DEFAULT_PREFS, NO_PREFS, disablePush, enablePush, pushState, pushSupport, savePushPrefs, testPush, type PushPrefs } from '../lib/push';
 
 import { callName } from '../lib/korean';
 import { AlbumSwitcher } from './AlbumSwitcher';
@@ -173,7 +174,7 @@ export function Settings() {
 
         <Group title="앨범">
           <Row icon={<CoverFace size={30} />} label="앨범 설정" detail={album.name} onClick={() => nav('/settings/album')} data-row="album" />
-          <Row icon={<Emoji e={kindInfo(album.kind).icon} />} label="앨범 종류" detail={kindInfo(album.kind).short} onClick={album.myRole === 'owner' ? () => setSheet('kind') : undefined} data-row="kind" />
+          <Row icon={<Emoji e={kindInfo(album.kind).icon} />} label="앨범 종류" detail={kindInfo(album.kind).short} onClick={canManage(album.myRole) ? () => setSheet('kind') : undefined} data-row="kind" />
           <Row icon={<Icon name="swap" size={22} />} label="다른 앨범" detail={`${albums.length}개`} onClick={() => setSheet('albums')} data-row="albums" />
         </Group>
 
@@ -293,7 +294,7 @@ export function DeleteAccount() {
           {shared.length > 0 && <li>다른 사람과 함께 쓰는 앨범 {shared.length}개에서 나가게 돼요. 내가 올린 사진과 댓글은 앨범에 남아요.</li>}
           {released.length > 0 && <li data-f="drive-release">{released.map((n) => `‘${n}’`).join(', ')} 앨범이 쓰던 내 구글 드라이브 연결이 끊겨요. 드라이브에 저장된 사진은 멤버가 앱에서 더 이상 볼 수 없어요. (사진은 내 드라이브에 그대로 남아요)</li>}
           <li>내가 누른 좋아요는 지워져요.</li>
-          {owned.length > 0 && <li>내가 관리자인 앨범은 가장 먼저 들어온 멤버가 관리자가 돼요.</li>}
+          {owned.length > 0 && <li>내가 관리자인 앨범은 부관리자가(없으면 가장 먼저 들어온 멤버가) 관리자가 돼요.</li>}
           <li>{name} 계정은 지워지지 않아요. 이 앱과의 연결만 끊겨요.</li>
           <li>삭제한 계정은 되살릴 수 없어요. 필요한 사진은 먼저 저장해 두세요.</li>
         </ul>
@@ -313,6 +314,8 @@ export function AlbumSettings() {
   const me = useSession((st) => st.me)!;
   const members = useSession((st) => st.members);
   const isOwner = album.myRole === 'owner';
+  // 관리자 · 부관리자: 앨범 종류 · 아이 · 시작일 · 초대 코드 (앨범 지우기는 관리자만)
+  const isAdmin = canManage(album.myRole);
   const nav = useNavigate();
   const [sheet, setSheet] = useState<'members' | 'since' | 'kind' | null>(null);
   const code = `${album.inviteCode.slice(0, 4)}-${album.inviteCode.slice(4)}`;
@@ -337,8 +340,9 @@ export function AlbumSettings() {
     } catch (e) { toast((e as Error).message); }
   };
   const leave = async () => {
-    const lastOwner = isOwner && !members.some((m) => m.userId !== me.id && m.role === 'owner');
-    if (!(await confirm({ title: '앨범에서 나갈까요?', message: `내가 올린 사진과 댓글은 앨범에 남아요.${lastOwner ? '\n가장 먼저 들어온 멤버가 관리자가 돼요.' : ''}\n다시 들어오려면 초대 코드가 필요해요.`, ok: '나가기', danger: true }))) return;
+    // 관리자가 나가면 부관리자가(없으면 가장 먼저 들어온 멤버가) 관리자가 돼요
+    const next = isOwner ? [...members].filter((m) => m.userId !== me.id).sort((a, b) => Number(b.role === 'admin') - Number(a.role === 'admin') || a.joinedAt.localeCompare(b.joinedAt))[0] : undefined;
+    if (!(await confirm({ title: '앨범에서 나갈까요?', message: `내가 올린 사진과 댓글은 앨범에 남아요.${next ? `\n${next.displayName}님이 관리자가 돼요. (멤버 목록에서 다른 사람에게 먼저 넘길 수도 있어요)` : ''}\n다시 들어오려면 초대 코드가 필요해요.`, ok: '나가기', danger: true }))) return;
     try {
       await api.leaveAlbum(album.id, me.id);
       await useSession.getState().loadAlbums();
@@ -366,16 +370,18 @@ export function AlbumSettings() {
         <Group footer={isBaby
           ? '출산 예정일까지 남은 날과 임신 주수, 태어난 뒤엔 아이 나이를 보여 줘요.'
           : `${sinceLabel(album.kind)}부터 함께한 날과 다음 100일 · 1주년을 보여 줘요.${album.kind === 'family' ? ' 예) 결혼한 날, 앨범을 시작한 날' : ' 예) 처음 모인 날'}`}>
-          <Row icon={<Emoji e={kindInfo(album.kind).icon} />} label="앨범 종류" detail={kindInfo(album.kind).label} onClick={isOwner ? () => setSheet('kind') : undefined} data-row="kind" />
+          <Row icon={<Emoji e={kindInfo(album.kind).icon} />} label="앨범 종류" detail={kindInfo(album.kind).label} onClick={isAdmin ? () => setSheet('kind') : undefined} data-row="kind" />
           {isBaby
-            ? <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isOwner ? () => nav('/settings/album/info') : undefined} data-row="kids" />
-            : <Row icon={<Icon name="calendar" size={22} />} label={sinceLabel(album.kind)} detail={since ? fmtDate(since) : '고르기'} onClick={isOwner ? () => setSheet('since') : undefined} data-row="since" />}
+            ? <Row icon={<Icon name="calendar" size={22} />} label="아이 · 출산 예정일" detail={kidsLabel(album.children) || '넣기'} onClick={isAdmin ? () => nav('/settings/album/info') : undefined} data-row="kids" />
+            : <Row icon={<Icon name="calendar" size={22} />} label={sinceLabel(album.kind)} detail={since ? fmtDate(since) : '고르기'} onClick={isAdmin ? () => setSheet('since') : undefined} data-row="since" />}
         </Group>
 
-        <Group title="멤버" footer={isOwner ? '가족뿐 아니라 초대받은 누구나 멤버가 될 수 있어요. 관리자는 멤버와 초대 코드를 관리해요.' : undefined}>
+        <Group title="멤버" footer={isOwner
+          ? '가족뿐 아니라 초대받은 누구나 멤버가 될 수 있어요. 멤버를 누르면 부관리자로 정하거나 관리자를 넘길 수 있어요. 부관리자도 앨범 정보 · 기념일 · 초대 코드를 관리하고 관리자만 게시물을 봐요.'
+          : isAdmin ? '나는 부관리자예요. 앨범 정보 · 기념일 · 초대 코드를 관리하고, 일반 멤버를 내보낼 수 있어요.' : undefined}>
           <Row icon={<Icon name="users" size={22} />} label="멤버" detail={`${members.length}명`} onClick={() => setSheet('members')} data-row="members" />
           <Row icon={<Icon name="key" size={22} />} label="초대 코드" detail={code} onClick={async () => { if (await copyText(album.inviteCode)) toast('초대 코드를 복사했어요'); }} chevron={false} />
-          {isOwner && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
+          {isAdmin && <Row icon={<Icon name="refresh" size={22} />} label="초대 코드 새로 만들기" onClick={newCode} chevron={false} data-row="new-code" />}
         </Group>
 
         <Group title="사진" footer="사진·동영상은 올린 사람의 구글 드라이브에 저장돼요. 내려받으면 원본 화질 그대로예요.">
@@ -388,8 +394,8 @@ export function AlbumSettings() {
         </Group>
       </div>
       <MembersSheet open={sheet === 'members'} onClose={() => setSheet(null)} />
-      {isOwner && <KindSheet open={sheet === 'kind'} onClose={() => setSheet(null)} />}
-      {isOwner && !isBaby && (
+      {isAdmin && <KindSheet open={sheet === 'kind'} onClose={() => setSheet(null)} />}
+      {isAdmin && !isBaby && (
         <DatePickerSheet open={sheet === 'since'} onClose={() => setSheet(null)} title={sinceLabel(album.kind)} value={since} min="1950-01-01" max={ymd(new Date())}
           onChange={(v) => { if (v) setSince(v); }} />
       )}
@@ -403,7 +409,7 @@ export function AlbumInfo() {
   const album = useAlbum()!;
   const nav = useNavigate();
   const cover = useCoverChanger();
-  const isOwner = album.myRole === 'owner';
+  const isAdmin = canManage(album.myRole);
   const isGroup = album.kind !== 'baby';
   const [kids, setKids] = useState<Child[]>(() => (album.children.length ? album.children : [newChild()]));
   // 앨범 이름을 직접 바꾼 적이 없으면 아이 이름을 따라가요 (태어나서 이름을 넣으면 '하준이네 앨범'으로). 모임 앨범은 직접 써요
@@ -430,12 +436,12 @@ export function AlbumInfo() {
     } catch (e) { toast((e as Error).message); }
   };
 
-  // 관리자가 아니면 바꿀 수 없어요 (주소로 바로 들어와도)
-  if (!isOwner) {
+  // 관리자 · 부관리자가 아니면 바꿀 수 없어요 (주소로 바로 들어와도)
+  if (!isAdmin) {
     return (
       <Page>
         <TopBar back title="프로필 편집" />
-        <div className={s.page}><p className={s.ownerOnly}>앨범 정보는 관리자만 바꿀 수 있어요.</p></div>
+        <div className={s.page}><p className={s.ownerOnly}>앨범 정보는 관리자 · 부관리자만 바꿀 수 있어요.</p></div>
       </Page>
     );
   }
@@ -471,8 +477,8 @@ export function AlbumInfo() {
 export function NotifySettings() {
   const nav = useNavigate();
   const album = useAlbum()!;
-  const isOwner = album.myRole === 'owner';
-  const upcoming = new Map(upcomingDays(album, 30).map((u) => [u.id, u]));
+  const isAdmin = canManage(album.myRole);
+  const upcoming = new Map(upcomingDays(album, MAX_DAYS).map((u) => [u.id, u]));
   const support = pushSupport();
   const [st, setSt] = useState<{ on: boolean; prefs: PushPrefs; denied: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -493,6 +499,15 @@ export function NotifySettings() {
       else await savePushPrefs(prefs);
       setSt(await pushState());
     } catch (e) { toast((e as Error).message); setSt(await pushState().catch(() => st)); } finally { setBusy(false); }
+  };
+  const sendTest = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await testPush();
+      if (!r.ok) setSt(await pushState().catch(() => st));
+      await confirm({ title: r.title, message: r.message, ok: '확인', cancel: '' });
+    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
   const can = support === 'ok' && !!st && !busy;
   const item = (k: keyof PushPrefs, title: string, sub: string, label: string) => (
@@ -515,25 +530,32 @@ export function NotifySettings() {
         {support === 'no' && <p className={s.ownerOnly}>이 브라우저는 알림을 받을 수 없어요. 크롬·사파리에서 열어 주세요.</p>}
         <Group title="알림" footer={st?.denied
           ? '알림이 막혀 있어요. 휴대폰 설정 → 알림에서 이 앱(또는 브라우저)을 허용해 주세요.'
-          : '켠 알림만 이 휴대폰으로 와요. 기념일 · N년 전 오늘은 매일 아침 9시쯤, 그런 날에만 와요.'}>
+          : '켠 알림만 이 휴대폰으로 와요. 가족도 각자 자기 휴대폰에서 켜야 받아요. 기념일 · N년 전 오늘은 매일 아침 9시쯤, 그런 날에만 와요.'}>
           {item('post', '새 사진·동영상', '가족이 올리면', '새 사진 알림')}
           {item('comment', '댓글', '내 게시물이나 내가 댓글 단 게시물에', '댓글 알림')}
           {item('anniv', '기념일', '백일 · 돌 · 생일, 아래 기념일', '기념일 알림')}
           {item('memory', 'N년 전 오늘', '1년 전 · 2년 전 … 같은 날 올린 사진이 있으면', 'N년 전 오늘 알림')}
         </Group>
 
-        <Group title="기념일 관리" footer={`기념일 당일엔 홈 맨 위에 축하가 뜨고, ${album.kind === 'group' ? '모임' : '가족'} 탭에 다가오는 기념일이 보여요.`}>
+        {/* 내가 올린 사진 · 댓글은 나에게 오지 않아서, 알림이 오는지 직접 확인하는 버튼 */}
+        {support === 'ok' && st?.on && (
+          <Group footer="내가 올린 사진이나 댓글은 나에게 알림이 오지 않아요. 알림이 잘 오는지 이 버튼으로 확인해 보세요.">
+            <Row icon={<Icon name="bell" size={22} />} label="테스트 알림 보내기" onClick={sendTest} chevron={false} data-row="push-test" />
+          </Group>
+        )}
+
+        <Group title="기념일 관리" footer={`기념일 일주일 전부터 홈 맨 위에 알려 주고, 당일엔 축하 문구가 떠요.${isAdmin ? '' : ' 기념일은 관리자 · 부관리자가 바꿔요.'}`}>
           {album.days.map((d) => {
             const u = upcoming.get(d.id);
             return (
               <Row key={d.id} icon={<Emoji e={d.birthday ? '🎂' : '🎉'} />}
                 label={<Two title={d.name} sub={`${d.lunar ? lunarLabel(d.lunar) : fmtDate(d.date)} · ${repeatLabel(d)}${d.lunar && u ? ` · 다음 양력 ${fmtShort(u.date)}` : ''}`} />}
                 detail={u ? (u.daysLeft ? `D-${u.daysLeft.toLocaleString()}` : '오늘') : undefined}
-                onClick={isOwner ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
+                onClick={isAdmin ? () => nav(`/settings/album/day/${d.id}`) : undefined} data-day={d.id} />
             );
           })}
-          {isOwner && album.days.length < 10 && <Row icon={<Icon name="plus" size={20} />} label="기념일 추가" onClick={() => nav('/settings/album/day/new')} data-row="day-add" />}
-          {!isOwner && !album.days.length && <Row label="아직 기념일이 없어요" />}
+          {isAdmin && album.days.length < MAX_DAYS && <Row icon={<Icon name="plus" size={20} />} label="기념일 추가" onClick={() => nav('/settings/album/day/new')} data-row="day-add" />}
+          {!isAdmin && !album.days.length && <Row label="아직 기념일이 없어요" />}
         </Group>
       </div>
     </Page>

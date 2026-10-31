@@ -1,6 +1,7 @@
 // 알림: 이 휴대폰에서 받을지, 무엇을 받을지 (새 사진 · 댓글 · 기념일 · N년 전 오늘)
 import { sb } from './supabase';
 import { driveSetup } from './drive';
+import { fnCall } from './fn';
 import { isIOS, isStandalone } from './device';
 
 export interface PushPrefs { post: boolean; comment: boolean; anniv: boolean; memory: boolean }
@@ -71,6 +72,33 @@ export async function disablePush() {
   if (!sub) return;
   await sb.rpc('drop_push', { p_endpoint: sub.endpoint });
   await sub.unsubscribe().catch(() => {});
+}
+
+/** 테스트 알림 결과: 무엇이 문제인지 사람이 알 수 있는 말로 */
+export interface PushTestResult { ok: boolean; title: string; message: string }
+
+/** 이 휴대폰에만 테스트 알림 하나 보내기 (서버 기능 → 애플 · 구글 알림 서버 → 이 휴대폰) */
+export async function testPush(): Promise<PushTestResult> {
+  const sub = await currentSub().catch(() => null);
+  if (!sub) return { ok: false, title: '이 휴대폰은 아직 알림을 받지 않아요', message: '위의 알림 항목을 하나 이상 켜 주세요.' };
+  let status: number;
+  try {
+    status = (await fnCall<{ status: number }>('test-push', { endpoint: sub.endpoint })).status;
+  } catch (e) {
+    const code = (e as { code?: string }).code || '';
+    if (code === 'unknown_route') return { ok: false, title: '서버 기능이 예전 버전이에요', message: 'Supabase에 서버 기능(drive)을 새 버전으로 다시 올려 주세요. (설명서 6-4)' };
+    return { ok: false, title: '알림을 보내지 못했어요', message: (e as Error).message };
+  }
+  if (status >= 200 && status < 300) {
+    return { ok: true, title: '테스트 알림을 보냈어요', message: '몇 초 안에 이 휴대폰에 알림이 오면 정상이에요.\n\n오지 않으면 휴대폰 설정 → 알림에서 이 앱을 허용했는지, 방해 금지 · 집중 모드가 켜져 있지 않은지 확인해 주세요.' };
+  }
+  // 이 휴대폰 연결이 끊겼거나(앱을 지웠다 다시 깔았거나 · 알림 허용을 바꿨거나) 서명 키가 맞지 않으면: 끊고 다시 켜야 해요
+  if (status === -1 || status === 404 || status === 410 || status === 400 || status === 401 || status === 403) {
+    await sb.rpc('drop_push', { p_endpoint: sub.endpoint });
+    await sub.unsubscribe().catch(() => {});
+    return { ok: false, title: '알림 연결이 끊겨 있었어요', message: '위의 알림 항목을 다시 켜 주세요. 새로 연결돼요.' };
+  }
+  return { ok: false, title: '알림 서버에 닿지 않았어요', message: `잠시 후 다시 해 주세요. (알림 서버 답: ${status || '없음'})` };
 }
 
 export async function savePushPrefs(prefs: PushPrefs) {

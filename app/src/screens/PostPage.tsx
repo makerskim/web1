@@ -15,14 +15,15 @@ export function PostPage() {
     let live = true;
     api.getPost(id).then((p) => {
       if (!live) return;
-      if (p) { usePosts.getState().put(p); if (extra === 'c') openComments(p.id); } else setMissing(true);
+      // 없으면 (지워졌거나 '관리자만'으로 바뀌었으면) 들고 있던 것도 지워요
+      if (p) { usePosts.getState().put(p); if (extra === 'c') openComments(p.id); } else { usePosts.getState().remove(id); setMissing(true); }
     }, () => { if (live && !usePosts.getState().byId[id]) setMissing(true); });
     return () => { live = false; };
   }, [id, extra]);
   return (
     <Page>
       <TopBar back title="게시물" />
-      {post ? <PostCard post={post} h={handlers} full /> : missing ? <p style={{ textAlign: 'center', padding: '64px 16px', color: 'var(--c-label-3)' }}>지워진 게시물이에요</p> : null}
+      {post ? <PostCard post={post} h={handlers} full /> : missing ? <p style={{ textAlign: 'center', padding: '64px 16px', color: 'var(--c-label-3)' }}>지워졌거나 볼 수 없는 게시물이에요</p> : null}
     </Page>
   );
 }

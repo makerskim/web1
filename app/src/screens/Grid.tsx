@@ -102,6 +102,7 @@ export function Grid() {
                 <button key={it.path} className={s.tile} onClick={() => open(it)} aria-label="사진 크게 보기">
                   <Photo albumId={album.id} path={it.thumb} ph={it.ph} className={s.ph} />
                   {it.count > 1 && it.index === 0 && <Icon name="layers" size={16} className={s.multi} />}
+                  {it.owners && <span className={s.lock} aria-label="관리자만" data-f="tile-lock"><Icon name="lock" size={13} stroke={2.4} /></span>}
                   <VideoMark item={it} />
                 </button>
               ))}

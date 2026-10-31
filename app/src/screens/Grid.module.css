@@ -7,6 +7,7 @@
 .ph { width: 100%; height: 100%; transition: transform var(--dur-2) var(--ease); }
 .tile:active .ph { transform: scale(.97); }
 .multi { position: absolute; top: 6px; right: 6px; color: #fff; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5)); }
+.lock { position: absolute; top: 6px; left: 6px; display: inline-flex; padding: 3px; border-radius: var(--r-full); background: rgba(20, 10, 16, .5); color: #fff; pointer-events: none; }
 .msg { text-align: center; padding: var(--s-10) var(--gutter); color: var(--c-label-3); line-height: 1.7; }
 .msg small { font-size: var(--t-footnote); }
 .bar { margin-top: calc(var(--s-2) * -1); }
