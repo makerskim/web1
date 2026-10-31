@@ -1,7 +1,11 @@
 import type { Child } from './kids';
 
 export type StorageKind = 'supabase' | 'drive';
-export type Role = 'owner' | 'member';
+/** 관리자(한 명) · 부관리자(관리자가 정해요) · 멤버 */
+export type Role = 'owner' | 'admin' | 'member';
+/** 앨범을 관리할 수 있는지 (관리자 · 부관리자): 앨범 정보 · 기념일 · 멤버 내보내기 · 게시물 지우기 · '관리자만' 게시물 보기 */
+export const canManage = (r: Role | undefined) => r === 'owner' || r === 'admin';
+export const roleLabel = (r: Role) => (r === 'owner' ? '관리자' : r === 'admin' ? '부관리자' : '');
 
 /** 앨범 종류: 아기 앨범 / 가족 앨범 / 친구·모임 앨범 */
 export type AlbumKind = 'baby' | 'family' | 'group';

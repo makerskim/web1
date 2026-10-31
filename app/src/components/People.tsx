@@ -1,4 +1,4 @@
-// 가족 목록 한 줄: 얼굴 · 이름 · '나' · '관리자' (들어온 때 같은 건 보여 주지 않아요)
+// 가족 목록 한 줄: 얼굴 · 이름 · '나' · '관리자' · '부관리자' (들어온 때 같은 건 보여 주지 않아요)
 import type { ReactNode } from 'react';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -12,7 +12,8 @@ export function PersonRow({ m, me, action }: { m: Member; me?: boolean; action?:
       <span className={s.name}>
         <b>{m.displayName}</b>
         {me && <em className={s.me}>나</em>}
-        {m.role === 'owner' && <em className={s.owner}><Icon name="crown" size={12} stroke={2.2} />관리자</em>}
+        {m.role === 'owner' && <em className={s.owner} data-role="owner"><Icon name="crown" size={12} stroke={2.2} />관리자</em>}
+        {m.role === 'admin' && <em className={s.admin} data-role="admin"><Icon name="shield" size={12} stroke={2.2} />부관리자</em>}
       </span>
       {action}
     </li>

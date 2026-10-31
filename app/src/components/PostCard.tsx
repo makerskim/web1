@@ -118,7 +118,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
           <Avatar src={author.avatar} name={author.displayName} size={36} />
           <span className={s.whoText}>
             <b>{author.displayName}</b>{age && <small className={s.ageTag} data-f="age">{age}</small>}
-            {post.visibility === 'owners' && <small className={s.lockTag} data-f="owners-only" title="관리자와 올린 사람만 봐요"><Icon name="lock" size={12} stroke={2.4} />관리자만</small>}
+            {post.visibility === 'owners' && <small className={s.lockTag} data-f="owners-only" title="관리자 · 부관리자와 올린 사람만 봐요"><Icon name="lock" size={12} stroke={2.4} />관리자만</small>}
           </span>
         </span>
         <button className={s.iconBtn} onClick={() => h.onMore(post)} aria-label="더보기" data-act="more"><Icon name="more" size={22} /></button>

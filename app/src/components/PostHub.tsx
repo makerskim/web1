@@ -14,7 +14,7 @@ import * as api from '../lib/api';
 import { saveWithChoice, sharePhotos, type SaveName } from '../lib/media';
 import { callName, subj } from '../lib/korean';
 import type { PostHandlers } from './PostCard';
-import type { Post } from '../lib/types';
+import type { Post, Visibility } from '../lib/types';
 import s from './PostHub.module.css';
 
 interface ViewerReq { items: ViewItem[]; start: number; postLink?: boolean }
@@ -59,18 +59,26 @@ async function shareText(p: Post) {
 async function postMenu(p: Post) {
   const st = useSession.getState();
   const mine = p.authorId === st.me?.id;
-  const items: Array<{ label: string; value: string; icon?: 'download' | 'send' | 'link' | 'edit' | 'trash'; danger?: boolean }> = [
+  const admin = st.isAdmin();
+  const items: Array<{ label: string; value: string; icon?: 'download' | 'send' | 'link' | 'edit' | 'trash' | 'lock' | 'users'; danger?: boolean }> = [
     { label: '휴대폰에 저장', value: 'save', icon: 'download' },
     { label: '보내기', value: 'share', icon: 'send' },
     { label: '링크 복사', value: 'link', icon: 'link' },
   ];
   if (mine) items.push({ label: '글 고치기', value: 'edit', icon: 'edit' });
-  if (mine || st.isOwner()) items.push({ label: '게시물 지우기', value: 'delete', icon: 'trash', danger: true });
+  // 공개 범위: 올린 사람이나 관리자 · 부관리자가 바꿔요
+  if (mine || admin) {
+    items.push(p.visibility === 'owners'
+      ? { label: '모든 멤버에게 보이기', value: 'show-all', icon: 'users' }
+      : { label: '관리자만 보기로 바꾸기', value: 'owners-only', icon: 'lock' });
+  }
+  if (mine || admin) items.push({ label: '게시물 지우기', value: 'delete', icon: 'trash', danger: true });
   const v = await menu(items);
   if (v === 'save') saveWithChoice(p.albumId, p.photos, naming(p));
   if (v === 'share') sharePhotos(p.albumId, p.photos, await shareText(p), naming(p));
   if (v === 'link' && await copyText(`${location.origin}${location.pathname}#/p/${p.id}`)) toast('링크를 복사했어요');
   if (v === 'edit') useHub.setState({ edit: p.id });
+  if (v === 'show-all' || v === 'owners-only') await changeVisibility(p, v === 'owners-only' ? 'owners' : 'all');
   if (v === 'delete' && await confirm({ title: '게시물을 지울까요?', message: '사진과 댓글이 모두 사라져요.', ok: '지우기', danger: true })) {
     const pr = progress('지우는 중');
     try {
@@ -84,6 +92,15 @@ async function postMenu(p: Post) {
       if (location.hash.startsWith(`#/p/${p.id}`)) history.back();
     } catch (e) { pr.close(); toast((e as Error).message); }
   }
+}
+
+async function changeVisibility(p: Post, to: Visibility) {
+  if (to === 'owners' && !(await confirm({ title: '관리자만 보게 할까요?', message: '관리자 · 부관리자와 올린 사람만 볼 수 있어요. 다른 멤버의 화면에서는 사라져요.', ok: '관리자만' }))) return;
+  if (to === 'all' && !(await confirm({ title: '모든 멤버에게 보일까요?', message: '이 앨범의 모든 멤버가 이 게시물을 볼 수 있어요.', ok: '모두에게 보이기' }))) return;
+  try {
+    usePosts.getState().put(await api.setVisibility(p, to));
+    toast(to === 'owners' ? '관리자만 볼 수 있게 바꿨어요' : '모든 멤버에게 보여요');
+  } catch (e) { toast((e as Error).message); }
 }
 
 function EditPost({ post, onClose }: { post: Post; onClose: () => void }) {

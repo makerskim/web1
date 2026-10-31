@@ -129,6 +129,19 @@ alter table public.members add constraint members_avatar_check check (
   or (char_length(avatar) <= 600 and avatar ~ '^https://([a-z0-9-]+\.)*(googleusercontent\.com|kakaocdn\.net|kakao\.com)/')
   or avatar ~ ('^sb:' || family_id::text || '/avatars/' || user_id::text || '-[0-9]+\.jpg$')
   or avatar ~ '^gd:[A-Za-z0-9_-]{10,200}$');
+-- 관리자(owner)는 한 명, 부관리자(admin)는 여럿: 관리자가 부관리자를 정하고 빼요
+alter table public.members drop constraint if exists members_role_check;
+alter table public.members add constraint members_role_check check (role in ('owner', 'admin', 'member'));
+-- 예전엔 관리자를 여러 명 둘 수 있었어요 → 앨범을 만든 사람(나갔으면 가장 먼저 들어온 관리자)만 관리자로 두고 나머지는 부관리자로
+with keep as (
+  select distinct on (m.family_id) m.family_id, m.user_id
+  from public.members m join public.families f on f.id = m.family_id
+  where m.role = 'owner'
+  order by m.family_id, (m.user_id = f.created_by) desc, m.joined_at, m.user_id
+)
+update public.members m set role = 'admin'
+from keep k
+where m.family_id = k.family_id and m.role = 'owner' and m.user_id <> k.user_id;
 
 create table if not exists public.posts (
   id         uuid primary key default gen_random_uuid(),
@@ -200,11 +213,17 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from members where family_id = fid and user_id = auth.uid() and role = 'owner');
 $$;
 
--- 이 게시물을 볼 수 있는지: 앨범 멤버이고, '관리자만' 게시물이면 관리자나 올린 사람만
+-- 관리자나 부관리자인가 (앨범을 관리하고 '관리자만' 게시물을 볼 수 있는 사람)
+create or replace function public.is_admin(fid uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from members where family_id = fid and user_id = auth.uid() and role in ('owner', 'admin'));
+$$;
+
+-- 이 게시물을 볼 수 있는지: 앨범 멤버이고, '관리자만' 게시물이면 관리자 · 부관리자나 올린 사람만
 create or replace function public.can_see_post(p_post uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from posts p where p.id = p_post and public.is_member(p.family_id)
-    and (p.visibility = 'all' or p.author_id = auth.uid() or public.is_owner(p.family_id)));
+    and (p.visibility = 'all' or p.author_id = auth.uid() or public.is_admin(p.family_id)));
 $$;
 
 create or replace function public.is_member_path(path text)
@@ -216,7 +235,7 @@ $$;
 create or replace function public.is_owner_path(path text)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from members
-                 where family_id::text = split_part(path, '/', 1) and user_id = auth.uid() and role = 'owner');
+                 where family_id::text = split_part(path, '/', 1) and user_id = auth.uid() and role in ('owner', 'admin'));
 $$;
 
 -- 익명(로그인 안 한) 사용자인가?
@@ -355,31 +374,59 @@ returns text language plpgsql security definer set search_path = public as $$
 declare
   new_code text;
 begin
-  if not is_owner(p_family) then raise exception 'not_owner'; end if;
+  if not is_admin(p_family) then raise exception 'not_owner'; end if;
   update families set invite_code = gen_invite_code() where id = p_family returning invite_code into new_code;
   return new_code;
 end $$;
 
+-- 부관리자로 정하기 · 빼기 (관리자만). 예전 앱의 '관리자로 지정'은 이제 부관리자로 정해요
 create or replace function public.set_member_role(p_family uuid, p_user uuid, p_role text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not is_owner(p_family) then raise exception 'not_owner'; end if;
-  if p_role not in ('owner', 'member') then raise exception 'bad_role'; end if;
-  if p_role = 'member' and p_user = auth.uid()
-     and (select count(*) from members where family_id = p_family and role = 'owner') <= 1 then
-    raise exception 'last_owner';
-  end if;
-  update members set role = p_role where family_id = p_family and user_id = p_user;
+  if p_role = 'owner' then p_role := 'admin'; end if;
+  if p_role not in ('admin', 'member') then raise exception 'bad_role'; end if;
+  if p_user = auth.uid() then raise exception 'last_owner'; end if;
+  update members set role = p_role where family_id = p_family and user_id = p_user and role <> 'owner';
 end $$;
 
--- 가족 내보내기 (관리자만) — 같은 링크로 다시 못 들어오게 초대 코드도 바꿔요
+-- 관리자 넘기기 (관리자만): 받은 사람이 관리자, 나는 부관리자가 돼요
+create or replace function public.transfer_owner(p_family uuid, p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not is_owner(p_family) then raise exception 'not_owner'; end if;
+  if p_user = auth.uid() then raise exception 'bad_user'; end if;
+  update members set role = 'owner' where family_id = p_family and user_id = p_user;
+  if not found then raise exception 'not_member'; end if;
+  update members set role = 'admin' where family_id = p_family and user_id = auth.uid();
+end $$;
+
+-- 게시물 공개 범위 바꾸기 (모든 멤버 ↔ 관리자만): 올린 사람이나 관리자 · 부관리자
+create or replace function public.set_post_visibility(p_post uuid, p_visibility text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  p public.posts;
+begin
+  if p_visibility not in ('all', 'owners') then raise exception 'bad_visibility'; end if;
+  select * into p from posts where id = p_post;
+  if not found or not public.can_see_post(p_post) then raise exception 'not_found'; end if;
+  if p.author_id <> auth.uid() and not is_admin(p.family_id) then raise exception 'not_owner'; end if;
+  update posts set visibility = p_visibility where id = p_post;
+end $$;
+
+-- 멤버 내보내기 (관리자 · 부관리자) — 같은 링크로 다시 못 들어오게 초대 코드도 바꿔요
+-- 부관리자는 일반 멤버만 내보낼 수 있어요 (관리자 · 다른 부관리자는 안 돼요)
 create or replace function public.remove_member(p_family uuid, p_user uuid)
 returns text language plpgsql security definer set search_path = public as $$
 declare
   new_code text;
 begin
-  if not is_owner(p_family) then raise exception 'not_owner'; end if;
+  if not is_admin(p_family) then raise exception 'not_owner'; end if;
   if p_user = auth.uid() then raise exception 'use_leave'; end if;
+  if not is_owner(p_family)
+     and exists (select 1 from members where family_id = p_family and user_id = p_user and role <> 'member') then
+    raise exception 'not_owner';
+  end if;
   delete from members where family_id = p_family and user_id = p_user;
   update families set invite_code = gen_invite_code() where id = p_family returning invite_code into new_code;
   return new_code;
@@ -436,7 +483,7 @@ drop trigger if exists posts_clear_cover on public.posts;
 create trigger posts_clear_cover after delete on public.posts
   for each row execute function public.clear_cover_on_post_delete();
 
--- 마지막 관리자가 나가면(계정 삭제 포함) 가장 먼저 들어온 가족이 관리자가 돼요
+-- 관리자가 나가면(계정 삭제 포함) 가장 먼저 들어온 부관리자가, 부관리자가 없으면 가장 먼저 들어온 멤버가 관리자가 돼요
 create or replace function public.keep_an_owner()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
@@ -445,7 +492,7 @@ begin
      and not exists (select 1 from members where family_id = old.family_id and role = 'owner') then
     update members set role = 'owner'
     where (family_id, user_id) = (select family_id, user_id from members
-                                  where family_id = old.family_id order by joined_at limit 1);
+                                  where family_id = old.family_id order by (role = 'admin') desc, joined_at limit 1);
   end if;
   return null;
 end $$;
@@ -594,9 +641,10 @@ grant select, insert, delete on public.comments to authenticated;
 -- drive_tokens · user_drives · push_subs · app_keys · push_sent: 앱은 표를 직접 못 써요 (위의 기능으로만)
 
 revoke execute on function
-  public.is_member(uuid), public.is_owner(uuid), public.can_see_post(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
+  public.is_member(uuid), public.is_owner(uuid), public.is_admin(uuid), public.can_see_post(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.gen_invite_code(), public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
+  public.transfer_owner(uuid, uuid), public.set_post_visibility(uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
   public.family_files(uuid), public.check_post_photos(), public.clear_cover_on_post_delete(), public.keep_an_owner(),
   public.delete_account_check(), public.drive_links_to_release(), public.delete_account(),
@@ -604,9 +652,10 @@ revoke execute on function
   public.on_this_day(uuid, int, int, text)
   from public, anon;
 grant execute on function
-  public.is_member(uuid), public.is_owner(uuid), public.can_see_post(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
+  public.is_member(uuid), public.is_owner(uuid), public.is_admin(uuid), public.can_see_post(uuid), public.is_member_path(text), public.is_owner_path(text), public.is_guest(),
   public.create_family(text, text, date, text, text), public.invite_info(text),
   public.join_family(text, text, text), public.reset_invite_code(uuid), public.set_member_role(uuid, uuid, text),
+  public.transfer_owner(uuid, uuid), public.set_post_visibility(uuid, text),
   public.remove_member(uuid, uuid), public.storage_usage(), public.forget_originals(uuid, text[]),
   public.family_files(uuid), public.delete_account_check(), public.drive_links_to_release(), public.delete_account(),
   public.my_drive(), public.save_push(text, text, text, jsonb), public.drop_push(text), public.my_push(text),
@@ -617,7 +666,7 @@ drop policy if exists families_select on public.families;
 create policy families_select on public.families for select to authenticated using (public.is_member(id));
 drop policy if exists families_update on public.families;
 create policy families_update on public.families for update to authenticated
-  using (public.is_owner(id)) with check (public.is_owner(id));
+  using (public.is_admin(id)) with check (public.is_admin(id));
 drop policy if exists families_delete on public.families;
 create policy families_delete on public.families for delete to authenticated using (public.is_owner(id));
 
@@ -628,11 +677,11 @@ create policy members_update on public.members for update to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 drop policy if exists members_delete on public.members;
 create policy members_delete on public.members for delete to authenticated
-  using (user_id = auth.uid() or public.is_owner(family_id));
+  using (user_id = auth.uid() or public.is_owner(family_id) or (public.is_admin(family_id) and role = 'member'));
 
 drop policy if exists posts_select on public.posts;
 create policy posts_select on public.posts for select to authenticated
-  using (public.is_member(family_id) and (visibility = 'all' or author_id = auth.uid() or public.is_owner(family_id)));
+  using (public.is_member(family_id) and (visibility = 'all' or author_id = auth.uid() or public.is_admin(family_id)));
 drop policy if exists posts_insert on public.posts;
 create policy posts_insert on public.posts for insert to authenticated
   with check (author_id = auth.uid() and public.is_member(family_id));
@@ -641,7 +690,7 @@ create policy posts_update on public.posts for update to authenticated
   using (author_id = auth.uid()) with check (author_id = auth.uid());
 drop policy if exists posts_delete on public.posts;
 create policy posts_delete on public.posts for delete to authenticated
-  using (author_id = auth.uid() or public.is_owner(family_id));
+  using (author_id = auth.uid() or public.is_admin(family_id));
 
 drop policy if exists likes_select on public.likes;
 create policy likes_select on public.likes for select to authenticated using (public.is_member(family_id) and public.can_see_post(post_id));
@@ -662,7 +711,7 @@ create policy comments_insert on public.comments for insert to authenticated
   with check (author_id = auth.uid() and public.is_member(family_id) and public.can_see_post(post_id));
 drop policy if exists comments_delete on public.comments;
 create policy comments_delete on public.comments for delete to authenticated
-  using (author_id = auth.uid() or public.is_owner(family_id));
+  using (author_id = auth.uid() or public.is_admin(family_id));
 
 -- ---------- 예전 사진 저장소 (Supabase) ----------
 -- 예전에 올린 사진을 보고 지울 수만 있어요. 새 사진·동영상은 각자의 구글 드라이브에 올려요

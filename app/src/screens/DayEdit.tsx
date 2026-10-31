@@ -10,13 +10,12 @@ import { useAlbum, useSession } from '../state/session';
 import * as api from '../lib/api';
 import { fmtDay, ymd } from '../lib/dates';
 import { albumSince } from '../lib/album';
-import { LUNAR_MAX_YEAR, LUNAR_MIN_YEAR, REPEATS, hasLeapMonth, lunarLabel, lunarMonthDays, lunarToSolar, nextDays, solarToLunar } from '../lib/days';
+import { LUNAR_MAX_YEAR, LUNAR_MIN_YEAR, MAX_DAYS, REPEATS, hasLeapMonth, lunarLabel, lunarMonthDays, lunarToSolar, nextDays, solarToLunar } from '../lib/days';
 import { hasBatchim } from '../lib/korean';
 import { uuid } from '../lib/uuid';
-import type { Anniversary, DayRepeat, LunarDate } from '../lib/types';
+import { canManage, type Anniversary, type DayRepeat, type LunarDate } from '../lib/types';
 import s from './Settings.module.css';
 
-const MAX_DAYS = 30;
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 export function DayEdit() {
@@ -30,7 +29,7 @@ export function DayEdit() {
   const [lunar, setLunar] = useState<LunarDate | null>(old?.lunar ?? null);
   const [repeat, setRepeat] = useState<DayRepeat>(old?.repeat ?? 'yearly');
   const [every, setEvery] = useState(String(old?.every ?? 100));
-  const isOwner = album.myRole === 'owner';
+  const isAdmin = canManage(album.myRole);
   const once = useOnce();
 
   // 자주 쓰는 기념일: 누르면 이름 · 반복(과 날짜)이 채워져요
@@ -103,11 +102,11 @@ export function DayEdit() {
     } catch (e) { toast((e as Error).message); }
   };
 
-  if (!isOwner) {
+  if (!isAdmin) {
     return (
       <Page>
         <TopBar back title="기념일" />
-        <div className={s.page}><p className={s.ownerOnly}>기념일은 관리자만 바꿀 수 있어요.</p></div>
+        <div className={s.page}><p className={s.ownerOnly}>기념일은 관리자 · 부관리자만 바꿀 수 있어요.</p></div>
       </Page>
     );
   }

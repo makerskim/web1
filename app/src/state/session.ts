@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { sb } from '../lib/supabase';
 import * as api from '../lib/api';
-import type { Album, Me, Member } from '../lib/types';
+import { canManage, type Album, type Me, type Member } from '../lib/types';
 import { kidsFrom } from '../lib/kids';
 import { linkFromLogin } from '../lib/drive';
 
@@ -35,6 +35,8 @@ interface Session {
   album: () => Album | null;
   member: (uid: string) => Member;
   isOwner: () => boolean;
+  /** 관리자 · 부관리자 (앨범을 관리할 수 있어요) */
+  isAdmin: () => boolean;
   // 동작
   init: () => Promise<void>;
   loadAlbums: () => Promise<Album[]>;
@@ -64,6 +66,7 @@ export const useSession = create<Session>((set, get) => ({
   album: () => get().albums.find((a) => a.id === get().albumId) || null,
   member: (uid) => get().members.find((m) => m.userId === uid) || unknownMember(uid),
   isOwner: () => get().album()?.myRole === 'owner',
+  isAdmin: () => canManage(get().album()?.myRole),
 
   async init() {
     document.documentElement.dataset.text = get().textSize;

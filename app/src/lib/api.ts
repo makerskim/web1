@@ -5,7 +5,7 @@ import { friendly } from './errors';
 import { removeFiles, uploadFile, isDrive } from './storage';
 import { fnCall } from './fn';
 import { ymd } from './dates';
-import { REACTIONS, type ActivityEvent, type Album, type AlbumKind, type Anniversary, type Comment, type DayRepeat, type LunarDate, type Me, type Member, type PhotoBg, type PhotoMeta, type Post, type Reaction, type StorageKind, type Visibility } from './types';
+import { REACTIONS, type ActivityEvent, type Album, type AlbumKind, type Anniversary, type Comment, type DayRepeat, type LunarDate, type Me, type Member, type PhotoBg, type PhotoMeta, type Post, type Reaction, type Role, type StorageKind, type Visibility } from './types';
 import { ageBirthday, childName, kidsFrom, kidsLabel, type Child } from './kids';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -45,7 +45,7 @@ const album = (r: Row, m?: Row): Album => {
   babyName: kidsLabel(children) || r.baby_name || '', babyBirthday: children.length ? ageBirthday(children) : r.baby_birthday ?? null, inviteCode: r.invite_code,
   storage: (r.storage || 'supabase') as StorageKind, cover: r.cover || '',
   kind: toKind(r.kind), since: typeof r.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.since) ? r.since.slice(0, 10) : null, days: toDays(r.days),
-  createdAt: r.created_at, myRole: m?.role || 'member', myName: m?.display_name || '', myAvatar: m?.avatar || '',
+  createdAt: r.created_at, myRole: toRole(m?.role), myName: m?.display_name || '', myAvatar: m?.avatar || '',
   };
 };
 // 아이 목록을 저장할 모양으로 (예전 칸 baby_name·baby_birthday도 첫째 아이로 맞춰 둬요)
@@ -57,7 +57,8 @@ const kidsRow = (kids: Child[]) => ({
   baby_name: kids[0] ? childName(kids[0]).slice(0, 20) : '',
   baby_birthday: kids[0]?.birthday ?? null,
 });
-const member = (r: Row): Member => ({ userId: r.user_id, displayName: r.display_name, avatar: r.avatar || '', role: r.role, joinedAt: r.joined_at });
+const toRole = (x: unknown): Role => (x === 'owner' || x === 'admin' ? x : 'member');
+const member = (r: Row): Member => ({ userId: r.user_id, displayName: r.display_name, avatar: r.avatar || '', role: toRole(r.role), joinedAt: r.joined_at });
 const comment = (r: Row): Comment => ({ id: r.id, postId: r.post_id, authorId: r.author_id, body: r.body, createdAt: r.created_at });
 const post = (r: Row): Post => ({
   id: r.id, albumId: r.family_id, authorId: r.author_id, caption: r.caption, takenAt: r.taken_at, createdAt: r.created_at,
@@ -251,8 +252,12 @@ export async function leaveAlbum(albumId: string, uid: string) {
 }
 export const removeMember = async (albumId: string, uid: string) =>
   check(await sb.rpc('remove_member', { p_family: albumId, p_user: uid })) as string;
-export const setRole = async (albumId: string, uid: string, role: 'owner' | 'member') =>
+/** 부관리자로 정하기 · 빼기 (관리자만) */
+export const setRole = async (albumId: string, uid: string, role: 'admin' | 'member') =>
   check(await sb.rpc('set_member_role', { p_family: albumId, p_user: uid, p_role: role }));
+/** 관리자 넘기기: 받은 사람이 관리자, 나는 부관리자 */
+export const transferOwner = async (albumId: string, uid: string) =>
+  check(await sb.rpc('transfer_owner', { p_family: albumId, p_user: uid }));
 
 // ---------- 게시물 ----------
 /** 홈 타임라인: 새로 올린 게 위. range(날짜로 보기)를 주면 그 기간에 올린 것만 ([시작일, 끝 다음날) 'YYYY-MM-DD') */
@@ -287,16 +292,18 @@ export async function getPost(id: string): Promise<Post | null> {
   return r ? post(r) : null;
 }
 
-export interface GridItem extends PhotoMeta { postId: string; authorId: string; takenAt: string; createdAt: string; index: number; count: number }
+export interface GridItem extends PhotoMeta { postId: string; authorId: string; takenAt: string; createdAt: string; index: number; count: number; owners: boolean }
 
-export async function allPhotos(albumId: string): Promise<GridItem[]> {
+/** 앨범의 모든 사진 (everyone: 모든 멤버에게 보이는 게시물만 — 앨범 사진 고르기처럼 모두에게 보일 때) */
+export async function allPhotos(albumId: string, opts: { everyone?: boolean } = {}): Promise<GridItem[]> {
   const out: GridItem[] = [];
   for (let from = 0; ; from += 1000) {
-    const rows = check(await sb.from('posts').select('id, author_id, photos, taken_at, created_at')
-      .eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
+    let q = sb.from('posts').select('id, author_id, photos, taken_at, created_at, visibility').eq('family_id', albumId);
+    if (opts.everyone) q = q.eq('visibility', 'all');
+    const rows = check(await q.order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
     for (const r of rows) {
       (r.photos as PhotoMeta[]).forEach((ph, i) => out.push({
-        ...ph, postId: r.id, authorId: r.author_id, takenAt: r.taken_at, createdAt: r.created_at, index: i, count: r.photos.length,
+        ...ph, postId: r.id, authorId: r.author_id, takenAt: r.taken_at, createdAt: r.created_at, index: i, count: r.photos.length, owners: r.visibility === 'owners',
       }));
     }
     if (rows.length < 1000) return out;
@@ -304,15 +311,15 @@ export async function allPhotos(albumId: string): Promise<GridItem[]> {
 }
 
 // 가족 탭 그리드: 게시물마다 한 칸 (첫 사진 + 여러 장 표시 + 좋아요한 사람)
-export interface PostTile { id: string; authorId: string; createdAt: string; first: PhotoMeta; count: number; likedBy: string[] }
+export interface PostTile { id: string; authorId: string; createdAt: string; first: PhotoMeta; count: number; likedBy: string[]; owners: boolean }
 
 export async function postTiles(albumId: string): Promise<PostTile[]> {
   const out: PostTile[] = [];
   for (let from = 0; ; from += 1000) {
-    const rows = check(await sb.from('posts').select('id, author_id, photos, created_at, likes(user_id)')
+    const rows = check(await sb.from('posts').select('id, author_id, photos, created_at, visibility, likes(user_id)')
       .eq('family_id', albumId).order('created_at', { ascending: false }).range(from, from + 999)) as Row[];
     for (const r of rows) {
-      out.push({ id: r.id, authorId: r.author_id, createdAt: r.created_at, first: r.photos[0], count: r.photos.length, likedBy: (r.likes || []).map((l: Row) => l.user_id) });
+      out.push({ id: r.id, authorId: r.author_id, createdAt: r.created_at, first: r.photos[0], count: r.photos.length, likedBy: (r.likes || []).map((l: Row) => l.user_id), owners: r.visibility === 'owners' });
     }
     if (rows.length < 1000) return out;
   }
@@ -423,6 +430,12 @@ export async function updatePost(id: string, p: { caption?: string; takenAt?: st
   if (p.bg) row.bg = p.bg;
   if (p.visibility) row.visibility = p.visibility;
   return post(check(await sb.from('posts').update(row).eq('id', id).select(POST_COLS).single()) as Row);
+}
+
+/** 공개 범위 바꾸기 (모든 멤버 ↔ 관리자만): 올린 사람이나 관리자 · 부관리자 */
+export async function setVisibility(p: Post, visibility: Visibility): Promise<Post> {
+  check(await sb.rpc('set_post_visibility', { p_post: p.id, p_visibility: visibility }));
+  return { ...p, visibility };
 }
 
 export const filesOf = (ph: PhotoMeta) => [ph.path, ph.thumb, ph.orig].filter(Boolean) as string[];

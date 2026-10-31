@@ -7,7 +7,7 @@ import { Photo } from './Photo';
 import { usePhotoURL } from '../hooks/usePhoto';
 import { Icon } from './Icon';
 import { useAlbum, useSession } from '../state/session';
-import type { Album } from '../lib/types';
+import type { Album, Member } from '../lib/types';
 import * as api from '../lib/api';
 import { useMyDrive } from '../lib/drive';
 import { askDriveLink } from '../state/actions';
@@ -17,7 +17,8 @@ import { spaceAmp } from '../lib/kids';
 import s from './AlbumBits.module.css';
 
 // ---------- 가족 N명 ----------
-// 이름 · '나' · '관리자'만 보여요. 관리자는 ⋯ 로 관리자 지정/내보내기
+// 이름 · '나' · '관리자' · '부관리자'만 보여요
+// 관리자는 ⋯ 로 부관리자 정하기/빼기 · 관리자 넘기기 · 내보내기, 부관리자는 일반 멤버 내보내기만
 export function MembersSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const album = useAlbum();
   const me = useSession((st) => st.me);
@@ -25,15 +26,25 @@ export function MembersSheet({ open, onClose }: { open: boolean; onClose: () => 
   useEffect(() => { if (open) useSession.getState().loadMembers().catch(() => {}); }, [open]);
   if (!album || !me) return null;
   const isOwner = album.myRole === 'owner';
+  const canManageRow = (m: Member) => m.userId !== me.id && (isOwner || (album.myRole === 'admin' && m.role === 'member'));
 
   const manage = async (uid: string) => {
     const m = members.find((x) => x.userId === uid)!;
-    const v = await menu([
-      m.role === 'owner' ? { label: '관리자에서 빼기', value: 'member', icon: 'crown' as const } : { label: '관리자로 지정', value: 'owner', icon: 'crown' as const },
+    const v = await menu<string>([
+      ...(isOwner ? [
+        m.role === 'admin' ? { label: '부관리자에서 빼기', value: 'member', icon: 'shield' as const } : { label: '부관리자로 정하기', value: 'admin', icon: 'shield' as const },
+        { label: '관리자 넘기기', value: 'transfer', icon: 'crown' as const },
+      ] : []),
       { label: '앨범에서 내보내기', value: 'remove', icon: 'logout' as const, danger: true },
     ], m.displayName);
     try {
-      if (v === 'owner' || v === 'member') { await api.setRole(album.id, uid, v); toast(v === 'owner' ? '관리자로 지정했어요' : '관리자에서 뺐어요'); }
+      if (v === 'admin' || v === 'member') { await api.setRole(album.id, uid, v); toast(v === 'admin' ? `${obj(m.displayName)} 부관리자로 정했어요` : '부관리자에서 뺐어요'); }
+      if (v === 'transfer') {
+        if (!(await confirm({ title: `${m.displayName}에게 관리자를 넘길까요?`, message: '관리자는 한 명이에요. 넘기면 나는 부관리자가 되고, 부관리자를 정하거나 앨범을 지우는 건 새 관리자만 할 수 있어요.', ok: '넘기기' }))) return;
+        await api.transferOwner(album.id, uid);
+        await useSession.getState().loadAlbums();
+        toast(`${m.displayName}에게 관리자를 넘겼어요`);
+      }
       if (v === 'remove') {
         if (!(await confirm({ title: `${obj(m.displayName)} 내보낼까요?`, message: '예전 초대 코드로 다시 못 들어오게 초대 코드가 새로 바뀌어요.', ok: '내보내기', danger: true }))) return;
         const code = await api.removeMember(album.id, uid);
@@ -44,16 +55,16 @@ export function MembersSheet({ open, onClose }: { open: boolean; onClose: () => 
     } catch (e) { toast((e as Error).message); }
   };
 
-  // 나 → 관리자 → 가나다
+  // 나 → 관리자 → 부관리자 → 가나다
   const ordered = [...members].sort((a, b) => {
-    const rank = (m: typeof a) => (m.userId === me.id ? 0 : m.role === 'owner' ? 1 : 2);
+    const rank = (m: typeof a) => (m.userId === me.id ? 0 : m.role === 'owner' ? 1 : m.role === 'admin' ? 2 : 3);
     return rank(a) - rank(b) || a.displayName.localeCompare(b.displayName, 'ko');
   });
   return (
     <Sheet open={open} onClose={onClose} title={`멤버 ${members.length}명`}>
       <PeopleList>
         {ordered.map((m) => (
-          <PersonRow key={m.userId} m={m} me={m.userId === me.id} action={isOwner && m.userId !== me.id
+          <PersonRow key={m.userId} m={m} me={m.userId === me.id} action={canManageRow(m)
             ? <button className={s.more} onClick={() => manage(m.userId)} aria-label={`${m.displayName} 관리`} data-member={m.userId}><Icon name="more" size={20} /></button>
             : undefined} />
         ))}
@@ -144,7 +155,8 @@ function CoverPicker({ open, onClose, onPick }: { open: boolean; onClose: () => 
   useEffect(() => {
     if (!open || !album) return;
     let live = true;
-    api.allPhotos(album.id).then((l) => live && setItems(l), (e) => { toast((e as Error).message); onClose(); });
+    // '관리자만' 게시물의 사진은 고를 수 없어요 (앨범 사진은 모든 멤버에게 보여서)
+    api.allPhotos(album.id, { everyone: true }).then((l) => live && setItems(l), (e) => { toast((e as Error).message); onClose(); });
     return () => { live = false; };
   }, [open, album?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!album) return null;

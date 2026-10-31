@@ -12,6 +12,7 @@ import { usePosts } from '../state/posts';
 import * as api from '../lib/api';
 import { ageLabel, babyDay, fmtDate, nextMilestone, spanLabel, ymd } from '../lib/dates';
 import { albumSince } from '../lib/album';
+import { canManage } from '../lib/types';
 import { bornWeeks, childName, dueInfo, dueStatus, isBorn, kidsPatch, needsName, newChild, weeksLabel, weeksText, type Child } from '../lib/kids';
 import { DatePickerSheet } from '../components/DatePicker';
 import { toast } from '../components/ui';
@@ -33,7 +34,8 @@ export function AlbumHome() {
   const album = useAlbum()!;
   const me = useSession((st) => st.me)!;
   const members = useSession((st) => st.members);
-  const isOwner = album.myRole === 'owner';
+  // 관리자 · 부관리자: 앨범 사진 · 프로필 편집 · 아기 정보 넣기
+  const isAdmin = canManage(album.myRole);
   const postsVersion = usePosts((st) => st.list.length + st.list.join().length);
   const [tiles, setTiles] = useState<api.PostTile[] | null>(null);
   const [err, setErr] = useState('');
@@ -138,9 +140,9 @@ export function AlbumHome() {
     const i = dueInfo(c);
     return { key: k, text: i ? `👶 ${n} · ${[weeksLabel(i), dueStatus(i)].filter(Boolean).join(' · ')} (${shortDate(c.birthday!)} 예정)` : `🎂 ${n} · ${ageLabel(c.birthday!)}` };
   });
-  const unnamed = isOwner ? kids.find(needsName) : undefined;
+  const unnamed = isAdmin ? kids.find(needsName) : undefined;
   // 아기 앨범인데 날짜가 하나도 없으면 (예: 가족 앨범에서 바꾼 직후) 넣어 달라고 해요
-  const noBabyInfo = isOwner && !isGroup && !all.some((c) => c.birthday);
+  const noBabyInfo = isAdmin && !isGroup && !all.some((c) => c.birthday);
   const postCount = tiles?.length;
   const base = useMemo(() => (tiles || []).filter((t) => tab === 'all' || t.likedBy.includes(me.id)), [tiles, tab, me.id]);
   // 생후 N개월로 거르기: 태어난 뒤에만 (그 전엔 출산 예정일이에요)
@@ -175,7 +177,7 @@ export function AlbumHome() {
 
       <section className={s.profile}>
         <div className={s.head}>
-          {isOwner
+          {isAdmin
             ? <button className={s.cover} onClick={cover.open} aria-label="앨범 사진 바꾸기" data-f="cover"><CoverFace size={88} /><span className={s.coverEdit}><Icon name="camera" size={13} stroke={2.2} /></span></button>
             : <div className={s.cover}><CoverFace size={88} /></div>}
           {/* 인스타그램처럼: 이름 옆에 설정 */}
@@ -212,7 +214,7 @@ export function AlbumHome() {
         {album.bio && <p className={s.bio} data-f="bio">{album.bio}</p>}
 
         {/* 예정일이 됐거나 지났으면: 태어났는지 물어봐요 */}
-        {isOwner && due && due.daysLeft <= 0 && (
+        {isAdmin && due && due.daysLeft <= 0 && (
           <button className={s.banner} onClick={() => openDp('born')} data-f="born-set">
             <span aria-hidden="true">👶</span><b>{who ? subj(groupName) : '아기가'} 태어났나요? 생일 넣기</b><Icon name="right" size={16} stroke={2.4} />
           </button>
@@ -229,7 +231,7 @@ export function AlbumHome() {
         )}
 
         <div className={s.btns}>
-          {isOwner
+          {isAdmin
             ? <button className={s.btn} onClick={editProfile} data-f="edit-profile">프로필 편집</button>
             : <button className={s.btn} onClick={() => setSheet('profile')} data-f="me">내 프로필</button>}
           <button className={s.btn} onClick={() => setSheet('invite')} data-f="invite">초대하기</button>
@@ -237,7 +239,7 @@ export function AlbumHome() {
       </section>
 
       {/* 태어난 날 고르기 */}
-      {isOwner && (
+      {isAdmin && (
         <DatePickerSheet open={!!dp} onClose={() => setDp(null)} title={`${who}언제 태어났나요?`}
           value={today} min="2000-01-01" max={today}
           onChange={(v) => { if (v && dp) saveDate(dp.mode, v, dp.ids); }} />
@@ -263,6 +265,7 @@ export function AlbumHome() {
             <button key={t.id} className={s.tile} onClick={() => nav(`/p/${t.id}`)} aria-label="게시물 보기" data-tile={t.id}>
               <Photo albumId={album.id} path={t.first.thumb} ph={t.first.ph} className={s.tileImg} />
               {t.count > 1 && <Icon name="layers" size={18} className={s.multi} />}
+              {t.owners && <span className={s.lock} aria-label="관리자만" data-f="tile-lock"><Icon name="lock" size={14} stroke={2.4} /></span>}
               <VideoMark item={t.first} />
             </button>
           ))}
