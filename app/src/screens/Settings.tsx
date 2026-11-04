@@ -185,7 +185,8 @@ export function Settings() {
             ? <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail="추가됨" data-row="install" />
             : <Row icon={<Icon name="phone" size={22} />} label="홈 화면에 추가" detail={install.installed ? '추가됨' : undefined} onClick={addToHome} data-row="install" />}
           <Row icon={<Icon name="shield" size={22} />} label="개인정보처리방침" onClick={() => window.open('privacy.html', '_blank', 'noopener')} data-row="privacy" />
-          <Row icon={<Icon name="info" size={22} />} label="버전" detail={`Pastel Memories ${VERSION}`} />
+          {/* 만든 때가 보여서, 업데이트 뒤 휴대폰에 새 버전이 왔는지 알 수 있어요 */}
+          <Row icon={<Icon name="info" size={22} />} label="버전" detail={`${VERSION} · ${__BUILT__}`} data-row="version" />
         </Group>
 
         <Group>
