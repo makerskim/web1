@@ -37,6 +37,7 @@
 .burst { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; pointer-events: none; filter: drop-shadow(0 6px 24px rgba(0, 0, 0, .25)); }
 
 .actions { position: relative; display: flex; align-items: center; padding: var(--s-1) var(--s-1); }
+.actLeft { display: flex; align-items: center; }
 /* 세로로 긴 사진 양옆: 올릴 때 고른 색 (기본은 같은 사진을 흐리게) */
 .bgBlack, .bgBlack .slide { background-color: #000; }
 .bgWhite, .bgWhite .slide { background-color: #fff; }
@@ -64,7 +65,9 @@
 .act { width: 44px; height: 44px; display: grid; place-items: center; color: var(--c-label); -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .liked { color: var(--c-heart); }
 .save { margin-left: auto; }
-.dots { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; pointer-events: none; }
+/* 사진 점: 사진 바로 아래 한 줄, 가운데 (인스타그램처럼 5개까지, 양끝은 작게). 누른 채 옆으로 밀면 넘어가요 */
+.dots { display: flex; justify-content: center; align-items: center; gap: 4px; height: 20px; margin: 4px auto 0; padding: 0 var(--s-3); width: max-content; touch-action: pan-y; cursor: ew-resize; }
+.dots i.dotSmall { transform: scale(0.66); }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--c-hairline-strong); transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease); }
 .dots i.dotOn { background: var(--c-accent); transform: scale(1.1); }
 

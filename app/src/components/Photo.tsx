@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNearScreen, usePhotoURL } from '../hooks/usePhoto';
+import { knownPhotoURL } from '../lib/storage';
 import s from './Photo.module.css';
 
 const safePh = (ph?: string) => (ph && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(ph) ? ph : '');
@@ -10,7 +11,8 @@ export function Photo({ albumId, path, ph, fit = 'cover', className = '', eager 
 }) {
   const [ref, near] = useNearScreen<HTMLDivElement>();
   const { url, failed } = usePhotoURL(albumId, path, eager || near);
-  const [loaded, setLoaded] = useState(false);
+  // 이미 받아 둔 사진은 서서히 나타나지 않고 바로 (다시 그릴 때마다 깜빡이지 않게)
+  const [loaded, setLoaded] = useState(() => !!knownPhotoURL(path));
   const bg = safePh(ph);
   return (
     <div ref={ref} className={`${s.box} ${className}`} style={bg ? { backgroundImage: `url(${bg})` } : undefined}>

@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { photoURL } from '../lib/storage';
+import { knownPhotoURL, photoURL } from '../lib/storage';
 import { usePageScroll } from '../components/Stack';
 
 // 사진 주소 (휴대폰 보관본 먼저). visible이 될 때만 받아요
+// 이미 받아 둔 사진은 처음부터 바로 보여요 (화면이 다시 그려질 때 빈 칸으로 깜빡이지 않게)
 export function usePhotoURL(albumId: string | null | undefined, path: string | null | undefined, enabled = true) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(() => knownPhotoURL(path));
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (!albumId || !path || !enabled) return;
+    if (!albumId || !path) return;
+    const known = knownPhotoURL(path);
+    if (known) { setUrl(known); setFailed(false); return; }
+    if (!enabled) return;
     let live = true;
     setFailed(false);
     photoURL(albumId, path).then((u) => live && setUrl(u), () => live && setFailed(true));

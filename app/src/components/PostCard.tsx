@@ -59,10 +59,11 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
       tapTimer.current = window.setTimeout(() => h.onView(post, idx), 300);
     }
   };
-  const go = (d: number) => {
+  const goTo = (i: number, smooth = true) => {
     const t = track.current!;
-    t.scrollTo({ left: (idx + d) * t.clientWidth, behavior: 'smooth' });
+    t.scrollTo({ left: i * t.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
   };
+  const go = (d: number) => goTo(idx + d);
   // 하트: 누르면 ❤️ 남기기·없애기, 길게 누르면 다른 리액션 고르기
   const onHeart = () => {
     if (press.current.long) { press.current.long = false; return; }
@@ -144,7 +145,10 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
         </AnimatePresence>
       </div>
 
+      {/* 사진 점은 사진 바로 아래 한 줄에, 리액션 · 댓글 · 보내기 · 저장은 그 아래 줄에 (사진이 많아도 겹치지 않게) */}
+      {post.photos.length > 1 && <Dots n={post.photos.length} idx={idx} onPick={goTo} />}
       <div className={s.actions}>
+        <span className={s.actLeft}>
         <motion.button whileTap={{ scale: 0.82 }} className={`${s.act} ${mine ? s.liked : ''}`} onClick={onHeart}
           onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd} onPointerCancel={holdEnd} onContextMenu={(e) => e.preventDefault()}
           aria-pressed={!!mine} aria-label={mine ? `내 리액션 ${mine} (누르면 없애요, 길게 누르면 바꿔요)` : '좋아요 (길게 누르면 다른 리액션)'} data-act="like" data-mine={mine || ''}>
@@ -169,9 +173,7 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
         </AnimatePresence>
         <motion.button whileTap={{ scale: 0.85 }} className={s.act} onClick={() => h.onComments(post)} aria-label="댓글" data-act="comments"><Icon name="comment" size={25} /></motion.button>
         <motion.button whileTap={{ scale: 0.85 }} className={s.act} onClick={() => h.onShare(post)} aria-label="보내기" data-act="share"><Icon name="send" size={24} /></motion.button>
-        {post.photos.length > 1 && (
-          <span className={s.dots} aria-hidden="true">{post.photos.map((_, i) => <i key={i} className={i === idx ? s.dotOn : ''} />)}</span>
-        )}
+        </span>
         <motion.button whileTap={{ scale: 0.85 }} className={`${s.act} ${s.save}`} onClick={() => h.onSave(post)} aria-label="휴대폰에 저장" data-act="save"><Icon name="download" size={24} /></motion.button>
       </div>
 
@@ -204,5 +206,32 @@ export function PostCard({ post, h, full = false }: { post: Post; h: PostHandler
         </p>
       </div>
     </article>
+  );
+}
+
+// 사진 점 (인스타그램처럼): 5개까지 보이고, 더 있으면 양끝 점이 작아져서 더 있다는 걸 알려요
+// 점 위를 누른 채 옆으로 밀면 사진이 한 장씩 넘어가요
+const DOTS = 5;
+function Dots({ n, idx, onPick }: { n: number; idx: number; onPick: (i: number, smooth?: boolean) => void }) {
+  const start = n <= DOTS ? 0 : Math.min(Math.max(idx - 2, 0), n - DOTS);
+  const end = Math.min(n, start + DOTS);
+  const drag = useRef<{ x0: number; i0: number; last: number } | null>(null);
+  const STEP = 18; // 이만큼 밀 때마다 한 장
+  return (
+    <div className={s.dots} aria-hidden="true" data-f="dots"
+      onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); drag.current = { x0: e.clientX, i0: idx, last: idx }; }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        const i = Math.min(n - 1, Math.max(0, d.i0 + Math.trunc((e.clientX - d.x0) / STEP)));
+        if (i !== d.last) { d.last = i; onPick(i, false); }
+      }}
+      onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+      {Array.from({ length: end - start }, (_, k) => {
+        const i = start + k;
+        const small = (i === start && start > 0) || (i === end - 1 && end < n);
+        return <i key={i} className={`${i === idx ? s.dotOn : ''} ${small ? s.dotSmall : ''}`} />;
+      })}
+    </div>
   );
 }

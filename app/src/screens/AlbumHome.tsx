@@ -30,6 +30,8 @@ const TABS: Array<{ id: Tab; icon: IconName; label: string }> = [
 const ORDER = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째'];
 
 
+let tileCache: { albumId: string; tiles: api.PostTile[] } | null = null;
+
 export function AlbumHome() {
   const album = useAlbum()!;
   const me = useSession((st) => st.me)!;
@@ -37,7 +39,8 @@ export function AlbumHome() {
   // 관리자 · 부관리자: 앨범 사진 · 프로필 편집 · 아기 정보 넣기
   const isAdmin = canManage(album.myRole);
   const postsVersion = usePosts((st) => st.list.length + st.list.join().length);
-  const [tiles, setTiles] = useState<api.PostTile[] | null>(null);
+  // 지난번에 받은 칸을 먼저 보여 주고 뒤에서 새로 받아요 (뒤로 와서 다시 그릴 때 빈 칸으로 깜빡이지 않게)
+  const [tiles, setTiles] = useState<api.PostTile[] | null>(() => (tileCache?.albumId === album.id ? tileCache.tiles : null));
   const [err, setErr] = useState('');
   const [reload, setReload] = useState(0);
   const [tab, setTab] = useState<Tab>('all');
@@ -51,7 +54,7 @@ export function AlbumHome() {
   useEffect(() => {
     let live = true;
     setErr('');
-    api.postTiles(album.id).then((l) => live && setTiles(l), (e) => live && setErr((e as Error).message));
+    api.postTiles(album.id).then((l) => { tileCache = { albumId: album.id, tiles: l }; if (live) setTiles(l); }, (e) => live && setErr((e as Error).message));
     return () => { live = false; };
   }, [album.id, postsVersion, reload]);
 
