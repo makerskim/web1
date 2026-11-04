@@ -316,6 +316,7 @@ export function AlbumSettings() {
   const isOwner = album.myRole === 'owner';
   // 관리자 · 부관리자: 앨범 종류 · 아이 · 시작일 · 초대 코드 (앨범 지우기는 관리자만)
   const isAdmin = canManage(album.myRole);
+  const ownerName = members.find((m) => m.role === 'owner')?.displayName || '';
   const nav = useNavigate();
   const [sheet, setSheet] = useState<'members' | 'since' | 'kind' | null>(null);
   const code = `${album.inviteCode.slice(0, 4)}-${album.inviteCode.slice(4)}`;
@@ -388,7 +389,8 @@ export function AlbumSettings() {
           <Row icon={<Icon name="cloud" size={22} />} label="사진 올리기 · 공유" detail="각자 구글 드라이브" onClick={() => nav('/settings/upload')} data-row="storage" />
         </Group>
 
-        <Group footer={isOwner ? '앨범을 지우면 모든 멤버에게서 사라져요.' : undefined}>
+        {/* 앨범 지우기는 관리자만: 다른 사람에게는 왜 없는지, 누가 관리자인지 알려 줘요 */}
+        <Group footer={isOwner ? '앨범을 지우면 모든 멤버에게서 사라져요.' : `앨범 지우기는 관리자${ownerName ? `(${ownerName})` : ''}만 할 수 있어요. 관리자가 멤버 목록에서 나에게 관리자를 넘기면 지울 수 있어요.`}>
           {!alone && <Row label="앨범에서 나가기" onClick={leave} danger chevron={false} data-row="leave" />}
           {isOwner && <Row label="앨범 지우기" onClick={remove} danger chevron={false} data-row="delete-album" />}
         </Group>

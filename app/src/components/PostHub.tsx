@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { Comments } from './Comments';
 import { LikesSheet } from './LikesSheet';
 import { Viewer, type ViewItem } from './Viewer';
-import { Sheet, confirm, menu, progress, toast, copyText } from './ui';
+import { Sheet, afterBack, confirm, menu, progress, toast, copyText } from './ui';
 import { Button } from './Button';
 import { useSession } from '../state/session';
 import { usePosts } from '../state/posts';
@@ -89,7 +89,8 @@ async function postMenu(p: Post) {
       if (cover && (cover.startsWith(`${p.albumId}/${p.id}/`) || p.photos.some((ph) => ph.thumb === cover))) st.patchAlbum({ cover: '' });
       pr.close();
       toast('게시물을 지웠어요');
-      if (location.hash.startsWith(`#/p/${p.id}`)) history.back();
+      // 확인 창의 기록이 빠진 다음 뒤로 (겹치면 사파리는 한 번만 가요)
+      if (location.hash.startsWith(`#/p/${p.id}`)) { await afterBack(); history.back(); }
     } catch (e) { pr.close(); toast((e as Error).message); }
   }
 }
