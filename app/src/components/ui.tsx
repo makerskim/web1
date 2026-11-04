@@ -30,13 +30,24 @@ if (typeof window !== 'undefined') {
 }
 // 맨 위 기록이 뺄 것이면 하나 빼고, 끝날 때까지 기다렸다 그다음을 봐요 (닫힌 순서와 상관없이 다 빠져요)
 async function popUndone() {
-  while (undo.delete(history.state?.pmOverlay)) {
+  for (let id = history.state?.pmOverlay; undo.delete(id); id = history.state?.pmOverlay) {
     ignorePops++;
     await new Promise<void>((resolve) => {
+      let finished = false;
       // popstate 처리가 다 끝난 다음 순간에 끝나요 (그 안에서 바로 back 하지 않게)
-      const done = () => { window.removeEventListener('popstate', done); clearTimeout(t); setTimeout(resolve, 0); };
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        window.removeEventListener('popstate', done);
+        clearInterval(poll);
+        clearTimeout(t);
+        setTimeout(resolve, 0);
+      };
       window.addEventListener('popstate', done);
-      const t = setTimeout(done, 600);
+      // 아이폰은 뒤로 가기가 늦게 일어날 때가 있어요. 기록이 정말 바뀔 때까지 기다려야
+      // 그다음 화면 이동이 뒤로 가기에 덮이지 않아요 (앨범을 바꾸자마자 설정으로 되돌아가던 문제)
+      const poll = setInterval(() => { if (history.state?.pmOverlay !== id) done(); }, 50);
+      const t = setTimeout(done, 4000);
       history.back();
     });
   }

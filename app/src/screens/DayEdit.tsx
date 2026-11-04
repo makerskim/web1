@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Page, TopBar } from '../components/Bars';
 import { Group, Field, Segmented } from '../components/Form';
 import { DateField } from '../components/DatePicker';
-import { confirm, toast, useOnce } from '../components/ui';
+import { afterBack, confirm, toast, useOnce } from '../components/ui';
 import { useAlbum, useSession } from '../state/session';
 import * as api from '../lib/api';
 import { fmtDay, ymd } from '../lib/dates';
@@ -98,6 +98,8 @@ export function DayEdit() {
       await api.updateAlbum(album.id, { days });
       useSession.getState().patchAlbum({ days });
       toast('지웠어요');
+      // 확인 창의 기록이 빠진 다음 뒤로 (겹치면 사파리는 한 번만 가요)
+      await afterBack();
       nav(-1);
     } catch (e) { toast((e as Error).message); }
   };
@@ -116,7 +118,7 @@ export function DayEdit() {
       <div className={s.page}>
         {/* 기념일인지 생일인지 */}
         <div className={s.daySeg} role="group" aria-label="종류">
-          <button type="button" className={!birthday ? s.daySegOn : ''} aria-pressed={!birthday} onClick={() => setBirthday(false)} data-day-kind="anniv">🎉 기념일<small>결혼기념일 · 만난 날 …</small></button>
+          <button type="button" className={!birthday ? s.daySegOn : ''} aria-pressed={!birthday} onClick={() => setBirthday(false)} data-day-kind="anniv">🎉 기념일<small>결혼기념일 · 만난 날</small></button>
           <button type="button" className={birthday ? s.daySegOn : ''} aria-pressed={birthday} onClick={() => { setBirthday(true); setRepeat('yearly'); }} data-day-kind="birthday">🎂 생일<small>가족 · 친구 생일</small></button>
         </div>
         {!old && (

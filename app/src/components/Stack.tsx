@@ -108,6 +108,20 @@ function Page({ loc, dir, restore, swipe, children }: {
   const shadow = useTransform(x, (v) => (v > 1 ? '-10px 0 30px rgba(20, 10, 16, 0.16)' : 'none'));
   // 사라지는 중인 화면은 눌리지 않게 (두 번 눌러 같은 화면이 두 번 쌓이지 않게)
   const present = useIsPresent();
+  // 나가다가 다시 돌아온 화면: 아이폰은 눌리지 않던 동안의 스크롤 영역을 잊을 때가 있어서 한 번 다시 잡아 줘요
+  const wasLeaving = useRef(false);
+  useEffect(() => {
+    if (!present) { wasLeaving.current = true; return; }
+    if (!wasLeaving.current) return;
+    wasLeaving.current = false;
+    const sc = scroller.current;
+    if (!sc) return;
+    const top = sc.scrollTop;
+    sc.style.overflowY = 'hidden';
+    void sc.offsetHeight;
+    const r = requestAnimationFrame(() => { sc.style.overflowY = ''; sc.scrollTop = top; });
+    return () => { cancelAnimationFrame(r); sc.style.overflowY = ''; };
+  }, [present]);
 
   // 같은 화면(주소)인데 다른 기록으로 돌아왔으면, 밀어 둔 화면을 제자리로
   const shownKey = useRef(loc.key);
