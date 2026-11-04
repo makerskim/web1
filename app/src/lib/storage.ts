@@ -1,7 +1,7 @@
 // 사진 파일: 'gd:파일ID'는 올린 사람의 구글 드라이브(공유 폴더에서 바로 받아요)
 // 그 밖의 경로는 예전에 Supabase 저장소에 올린 사진이에요 (보기·지우기만, 새로 올리지 않아요)
 import { sb } from './supabase';
-import { cachedBlob, cachedURL, forget, remember } from './photoCache';
+import { cachedBlob, cachedURL, forget, knownURL, remember } from './photoCache';
 import { friendly } from './errors';
 import { fetchDriveFile, trashOnDrive, uploadToDrive } from './drive';
 
@@ -26,6 +26,8 @@ export async function fetchFile(albumId: string, path: string): Promise<Blob> {
 
 // 화면에 보여줄 주소 (휴대폰에 보관된 것 먼저)
 export const photoURL = (albumId: string, path: string) => cachedURL(path, () => fetchFile(albumId, path));
+/** 이미 받아 둔 사진이면 그 주소를 바로 (없으면 null) */
+export const knownPhotoURL = (path: string | null | undefined) => (path ? knownURL(path) : null);
 export const photoBlob = (albumId: string, path: string) => cachedBlob(path, () => fetchFile(albumId, path));
 
 export interface UploadTarget { albumId: string; storage: 'supabase' | 'drive'; postId: string }

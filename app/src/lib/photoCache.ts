@@ -20,6 +20,9 @@ function limit<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
+/** 이미 받아 둔 사진 주소 (바로, 기다리지 않고) — 화면을 다시 그릴 때 사진이 깜빡이지 않게 */
+export const knownURL = (key: string) => urls.get(key) ?? null;
+
 export async function cachedURL(key: string, fetchBlob: () => Promise<Blob>) {
   const hit = urls.get(key);
   if (hit) return hit;
