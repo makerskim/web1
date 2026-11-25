@@ -57,18 +57,19 @@ class Alerts {
     for (const p of snapshot.providers) {
       for (const w of p.windows || []) {
         const id = `${p.id}:${w.key}`;
-        const prev = this.fired.get(id) || { cycle: null, top: 0 };
-        // A new cycle starts when the reset time moves on, or usage falls back below the first threshold.
-        const cycle = w.resetsAt ? Math.round(w.resetsAt / 3600000) : null;
+        const prev = this.fired.get(id) || { resetsAt: null, top: 0 };
+        // A new cycle starts when the reset time moves on (by more than a few minutes of jitter),
+        // even if usage is already high again, or when usage falls back below the first threshold.
+        const newCycle = prev.resetsAt != null && w.resetsAt != null && Math.abs(w.resetsAt - prev.resetsAt) > 30 * 60e3;
         let top = prev.top;
-        if ((prev.cycle != null && cycle != null && cycle !== prev.cycle && w.usedPercent < sorted[0]) || w.usedPercent < sorted[0]) top = 0;
+        if (newCycle || w.usedPercent < sorted[0]) top = 0;
         const crossed = sorted.filter((t) => w.usedPercent >= t && t > top);
         if (crossed.length) {
           const t = crossed[crossed.length - 1];
           out.push({ provider: p, window: w, threshold: t });
           top = t;
         }
-        this.fired.set(id, { cycle: cycle ?? prev.cycle, top });
+        this.fired.set(id, { resetsAt: w.resetsAt ?? prev.resetsAt, top });
       }
     }
     return out;

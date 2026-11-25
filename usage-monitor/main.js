@@ -178,7 +178,10 @@ function decorate(p, now) {
 async function readOne(src, now, force) {
   const wait = backoff.get(src.id);
   const prev = lastGood.get(src.id);
-  if (!force && wait && now < wait.until && prev) return { ...prev, stale: true, liveStatus: 'busy' };
+  if (!force && wait && now < wait.until) {
+    // Still waiting after "too many requests": don't ask again yet.
+    return prev ? { ...prev, stale: true, liveStatus: 'busy' } : { status: 'busy', windows: [] };
+  }
   let r;
   try {
     r = await src.read(now);

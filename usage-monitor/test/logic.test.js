@@ -36,6 +36,14 @@ test('alerts fire once per threshold and again after reset', () => {
   assert.deepEqual(a.check(snap(99, 1), [80, 95]).map((x) => x.threshold), [95]);
 });
 
+test('alerts fire again in a new cycle even if usage is already high', () => {
+  const a = new Alerts();
+  const snap = (used, resetsAt) => ({ providers: [{ id: 'claude', windows: [{ key: 'five_hour', usedPercent: used, resetsAt, windowSeconds: 18000 }] }] });
+  assert.deepEqual(a.check(snap(97, now + 1 * H), [80, 95]).map((x) => x.threshold), [95]);
+  assert.deepEqual(a.check(snap(97, now + 1 * H + 20e3), [80, 95]).map((x) => x.threshold), [], 'small jitter is the same cycle');
+  assert.deepEqual(a.check(snap(97, now + 6 * H), [80, 95]).map((x) => x.threshold), [95]);
+});
+
 test('worst level', () => {
   const s = { providers: [{ windows: [{ usedPercent: 10 }, { usedPercent: 85 }] }, { windows: [] }] };
   assert.equal(worstLevel(s, [80, 95]), 'warn');
