@@ -1,9 +1,12 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, nativeTheme, net, shell, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, nativeTheme, net, powerMonitor } = require('electron');
 const path = require('path');
 const os = require('os');
 const { createClaudeSource } = require('./src/sources/claude');
 const { createCodexSource } = require('./src/sources/codex');
+const { readClaudeWeb, readChatgptWeb } = require('./src/sources/web');
+const { createProvider } = require('./src/providers');
+const { createWebAccount } = require('./src/websession');
 const { pace, worstLevel, Alerts } = require('./src/logic');
 const { createSettings } = require('./src/settings');
 
@@ -19,7 +22,8 @@ app.on('second-instance', () => showWindow());
 
 const home = process.env.USAGE_MONITOR_HOME || os.homedir();
 const fetchFn = (url, opts) => net.fetch(url, opts);
-const sources = [createClaudeSource({ home, fetch: fetchFn }), createCodexSource({ home, fetch: fetchFn })];
+let sources = []; // built once Electron is ready (sessions need it)
+const accounts = {};
 const alerts = new Alerts();
 
 let settings;
@@ -45,6 +49,11 @@ function icon(name) {
   return nativeImage.createFromPath(path.join(__dirname, 'assets', name));
 }
 
+// The app's own icon: the multi-size .ico on Windows keeps the taskbar and title bar sharp.
+function appIcon() {
+  return icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+}
+
 function createWindow() {
   const t = theme();
   win = new BrowserWindow({
@@ -55,7 +64,7 @@ function createWindow() {
     show: false,
     title: 'AI 사용량',
     backgroundColor: t.bg,
-    icon: icon('icon.png'),
+    icon: appIcon(),
     alwaysOnTop: settings.get().alwaysOnTop,
     autoHideMenuBar: true,
     ...(process.platform === 'win32'
@@ -95,7 +104,7 @@ function createWindow() {
       new Notification({
         title: 'AI 사용량은 계속 확인하고 있어요',
         body: '화면 오른쪽 아래 시계 옆 아이콘이나 바탕화면의 AI 사용량 아이콘을 누르면 다시 열려요. 완전히 끄려면 시계 옆 아이콘을 마우스 오른쪽 버튼으로 누르고 "끝내기"를 누르세요.',
-        icon: icon('icon.png'),
+        icon: appIcon(),
       }).show();
       settings.set({ trayHintShown: true });
     }
@@ -240,7 +249,7 @@ function notify({ provider, window: w, threshold }) {
       threshold >= 100 || w.usedPercent >= 100
         ? `한도를 다 썼어요.${when ? ` ${when}에 다시 채워져요.` : ''}`
         : `알림 기준 ${threshold}%를 넘었어요.${when ? ` ${when}에 다시 채워져요.` : ''}`,
-    icon: icon('icon.png'),
+    icon: appIcon(),
     urgency: threshold >= settings.get().thresholds[1] ? 'critical' : 'normal',
   });
   n.on('click', showWindow);
@@ -275,13 +284,45 @@ app.whenReady().then(() => {
     if ('thresholds' in clean) updateTray();
     return { ...next, version: app.getVersion(), platform: process.platform };
   });
-  ipcMain.handle('open-help', (_e, which) => {
-    const links = {
-      claude: 'https://docs.claude.com/en/docs/claude-code/setup',
-      codex: 'https://developers.openai.com/codex/cli',
-    };
-    if (links[which]) shell.openExternal(links[which]);
+  ipcMain.handle('account:login', (_e, id) => {
+    const a = accounts[id];
+    if (!a) return;
+    a.web.openLogin(
+      async () => (await a.read(Date.now())).status === 'ok',
+      () => refresh(true)
+    );
   });
+  ipcMain.handle('account:logout', async (_e, id) => {
+    const a = accounts[id];
+    if (!a) return snapshot;
+    await a.web.logout();
+    lastGood.delete(id);
+    return refresh(true);
+  });
+  // Claude: claude.ai login first, Claude Code on this computer second.
+  const claudeWeb = createWebAccount({
+    partition: 'persist:claude-web',
+    origin: 'https://claude.ai',
+    loginUrl: 'https://claude.ai/login',
+    probeUrl: 'https://claude.ai/api/organizations',
+    title: 'Claude 로그인',
+    icon: appIcon(),
+  });
+  // ChatGPT: chatgpt.com login first, Codex on this computer second.
+  const chatgptWeb = createWebAccount({
+    partition: 'persist:chatgpt-web',
+    origin: 'https://chatgpt.com',
+    loginUrl: 'https://chatgpt.com/auth/login',
+    probeUrl: 'https://chatgpt.com/api/auth/session',
+    title: 'ChatGPT 로그인',
+    icon: appIcon(),
+  });
+  accounts.claude = { web: claudeWeb, read: () => readClaudeWeb(claudeWeb.request) };
+  accounts.chatgpt = { web: chatgptWeb, read: (now) => readChatgptWeb(chatgptWeb.request, now) };
+  sources = [
+    createProvider({ id: 'claude', name: 'Claude', readWeb: accounts.claude.read, local: createClaudeSource({ home, fetch: fetchFn }) }),
+    createProvider({ id: 'chatgpt', name: 'ChatGPT', readWeb: accounts.chatgpt.read, local: createCodexSource({ home, fetch: fetchFn }) }),
+  ];
 
   createWindow();
   tray = new Tray(icon('tray-idle.png'));

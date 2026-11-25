@@ -1,7 +1,7 @@
 {
   "name": "ai-usage-monitor",
   "productName": "AI Usage Monitor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Claude Code와 Codex 한도를 실시간으로 보여주는 Windows 프로그램",
   "main": "main.js",
   "private": true,
@@ -40,7 +40,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.png",
+      "icon": "assets/icon.ico",
       "artifactName": "AI-Usage-Monitor-Setup-${version}.exe"
     },
     "nsis": {
@@ -50,7 +50,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
     }
   }
 }

@@ -150,6 +150,12 @@ function createCodexSource({ env = process.env, home, fetch }) {
       }
       return { windows: [], ...l, stats };
     },
+    /** Today's tokens and turns from Codex's logs only (no network). */
+    async readStats(now = Date.now()) {
+      if (!(await exists(dir))) return null;
+      const g = await logs(now).catch(() => null);
+      return g ? g.stats : null;
+    },
   };
 }
 

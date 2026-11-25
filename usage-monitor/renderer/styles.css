@@ -49,6 +49,11 @@
   box-sizing: border-box;
 }
 
+/* Anything marked hidden stays hidden, whatever display a class gives it. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -345,6 +350,15 @@ main {
   padding: 6px 12px;
   cursor: pointer;
 }
+.btn-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+.note-action {
+  display: block;
+  margin-top: 10px;
+}
 .btn:hover {
   border-color: var(--faint);
 }
@@ -485,4 +499,9 @@ input[type='number'] {
   * {
     transition: none !important;
   }
+}
+
+.btn-primary:hover {
+  border-color: var(--ink);
+  opacity: 0.9;
 }

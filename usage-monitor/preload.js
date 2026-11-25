@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('usage', {
   },
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
-  openHelp: (which) => ipcRenderer.invoke('open-help', which),
+  login: (id) => ipcRenderer.invoke('account:login', id),
+  logout: (id) => ipcRenderer.invoke('account:logout', id),
 });

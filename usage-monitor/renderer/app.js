@@ -7,40 +7,31 @@
   let snap = { providers: [], checkedAt: null };
   let settings = { thresholds: [80, 95] };
 
+  const SITE = { claude: 'Claude', chatgpt: 'ChatGPT' };
+
   const NOTES = {
-    claude: {
-      not_installed: ['이 컴퓨터에서 Claude Code를 찾지 못했어요. 설치하고 로그인하면 여기에 바로 보여요.', '설치 방법 보기'],
-      not_logged_in: ['Claude Code에 로그인하면 여기에 보여요. 명령 창에서 claude 를 입력해 실행한 뒤 로그인하세요.'],
-      expired: ['로그인 정보가 오래됐어요. 명령 창에서 claude 를 한 번 실행하면 다시 보여요.'],
-    },
-    codex: {
-      not_installed: ['이 컴퓨터에서 Codex를 찾지 못했어요. 설치하고 ChatGPT 계정으로 로그인하면 여기에 바로 보여요.', '설치 방법 보기'],
-      not_logged_in: ['Codex에 로그인하면 여기에 보여요. 명령 창에서 codex login 을 입력해 ChatGPT 계정으로 로그인하세요.'],
-      api_key_only: ['Codex가 API 키로 로그인돼 있어요. 한도는 ChatGPT 계정으로 로그인했을 때만 보여요. 명령 창에서 codex login 을 실행하세요.'],
-      expired: ['로그인 정보가 오래됐어요. 명령 창에서 codex 를 한 번 실행하면 다시 보여요.'],
-    },
-    any: {
-      offline: '인터넷에 연결되지 않아 확인하지 못했어요. 연결되면 자동으로 다시 확인해요.',
-      busy: '확인 요청이 많아 잠시 쉬는 중이에요. 몇 분 뒤 자동으로 다시 확인해요.',
-      error: '한도를 읽지 못했어요. 다음 확인 때 다시 시도해요.',
-      expired: '로그인 정보가 오래됐어요. 해당 프로그램을 한 번 실행하면 다시 보여요.',
-    },
+    offline: '인터넷에 연결되지 않아 확인하지 못했어요. 연결되면 자동으로 다시 확인해요.',
+    busy: '확인 요청이 많아 잠시 쉬는 중이에요. 몇 분 뒤 자동으로 다시 확인해요.',
+    error: '한도를 읽지 못했어요. 다음 확인 때 다시 시도해요.',
+    expired: '로그인이 풀렸어요. 아래 버튼으로 다시 로그인해 주세요.',
   };
 
   function noteFor(p) {
     if (p.status === 'ok' && !p.stale && p.source !== 'log') return null;
     const now = Date.now();
+    const site = SITE[p.id] || p.name;
     if (p.source === 'log') {
-      const why = p.liveStatus && NOTES.any[p.liveStatus] ? ' 실시간 확인이 안 돼서' : '';
-      return { text: `${why} Codex가 마지막으로 기록한 숫자예요 (${fmt.ago(p.loggedAt, now)} 작업).`.trim(), tone: 'soft' };
+      return { text: `Codex가 이 컴퓨터에 마지막으로 기록한 숫자예요 (${fmt.ago(p.loggedAt, now)} 작업). ${site}에 로그인하면 실시간으로 보여요.`, tone: 'soft', login: !p.webLoggedIn };
     }
     if (p.stale) {
-      const reason = NOTES.any[p.liveStatus] || NOTES.any.error;
+      const reason = NOTES[p.liveStatus] || NOTES.error;
       return { text: `${reason} 아래는 ${fmt.ago(p.fetchedAt, now)}에 받은 숫자예요.`, tone: 'soft' };
     }
-    const own = (NOTES[p.id] || {})[p.status];
-    if (own) return { text: own[0], action: own[1], tone: 'plain' };
-    let text = NOTES.any[p.status] || NOTES.any.error;
+    if (p.status === 'not_logged_in') {
+      return { text: `${site} 계정에 로그인하면 사용량이 여기에 바로 보여요.`, tone: 'plain', login: true };
+    }
+    if (p.status === 'expired') return { text: NOTES.expired, tone: 'plain', login: true };
+    let text = NOTES[p.status] || NOTES.error;
     if (p.status === 'error' && p.message) text = `한도를 읽지 못했어요 (${p.message}). 다음 확인 때 다시 시도해요.`;
     return { text, tone: 'plain' };
   }
@@ -126,6 +117,7 @@
       const fresh = node.querySelector('.p-fresh');
       if (p.status === 'ok') {
         fresh.textContent = p.source === 'log' ? '기록 기준' : p.stale ? '지난 숫자' : '실시간';
+        fresh.title = p.via === 'web' ? `${SITE[p.id]} 사이트 로그인으로 확인 중` : p.id === 'claude' ? '이 컴퓨터의 Claude Code 로그인으로 확인 중' : '이 컴퓨터의 Codex 로그인으로 확인 중';
         fresh.classList.add(p.source === 'log' || p.stale ? 'is-soft' : 'is-live');
       } else {
         fresh.remove();
@@ -137,11 +129,13 @@
         n.hidden = false;
         n.classList.add(`tone-${note.tone}`);
         n.textContent = note.text;
-        if (note.action) {
-          const b = el('button', 'link', note.action);
+        if (note.login) {
+          const b = el('button', 'btn btn-primary', `${SITE[p.id] || p.name} 로그인`);
           b.type = 'button';
-          b.addEventListener('click', () => api.openHelp(p.id));
-          n.append(' ', b);
+          b.addEventListener('click', () => api.login(p.id));
+          const wrap = el('span', 'note-action');
+          wrap.append(b);
+          n.append(wrap);
         }
       }
 
@@ -156,7 +150,7 @@
       }
       list.append(node);
     }
-    if (snap.providers.length) {
+    if (snap.providers.some((p) => (p.windows || []).length)) {
       const legend = el('p', 'legend');
       const tick = el('span', 'legend-tick');
       tick.setAttribute('aria-hidden', 'true');
@@ -203,6 +197,37 @@
     $('s-top').checked = settings.alwaysOnTop;
     $('s-close').value = settings.closeAction;
     $('version').textContent = settings.version ? `버전 ${settings.version}` : '';
+    renderAccounts();
+  }
+
+  function renderAccounts() {
+    const box = $('accounts');
+    box.replaceChildren();
+    for (const id of ['claude', 'chatgpt']) {
+      const p = snap.providers.find((x) => x.id === id) || {};
+      const row = el('div', 'row');
+      const text = el('span');
+      text.append(el('span', 'row-title', `${SITE[id]} 계정`));
+      const state = p.webLoggedIn
+        ? '로그인되어 있어요'
+        : p.via === 'app'
+          ? `이 컴퓨터의 ${id === 'claude' ? 'Claude Code' : 'Codex'} 로그인을 쓰고 있어요`
+          : '로그인되어 있지 않아요';
+      text.append(el('span', 'row-help', state));
+      const b = el('button', p.webLoggedIn ? 'btn' : 'btn btn-primary', p.webLoggedIn ? '로그아웃' : '로그인');
+      b.type = 'button';
+      b.addEventListener('click', async () => {
+        if (p.webLoggedIn) {
+          snap = await api.logout(id);
+          render();
+          renderAccounts();
+        } else {
+          api.login(id);
+        }
+      });
+      row.append(text, b);
+      box.append(row);
+    }
   }
 
   async function save(patch) {
@@ -246,6 +271,7 @@
   api.onUpdate((s) => {
     snap = s;
     render();
+    if (!$('sheet').hidden) renderAccounts();
   });
 
   (async function init() {

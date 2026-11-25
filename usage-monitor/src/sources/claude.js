@@ -130,6 +130,11 @@ function createClaudeSource({ env = process.env, home, fetch }) {
       const [l, s] = await Promise.all([limits(dir, now), stats(dir, now).catch(() => null)]);
       return { windows: [], ...l, source: 'live', stats: s };
     },
+    /** Today's tokens and replies from Claude Code's logs only (no network). */
+    async readStats(now = Date.now()) {
+      const dir = await findDir();
+      return dir ? stats(dir, now).catch(() => null) : null;
+    },
   };
 }
 
