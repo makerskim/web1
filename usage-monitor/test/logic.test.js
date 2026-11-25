@@ -52,6 +52,13 @@ test('format', () => {
   assert.equal(fmt.duration(30e3), '1분 안');
 });
 
+test('settings: old "close to tray off" becomes quit, default is minimize', () => {
+  assert.equal(sanitize({ closeToTray: false }).closeAction, 'quit');
+  assert.equal(sanitize({}).closeAction, 'minimize');
+  assert.equal(sanitize({ closeAction: 'nope' }).closeAction, 'minimize');
+  assert.equal('closeToTray' in sanitize({ closeToTray: true }), false);
+});
+
 test('settings are kept in range', () => {
   assert.deepEqual(sanitize({ thresholds: [99, 50], intervalSec: 7 }).thresholds, [99, 100]);
   assert.equal(sanitize({ intervalSec: 7 }).intervalSec, 60);

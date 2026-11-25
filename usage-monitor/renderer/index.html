@@ -64,7 +64,7 @@
         <label class="row">
           <span>
             <span class="row-title">컴퓨터를 켜면 자동으로 시작</span>
-            <span class="row-help">창 없이 작업 표시줄 아이콘으로 시작해요</span>
+            <span class="row-help">창을 띄우지 않고 작업 표시줄에서 기다려요</span>
           </span>
           <input id="s-login" type="checkbox" class="switch" />
         </label>
@@ -79,10 +79,14 @@
 
         <label class="row">
           <span>
-            <span class="row-title">닫기를 누르면 작업 표시줄로 숨기기</span>
-            <span class="row-help">끄면 닫기 버튼이 프로그램을 완전히 끝내요</span>
+            <span class="row-title">창의 닫기(✕)를 누르면</span>
+            <span class="row-help">어느 쪽이든 바탕화면 아이콘을 누르면 다시 열려요</span>
           </span>
-          <input id="s-tray" type="checkbox" class="switch" />
+          <select id="s-close">
+            <option value="minimize">작업 표시줄로 내리기</option>
+            <option value="tray">시계 옆 아이콘으로 숨기기</option>
+            <option value="quit">프로그램 끝내기</option>
+          </select>
         </label>
 
         <p id="version" class="version"></p>

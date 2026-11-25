@@ -201,7 +201,7 @@
     $('s-danger').value = settings.thresholds[1];
     $('s-login').checked = settings.openAtLogin;
     $('s-top').checked = settings.alwaysOnTop;
-    $('s-tray').checked = settings.closeToTray;
+    $('s-close').value = settings.closeAction;
     $('version').textContent = settings.version ? `버전 ${settings.version}` : '';
   }
 
@@ -238,7 +238,7 @@
   $('s-notify').addEventListener('change', (e) => save({ notify: e.target.checked }));
   $('s-login').addEventListener('change', (e) => save({ openAtLogin: e.target.checked }));
   $('s-top').addEventListener('change', (e) => save({ alwaysOnTop: e.target.checked }));
-  $('s-tray').addEventListener('change', (e) => save({ closeToTray: e.target.checked }));
+  $('s-close').addEventListener('change', (e) => save({ closeAction: e.target.value }));
   const th = () => save({ thresholds: [Number($('s-warn').value), Number($('s-danger').value)] });
   $('s-warn').addEventListener('change', th);
   $('s-danger').addEventListener('change', th);

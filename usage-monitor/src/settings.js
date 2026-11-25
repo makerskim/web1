@@ -8,12 +8,15 @@ const DEFAULTS = {
   thresholds: [80, 95],
   openAtLogin: false,
   alwaysOnTop: false,
-  closeToTray: true,
+  closeAction: 'minimize', // 'minimize' to the taskbar, 'tray' (hide to the icon by the clock) or 'quit'
   trayHintShown: false,
 };
 
 function sanitize(s) {
   const out = { ...DEFAULTS, ...(s || {}) };
+  if (s && s.closeToTray === false && !s.closeAction) out.closeAction = 'quit';
+  delete out.closeToTray;
+  if (!['minimize', 'tray', 'quit'].includes(out.closeAction)) out.closeAction = 'minimize';
   out.intervalSec = [30, 60, 120, 300].includes(Number(out.intervalSec)) ? Number(out.intervalSec) : 60;
   let [a, b] = Array.isArray(out.thresholds) ? out.thresholds.map(Number) : DEFAULTS.thresholds;
   if (!Number.isFinite(a)) a = 80;
@@ -21,7 +24,7 @@ function sanitize(s) {
   a = Math.max(10, Math.min(99, Math.round(a)));
   b = Math.max(a + 1, Math.min(100, Math.round(b)));
   out.thresholds = [a, b];
-  for (const k of ['notify', 'openAtLogin', 'alwaysOnTop', 'closeToTray', 'trayHintShown']) out[k] = !!out[k];
+  for (const k of ['notify', 'openAtLogin', 'alwaysOnTop', 'trayHintShown']) out[k] = !!out[k];
   return out;
 }
 

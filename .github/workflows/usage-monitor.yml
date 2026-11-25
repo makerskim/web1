@@ -5,11 +5,17 @@ name: Build usage monitor
 
 on:
   push:
+    # Branches must be listed too: with only "tags" listed, branch pushes are ignored.
+    branches: ['**']
     paths:
       - 'usage-monitor/**'
       - '.github/workflows/usage-monitor.yml'
     tags:
       - 'usage-monitor-v*'
+  pull_request:
+    paths:
+      - 'usage-monitor/**'
+      - '.github/workflows/usage-monitor.yml'
   workflow_dispatch:
 
 permissions:

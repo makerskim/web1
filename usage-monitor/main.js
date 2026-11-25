@@ -10,11 +10,12 @@ const { createSettings } = require('./src/settings');
 const APP_ID = 'com.aiusage.monitor';
 const startHidden = process.argv.includes('--hidden');
 
+// A second launch (for example the desktop icon while it already runs) brings the open window forward.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
-} else {
-  app.on('second-instance', () => showWindow());
+  return;
 }
+app.on('second-instance', () => showWindow());
 
 const home = process.env.USAGE_MONITOR_HOME || os.homedir();
 const fetchFn = (url, opts) => net.fetch(url, opts);
@@ -71,15 +72,29 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => {
     if (!startHidden) win.show();
+    else if (settings.get().closeAction !== 'tray') win.minimize(); // started with Windows: wait on the taskbar
+    updateTaskbar();
   });
+  // Keep our own title (it carries the percentages shown when hovering the taskbar button).
+  win.on('page-title-updated', (e) => e.preventDefault());
   win.on('close', (e) => {
-    if (quitting || !settings.get().closeToTray) return;
+    if (quitting) return;
+    const action = settings.get().closeAction;
+    if (action === 'quit') {
+      quitting = true;
+      app.quit();
+      return;
+    }
     e.preventDefault();
+    if (action === 'minimize') {
+      win.minimize();
+      return;
+    }
     win.hide();
     if (!settings.get().trayHintShown && Notification.isSupported()) {
       new Notification({
         title: 'AI 사용량은 계속 확인하고 있어요',
-        body: '화면 오른쪽 아래 작업 표시줄의 아이콘을 누르면 다시 열려요. 완전히 끄려면 아이콘을 오른쪽 클릭하고 "끝내기"를 누르세요.',
+        body: '화면 오른쪽 아래 시계 옆 아이콘이나 바탕화면의 AI 사용량 아이콘을 누르면 다시 열려요. 완전히 끄려면 시계 옆 아이콘을 마우스 오른쪽 버튼으로 누르고 "끝내기"를 누르세요.',
         icon: icon('icon.png'),
       }).show();
       settings.set({ trayHintShown: true });
@@ -124,6 +139,36 @@ function updateTray() {
   const lvl = worstLevel(snapshot, settings.get().thresholds);
   tray.setImage(icon(`tray-${lvl}.png`));
   tray.setToolTip(trayText());
+  updateTaskbar();
+}
+
+/**
+ * The taskbar button shows the fullest 5-hour limit as a progress bar
+ * (green, yellow at the warning level, red at the danger level), a coloured
+ * badge, and the percentages in the window title when hovered.
+ */
+function updateTaskbar() {
+  if (!win || win.isDestroyed()) return;
+  const [warn, danger] = settings.get().thresholds;
+  const parts = [];
+  let top = null;
+  for (const p of snapshot.providers) {
+    const w = (p.windows || []).find((x) => x.primary);
+    if (!w) continue;
+    parts.push(`${p.name} ${Math.round(w.usedPercent)}%`);
+    top = Math.max(top ?? 0, w.usedPercent);
+  }
+  win.setTitle(parts.length ? `AI 사용량  ${parts.join(', ')}` : 'AI 사용량');
+  if (top == null) {
+    win.setProgressBar(-1);
+  } else {
+    const mode = top >= danger ? 'error' : top >= warn ? 'paused' : 'normal';
+    win.setProgressBar(Math.max(0.02, top / 100), { mode });
+  }
+  if (process.platform === 'win32') {
+    const lvl = worstLevel(snapshot, settings.get().thresholds);
+    win.setOverlayIcon(lvl === 'idle' ? null : icon(`tray-${lvl}.png`), parts.join(', '));
+  }
 }
 
 function decorate(p, now) {
@@ -217,7 +262,7 @@ app.whenReady().then(() => {
   ipcMain.handle('usage:refresh', () => refresh(true));
   ipcMain.handle('settings:get', () => ({ ...settings.get(), version: app.getVersion(), platform: process.platform }));
   ipcMain.handle('settings:set', (_e, patch) => {
-    const allowed = ['intervalSec', 'notify', 'thresholds', 'openAtLogin', 'alwaysOnTop', 'closeToTray'];
+    const allowed = ['intervalSec', 'notify', 'thresholds', 'openAtLogin', 'alwaysOnTop', 'closeAction'];
     const clean = {};
     for (const k of allowed) if (patch && k in patch) clean[k] = patch[k];
     const next = settings.set(clean);
