@@ -1,0 +1,49 @@
+# AI 사용량 프로그램(usage-monitor 폴더)의 Windows 설치 파일을 만들어요.
+# - usage-monitor 폴더가 바뀌어 올라오면: 설치 파일을 만들어 이 실행 기록의 "Artifacts"에 올려요
+# - usage-monitor-v1.0.0 같은 태그를 올리면: Releases 페이지에도 설치 파일을 올려요
+name: Build usage monitor
+
+on:
+  push:
+    paths:
+      - 'usage-monitor/**'
+      - '.github/workflows/usage-monitor.yml'
+    tags:
+      - 'usage-monitor-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: usage-monitor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: usage-monitor/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build installer
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Usage-Monitor-Setup
+          path: usage-monitor/dist/*.exe
+          if-no-files-found: error
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/usage-monitor-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: usage-monitor/dist/*.exe
+          name: AI 사용량 ${{ github.ref_name }}
