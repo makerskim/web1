@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI 사용량</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="panel" class="panel">
+      <header class="top">
+        <span class="app-title">AI 사용량</span>
+        <span id="checked" class="checked"></span>
+        <button id="refresh" class="icon-btn" type="button" title="지금 새로고침" aria-label="지금 새로고침">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" /></svg>
+        </button>
+        <button id="open-settings" class="icon-btn" type="button" title="설정" aria-label="설정">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h12M2 11.5h12" /><circle cx="5.5" cy="4.5" r="1.7" class="knob" /><circle cx="10.5" cy="11.5" r="1.7" class="knob" /></svg>
+        </button>
+      </header>
+
+      <main id="list" aria-live="polite">
+        <p class="loading">사용량을 확인하는 중이에요</p>
+      </main>
+
+      <section id="settings" class="settings" aria-labelledby="settings-title" hidden>
+        <div class="settings-head">
+          <h2 id="settings-title">설정</h2>
+          <button id="close-settings" class="btn" type="button">완료</button>
+        </div>
+
+        <label class="row">
+          <span class="row-title">확인 간격</span>
+          <select id="s-interval">
+            <option value="1">1분</option>
+            <option value="2">2분</option>
+            <option value="5">5분</option>
+          </select>
+        </label>
+
+        <label class="row">
+          <span class="row-title">한도 알림</span>
+          <input id="s-notify" type="checkbox" class="switch" />
+        </label>
+
+        <label class="row">
+          <span>
+            <span class="row-title">다시 채워지면 알림</span>
+            <span class="row-help">기준을 넘었던 한도가 초기화되면 알려줘요</span>
+          </span>
+          <input id="s-reset" type="checkbox" class="switch" />
+        </label>
+
+        <div class="row">
+          <span class="row-title">주의 / 위험 기준</span>
+          <span class="pair">
+            <label><input id="s-warn" type="number" min="10" max="99" step="1" aria-label="주의 기준 %" />%</label>
+            <label><input id="s-danger" type="number" min="11" max="100" step="1" aria-label="위험 기준 %" />%</label>
+          </span>
+        </div>
+
+        <p class="help">아이콘 위 숫자는 두 서비스 중 더 많이 쓴 5시간 한도(%)예요.</p>
+        <p id="version" class="help"></p>
+      </section>
+    </div>
+
+    <template id="provider-tpl">
+      <section class="provider">
+        <div class="p-head">
+          <span class="p-dot" aria-hidden="true"></span>
+          <h2 class="p-name"><button class="name-link" type="button"></button></h2>
+          <span class="p-plan"></span>
+        </div>
+        <p class="p-note" hidden></p>
+        <div class="p-windows"></div>
+      </section>
+    </template>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

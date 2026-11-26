@@ -1,0 +1,12 @@
+{
+  "name": "ai-usage-extension",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension showing Claude and ChatGPT (Codex) limits on its icon",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "icons": "node scripts/make-icons.cjs"
+  },
+  "license": "MIT"
+}

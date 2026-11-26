@@ -1,0 +1,57 @@
+# AI 사용량 크롬 확장 프로그램(usage-extension 폴더)을 압축 파일로 만들어요.
+# - 실행 기록의 "Artifacts"에 올리고
+# - 브랜치에 올라오면 Releases 페이지에도 올려요 (GitHub 로그인 없이 내려받기)
+name: Build Chrome extension
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'usage-extension/**'
+      - '.github/workflows/usage-extension.yml'
+  pull_request:
+    paths:
+      - 'usage-extension/**'
+      - '.github/workflows/usage-extension.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: usage-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test
+        run: npm test
+      - name: Zip the extension
+        id: zip
+        run: |
+          V=$(node -p "require('./manifest.json').version")
+          mkdir -p ../dist
+          zip -r "../dist/AI-Usage-Extension-$V.zip" manifest.json background.js popup.html popup.css popup.js src icons fonts
+          echo "v=$V" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Usage-Extension
+          path: dist/*.zip
+          if-no-files-found: error
+      - name: Publish release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: usage-extension-v${{ steps.zip.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          name: AI 사용량 크롬 확장 프로그램 ${{ steps.zip.outputs.v }}
+          body: |
+            크롬 확장 프로그램이에요. 아래 Assets 에서 AI-Usage-Extension-${{ steps.zip.outputs.v }}.zip 을 내려받아 설치하세요.
+            설치 방법: https://github.com/makerskim/web1/tree/${{ github.ref_name }}/usage-extension#설치하기
+          files: dist/*.zip
+          make_latest: true
