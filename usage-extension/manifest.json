@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "AI 사용량",
+  "version": "2.0.0",
+  "description": "Claude와 ChatGPT(Codex)의 5시간·주간 한도를 아이콘에서 바로 보여줘요.",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "AI 사용량",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["storage", "alarms", "notifications"],
+  "host_permissions": ["https://claude.ai/*", "https://chatgpt.com/*"]
+}
