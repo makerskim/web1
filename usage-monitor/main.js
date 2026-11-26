@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, nativeTheme, net, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, nativeTheme, net, powerMonitor, screen } = require('electron');
 const path = require('path');
 const os = require('os');
 const { createClaudeSource } = require('./src/sources/claude');
@@ -54,22 +54,36 @@ function appIcon() {
   return icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 }
 
+// A small panel pinned to a corner of the screen; it can't be dragged away.
+const PANEL_WIDTH = 280;
+const MARGIN = 10;
+let panelHeight = 240;
+
+function placeWindow() {
+  if (!win || win.isDestroyed()) return;
+  const area = screen.getPrimaryDisplay().workArea; // the screen minus the taskbar
+  const h = Math.min(panelHeight, area.height - MARGIN * 2);
+  const x = area.x + area.width - PANEL_WIDTH - MARGIN;
+  const y = settings.get().dock === 'bottom-right' ? area.y + area.height - h - MARGIN : area.y + MARGIN;
+  win.setBounds({ x, y, width: PANEL_WIDTH, height: h });
+}
+
 function createWindow() {
   const t = theme();
   win = new BrowserWindow({
-    width: 440,
-    height: 760,
-    minWidth: 380,
-    minHeight: 520,
+    width: PANEL_WIDTH,
+    height: panelHeight,
     show: false,
+    frame: false,
+    resizable: false,
+    movable: false,
+    maximizable: false,
+    fullscreenable: false,
     title: 'AI 사용량',
     backgroundColor: t.bg,
     icon: appIcon(),
     alwaysOnTop: settings.get().alwaysOnTop,
     autoHideMenuBar: true,
-    ...(process.platform === 'win32'
-      ? { titleBarStyle: 'hidden', titleBarOverlay: { color: t.bg, symbolColor: t.symbol, height: 44 } }
-      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -79,7 +93,9 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  placeWindow();
   win.once('ready-to-show', () => {
+    placeWindow();
     if (!startHidden) win.show();
     else if (settings.get().closeAction !== 'tray') win.minimize(); // started with Windows: wait on the taskbar
     updateTaskbar();
@@ -116,6 +132,7 @@ function createWindow() {
 function showWindow() {
   if (!win) createWindow();
   if (win.isMinimized()) win.restore();
+  placeWindow();
   win.show();
   win.focus();
 }
@@ -274,7 +291,7 @@ app.whenReady().then(() => {
   ipcMain.handle('usage:refresh', () => refresh(true));
   ipcMain.handle('settings:get', () => ({ ...settings.get(), version: app.getVersion(), platform: process.platform }));
   ipcMain.handle('settings:set', (_e, patch) => {
-    const allowed = ['intervalSec', 'notify', 'thresholds', 'openAtLogin', 'alwaysOnTop', 'closeAction'];
+    const allowed = ['intervalSec', 'notify', 'thresholds', 'openAtLogin', 'alwaysOnTop', 'closeAction', 'dock'];
     const clean = {};
     for (const k of allowed) if (patch && k in patch) clean[k] = patch[k];
     const next = settings.set(clean);
@@ -282,8 +299,17 @@ app.whenReady().then(() => {
     if ('openAtLogin' in clean) applyLogin(next.openAtLogin);
     if ('alwaysOnTop' in clean && win) win.setAlwaysOnTop(next.alwaysOnTop);
     if ('thresholds' in clean) updateTray();
+    if ('dock' in clean) placeWindow();
     return { ...next, version: app.getVersion(), platform: process.platform };
   });
+  // The page reports how tall its content is; the panel grows or shrinks to fit.
+  ipcMain.on('panel:height', (_e, h) => {
+    const n = Math.round(Number(h));
+    if (!Number.isFinite(n) || n < 80 || n > 2000 || n === panelHeight) return;
+    panelHeight = n;
+    placeWindow();
+  });
+  ipcMain.on('panel:close', () => win && win.close());
   ipcMain.handle('account:login', (_e, id) => {
     const a = accounts[id];
     if (!a) return;
@@ -331,13 +357,13 @@ app.whenReady().then(() => {
   tray.on('click', () => (win && win.isVisible() && win.isFocused() ? win.hide() : showWindow()));
 
   nativeTheme.on('updated', () => {
-    if (win && process.platform === 'win32') {
-      const t = theme();
-      win.setTitleBarOverlay({ color: t.bg, symbolColor: t.symbol });
-      win.setBackgroundColor(t.bg);
-    }
+    if (win) win.setBackgroundColor(theme().bg);
   });
   powerMonitor.on('resume', () => refresh(true));
+  // Screen size or taskbar changed: stay in the corner.
+  screen.on('display-metrics-changed', placeWindow);
+  screen.on('display-added', placeWindow);
+  screen.on('display-removed', placeWindow);
 
   refresh(true);
   schedule();

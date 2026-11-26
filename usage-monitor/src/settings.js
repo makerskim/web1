@@ -7,7 +7,8 @@ const DEFAULTS = {
   notify: true,
   thresholds: [80, 95],
   openAtLogin: false,
-  alwaysOnTop: false,
+  alwaysOnTop: true,
+  dock: 'top-right', // the window sits in this corner of the screen: 'top-right' or 'bottom-right'
   closeAction: 'minimize', // 'minimize' to the taskbar, 'tray' (hide to the icon by the clock) or 'quit'
   trayHintShown: false,
 };
@@ -17,6 +18,7 @@ function sanitize(s) {
   if (s && s.closeToTray === false && !s.closeAction) out.closeAction = 'quit';
   delete out.closeToTray;
   if (!['minimize', 'tray', 'quit'].includes(out.closeAction)) out.closeAction = 'minimize';
+  if (!['top-right', 'bottom-right'].includes(out.dock)) out.dock = 'top-right';
   out.intervalSec = [30, 60, 120, 300].includes(Number(out.intervalSec)) ? Number(out.intervalSec) : 60;
   let [a, b] = Array.isArray(out.thresholds) ? out.thresholds.map(Number) : DEFAULTS.thresholds;
   if (!Number.isFinite(a)) a = 80;

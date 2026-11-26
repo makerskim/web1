@@ -8,34 +8,51 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="titlebar">
-      <span class="app-title">AI 사용량</span>
-    </header>
+    <div id="panel" class="panel">
+      <header class="top">
+        <span class="app-title">AI 사용량</span>
+        <span id="checked" class="checked"></span>
+        <button id="refresh" class="icon-btn" type="button" title="지금 새로고침" aria-label="지금 새로고침">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" /></svg>
+        </button>
+        <button id="pin" class="icon-btn pin" type="button" aria-label="맨 위 고정" aria-pressed="false">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.6 4.2L12 8.5v1H4v-1l2.6-2.3zM8 9.5V14" /></svg>
+        </button>
+        <button id="open-settings" class="icon-btn" type="button" title="설정" aria-label="설정">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h12M2 11.5h12" /><circle cx="5.5" cy="4.5" r="1.7" class="knob" /><circle cx="10.5" cy="11.5" r="1.7" class="knob" /></svg>
+        </button>
+        <button id="close" class="icon-btn" type="button" title="닫기" aria-label="닫기">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </header>
 
-    <main id="list" aria-live="polite">
-      <p class="loading">사용량을 확인하는 중이에요</p>
-    </main>
+      <main id="list" aria-live="polite">
+        <p class="loading">사용량을 확인하는 중이에요</p>
+      </main>
 
-    <footer class="bar">
-      <span id="checked" class="checked">아직 확인 전</span>
-      <button id="refresh" class="btn" type="button">새로고침</button>
-      <button id="open-settings" class="btn" type="button" aria-haspopup="dialog">설정</button>
-    </footer>
-
-    <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
-      <div class="sheet-inner">
-        <div class="sheet-head">
-          <h2 id="sheet-title">설정</h2>
-          <button id="close-settings" class="btn" type="button">닫기</button>
+      <section id="settings" class="settings" aria-labelledby="settings-title" hidden>
+        <div class="settings-head">
+          <h2 id="settings-title">설정</h2>
+          <button id="close-settings" class="btn" type="button">완료</button>
         </div>
 
         <div id="accounts"></div>
 
         <label class="row">
-          <span>
-            <span class="row-title">확인 간격</span>
-            <span class="row-help">이 간격마다 한도를 새로 확인해요</span>
-          </span>
+          <span class="row-title">화면 위치</span>
+          <select id="s-dock">
+            <option value="top-right">오른쪽 위</option>
+            <option value="bottom-right">오른쪽 아래</option>
+          </select>
+        </label>
+
+        <label class="row">
+          <span class="row-title">맨 위 고정 (다른 창에 안 가려짐)</span>
+          <input id="s-top" type="checkbox" class="switch" />
+        </label>
+
+        <label class="row">
+          <span class="row-title">확인 간격</span>
           <select id="s-interval">
             <option value="30">30초</option>
             <option value="60">1분</option>
@@ -45,18 +62,12 @@
         </label>
 
         <label class="row">
-          <span>
-            <span class="row-title">한도 알림</span>
-            <span class="row-help">아래 비율을 넘으면 Windows 알림을 띄워요</span>
-          </span>
+          <span class="row-title">한도 알림</span>
           <input id="s-notify" type="checkbox" class="switch" />
         </label>
 
         <div class="row">
-          <span>
-            <span class="row-title">주의 / 위험 기준</span>
-            <span class="row-help">막대 색도 이 기준으로 바뀌어요</span>
-          </span>
+          <span class="row-title">주의 / 위험 기준</span>
           <span class="pair">
             <label><input id="s-warn" type="number" min="10" max="99" step="1" aria-label="주의 기준 %" />%</label>
             <label><input id="s-danger" type="number" min="11" max="100" step="1" aria-label="위험 기준 %" />%</label>
@@ -64,50 +75,32 @@
         </div>
 
         <label class="row">
-          <span>
-            <span class="row-title">컴퓨터를 켜면 자동으로 시작</span>
-            <span class="row-help">창을 띄우지 않고 작업 표시줄에서 기다려요</span>
-          </span>
+          <span class="row-title">컴퓨터를 켜면 자동으로 시작</span>
           <input id="s-login" type="checkbox" class="switch" />
         </label>
 
         <label class="row">
-          <span>
-            <span class="row-title">창을 항상 위에 두기</span>
-            <span class="row-help">다른 창을 열어도 이 창이 가려지지 않아요</span>
-          </span>
-          <input id="s-top" type="checkbox" class="switch" />
-        </label>
-
-        <label class="row">
-          <span>
-            <span class="row-title">창의 닫기(✕)를 누르면</span>
-            <span class="row-help">어느 쪽이든 바탕화면 아이콘을 누르면 다시 열려요</span>
-          </span>
+          <span class="row-title">✕ 누르면</span>
           <select id="s-close">
-            <option value="minimize">작업 표시줄로 내리기</option>
-            <option value="tray">시계 옆 아이콘으로 숨기기</option>
+            <option value="minimize">작업 표시줄로</option>
+            <option value="tray">시계 옆으로 숨기기</option>
             <option value="quit">프로그램 끝내기</option>
           </select>
         </label>
 
         <p id="version" class="version"></p>
-      </div>
+      </section>
     </div>
 
     <template id="provider-tpl">
       <section class="provider">
         <div class="p-head">
+          <span class="p-dot" aria-hidden="true"></span>
           <h2 class="p-name"></h2>
           <span class="p-plan"></span>
-          <span class="p-fresh"></span>
         </div>
         <p class="p-note" hidden></p>
         <div class="p-windows"></div>
-        <dl class="p-stats" hidden>
-          <div><dt>오늘 토큰</dt><dd class="s-tokens"></dd></div>
-          <div><dt>오늘 응답</dt><dd class="s-replies"></dd></div>
-        </dl>
       </section>
     </template>
 
