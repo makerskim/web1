@@ -1,6 +1,6 @@
 # AI 사용량 프로그램(usage-monitor 폴더)의 Windows 설치 파일을 만들어요.
 # - usage-monitor 폴더가 바뀌어 올라오면: 설치 파일을 만들어 이 실행 기록의 "Artifacts"에 올려요
-# - usage-monitor-v1.0.0 같은 태그를 올리면: Releases 페이지에도 설치 파일을 올려요
+# - 브랜치에 올라오면 Releases 페이지에도 설치 파일을 올려요 (로그인 없이 내려받기)
 name: Build usage monitor
 
 on:
@@ -47,9 +47,20 @@ jobs:
           name: AI-Usage-Monitor-Setup
           path: usage-monitor/dist/*.exe
           if-no-files-found: error
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      # Pushed builds are also published on the Releases page, so the installer
+      # downloads with one click and without signing in to GitHub.
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/usage-monitor-v')
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: usage-monitor-v${{ steps.version.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          name: AI 사용량 ${{ steps.version.outputs.v }}
+          body: |
+            Windows 설치 파일이에요. 아래 Assets 에서 AI-Usage-Monitor-Setup-${{ steps.version.outputs.v }}.exe 를 눌러 내려받으세요.
           files: usage-monitor/dist/*.exe
-          name: AI 사용량 ${{ github.ref_name }}
+          make_latest: true

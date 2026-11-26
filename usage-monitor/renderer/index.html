@@ -52,6 +52,16 @@
         </label>
 
         <label class="row">
+          <span class="row-title">투명도</span>
+          <select id="s-opacity">
+            <option value="1">불투명</option>
+            <option value="0.9">90%</option>
+            <option value="0.8">80%</option>
+            <option value="0.7">70%</option>
+          </select>
+        </label>
+
+        <label class="row">
           <span class="row-title">확인 간격</span>
           <select id="s-interval">
             <option value="30">30초</option>
@@ -64,6 +74,14 @@
         <label class="row">
           <span class="row-title">한도 알림</span>
           <input id="s-notify" type="checkbox" class="switch" />
+        </label>
+
+        <label class="row">
+          <span>
+            <span class="row-title">다시 채워지면 알림</span>
+            <span class="row-help">기준을 넘었던 한도가 초기화되면 알려줘요</span>
+          </span>
+          <input id="s-reset" type="checkbox" class="switch" />
         </label>
 
         <div class="row">
@@ -88,6 +106,7 @@
           </select>
         </label>
 
+        <p id="shortcut" class="version"></p>
         <p id="version" class="version"></p>
       </section>
     </div>
@@ -96,7 +115,7 @@
       <section class="provider">
         <div class="p-head">
           <span class="p-dot" aria-hidden="true"></span>
-          <h2 class="p-name"></h2>
+          <h2 class="p-name"><button class="name-link" type="button"></button></h2>
           <span class="p-plan"></span>
         </div>
         <p class="p-note" hidden></p>

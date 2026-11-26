@@ -88,7 +88,10 @@
     for (const p of snap.providers) {
       const node = tpl.content.firstElementChild.cloneNode(true);
       node.dataset.provider = p.id;
-      node.querySelector('.p-name').textContent = SITE[p.id] || p.name;
+      const name = node.querySelector('.name-link');
+      name.textContent = SITE[p.id] || p.name;
+      name.title = `${SITE[p.id] || p.name} 사용량 페이지 열기`;
+      name.addEventListener('click', () => api.openUsagePage(p.id));
       const plan = node.querySelector('.p-plan');
       if (p.plan) plan.textContent = p.plan;
       else plan.remove();
@@ -189,6 +192,11 @@
     $('s-top').checked = settings.alwaysOnTop;
     $('s-interval').value = String(settings.intervalSec);
     $('s-notify').checked = settings.notify;
+    $('s-reset').checked = settings.notifyReset;
+    $('s-opacity').value = String(settings.opacity ?? 1);
+    $('shortcut').textContent = settings.shortcutOk === false
+      ? '단축키 Ctrl + Alt + U 는 다른 프로그램이 쓰고 있어서 사용할 수 없어요.'
+      : '단축키: Ctrl + Alt + U 를 누르면 창을 보이거나 숨겨요.';
     $('s-warn').value = settings.thresholds[0];
     $('s-danger').value = settings.thresholds[1];
     $('s-login').checked = settings.openAtLogin;
@@ -228,6 +236,8 @@
   $('s-top').addEventListener('change', (e) => save({ alwaysOnTop: e.target.checked }));
   $('s-interval').addEventListener('change', (e) => save({ intervalSec: Number(e.target.value) }));
   $('s-notify').addEventListener('change', (e) => save({ notify: e.target.checked }));
+  $('s-reset').addEventListener('change', (e) => save({ notifyReset: e.target.checked }));
+  $('s-opacity').addEventListener('change', (e) => save({ opacity: Number(e.target.value) }));
   $('s-login').addEventListener('change', (e) => save({ openAtLogin: e.target.checked }));
   $('s-close').addEventListener('change', (e) => save({ closeAction: e.target.value }));
   const th = () => save({ thresholds: [Number($('s-warn').value), Number($('s-danger').value)] });

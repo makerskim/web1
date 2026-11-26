@@ -28,20 +28,31 @@ test('pace: too early, already out, no reset time', () => {
 test('alerts fire once per threshold and again after reset', () => {
   const a = new Alerts();
   const snap = (used, leftH) => ({ providers: [{ id: 'claude', windows: [w5(used, leftH)] }] });
-  assert.deepEqual(a.check(snap(50, 3), [80, 95]).map((x) => x.threshold), []);
-  assert.deepEqual(a.check(snap(82, 3), [80, 95]).map((x) => x.threshold), [80]);
-  assert.deepEqual(a.check(snap(85, 3), [80, 95]).map((x) => x.threshold), []);
-  assert.deepEqual(a.check(snap(97, 3), [80, 95]).map((x) => x.threshold), [95]);
-  assert.deepEqual(a.check(snap(3, 5), [80, 95]).map((x) => x.threshold), []);
-  assert.deepEqual(a.check(snap(99, 1), [80, 95]).map((x) => x.threshold), [95]);
+  assert.deepEqual(a.check(snap(50, 3), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), []);
+  assert.deepEqual(a.check(snap(82, 3), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), [80]);
+  assert.deepEqual(a.check(snap(85, 3), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), []);
+  assert.deepEqual(a.check(snap(97, 3), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), [95]);
+  assert.deepEqual(a.check(snap(3, 5), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), []);
+  assert.deepEqual(a.check(snap(99, 1), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), [95]);
 });
 
 test('alerts fire again in a new cycle even if usage is already high', () => {
   const a = new Alerts();
   const snap = (used, resetsAt) => ({ providers: [{ id: 'claude', windows: [{ key: 'five_hour', usedPercent: used, resetsAt, windowSeconds: 18000 }] }] });
-  assert.deepEqual(a.check(snap(97, now + 1 * H), [80, 95]).map((x) => x.threshold), [95]);
-  assert.deepEqual(a.check(snap(97, now + 1 * H + 20e3), [80, 95]).map((x) => x.threshold), [], 'small jitter is the same cycle');
-  assert.deepEqual(a.check(snap(97, now + 6 * H), [80, 95]).map((x) => x.threshold), [95]);
+  assert.deepEqual(a.check(snap(97, now + 1 * H), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), [95]);
+  assert.deepEqual(a.check(snap(97, now + 1 * H + 20e3), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), [], 'small jitter is the same cycle');
+  assert.deepEqual(a.check(snap(97, now + 6 * H), [80, 95]).filter((x) => x.kind === "limit").map((x) => x.threshold), [95]);
+});
+
+test('a refill is announced once after a limit was high', () => {
+  const a = new Alerts();
+  const snap = (used, resetsAt) => ({ providers: [{ id: 'claude', windows: [{ key: 'five_hour', usedPercent: used, resetsAt, windowSeconds: 18000 }] }] });
+  const kinds = (r) => r.map((x) => x.kind);
+  assert.deepEqual(kinds(a.check(snap(50, now + 1 * H), [80, 95])), []);
+  assert.deepEqual(kinds(a.check(snap(3, now + 5 * H), [80, 95])), [], 'no refill notice when it was never high');
+  assert.deepEqual(kinds(a.check(snap(90, now + 5 * H), [80, 95])), ['limit']);
+  assert.deepEqual(kinds(a.check(snap(0, now + 10 * H), [80, 95])), ['reset']);
+  assert.deepEqual(kinds(a.check(snap(1, now + 10 * H), [80, 95])), []);
 });
 
 test('worst level', () => {

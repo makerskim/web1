@@ -14,5 +14,6 @@ contextBridge.exposeInMainWorld('usage', {
   login: (id) => ipcRenderer.invoke('account:login', id),
   setHeight: (h) => ipcRenderer.send('panel:height', h),
   close: () => ipcRenderer.send('panel:close'),
+  openUsagePage: (id) => ipcRenderer.send('open-usage-page', id),
   logout: (id) => ipcRenderer.invoke('account:logout', id),
 });

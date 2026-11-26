@@ -8,6 +8,8 @@ const DEFAULTS = {
   thresholds: [80, 95],
   openAtLogin: false,
   alwaysOnTop: true,
+  notifyReset: true, // tell me when a limit that was high has refilled
+  opacity: 1, // 1, 0.9, 0.8 or 0.7
   dock: 'top-right', // the window sits in this corner of the screen: 'top-right' or 'bottom-right'
   closeAction: 'minimize', // 'minimize' to the taskbar, 'tray' (hide to the icon by the clock) or 'quit'
   trayHintShown: false,
@@ -19,6 +21,7 @@ function sanitize(s) {
   delete out.closeToTray;
   if (!['minimize', 'tray', 'quit'].includes(out.closeAction)) out.closeAction = 'minimize';
   if (!['top-right', 'bottom-right'].includes(out.dock)) out.dock = 'top-right';
+  out.opacity = [1, 0.9, 0.8, 0.7].includes(Number(out.opacity)) ? Number(out.opacity) : 1;
   out.intervalSec = [30, 60, 120, 300].includes(Number(out.intervalSec)) ? Number(out.intervalSec) : 60;
   let [a, b] = Array.isArray(out.thresholds) ? out.thresholds.map(Number) : DEFAULTS.thresholds;
   if (!Number.isFinite(a)) a = 80;
@@ -26,7 +29,7 @@ function sanitize(s) {
   a = Math.max(10, Math.min(99, Math.round(a)));
   b = Math.max(a + 1, Math.min(100, Math.round(b)));
   out.thresholds = [a, b];
-  for (const k of ['notify', 'openAtLogin', 'alwaysOnTop', 'trayHintShown']) out[k] = !!out[k];
+  for (const k of ['notify', 'notifyReset', 'openAtLogin', 'alwaysOnTop', 'trayHintShown']) out[k] = !!out[k];
   return out;
 }
 

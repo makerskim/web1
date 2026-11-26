@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, nativeTheme, net, powerMonitor, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, nativeTheme, net, powerMonitor, screen, shell, globalShortcut } = require('electron');
 const path = require('path');
 const os = require('os');
 const { createClaudeSource } = require('./src/sources/claude');
@@ -32,6 +32,7 @@ let tray = null;
 let timer = null;
 let quitting = false;
 let busy = false;
+let shortcutOk = false;
 let snapshot = { providers: [], checkedAt: null };
 const lastGood = new Map();
 const backoff = new Map(); // provider id -> skip until (ms) after "too many requests"
@@ -83,6 +84,7 @@ function createWindow() {
     backgroundColor: t.bg,
     icon: appIcon(),
     alwaysOnTop: settings.get().alwaysOnTop,
+    opacity: settings.get().opacity,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -244,7 +246,13 @@ async function refresh(force = false) {
     };
     const s = settings.get();
     if (s.notify && Notification.isSupported()) {
-      for (const a of alerts.check(snapshot, s.thresholds)) notify(a);
+      for (const a of alerts.check(snapshot, s.thresholds)) {
+        if (a.kind === 'reset') {
+          if (s.notifyReset) notifyReset(a);
+        } else {
+          notify(a);
+        }
+      }
     } else {
       alerts.check(snapshot, s.thresholds);
     }
@@ -273,6 +281,21 @@ function notify({ provider, window: w, threshold }) {
   n.show();
 }
 
+function notifyReset({ provider, window: w }) {
+  const n = new Notification({
+    title: `${provider.name} ${w.label}가 다시 채워졌어요`,
+    body: `지금 ${Math.round(w.usedPercent)}% 사용 중이에요. 다시 마음껏 쓸 수 있어요.`,
+    icon: appIcon(),
+  });
+  n.on('click', showWindow);
+  n.show();
+}
+
+function toggleWindow() {
+  if (win && win.isVisible() && !win.isMinimized()) win.close();
+  else showWindow();
+}
+
 function schedule() {
   clearInterval(timer);
   timer = setInterval(() => refresh(false), settings.get().intervalSec * 1000);
@@ -289,9 +312,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle('usage:get', () => snapshot);
   ipcMain.handle('usage:refresh', () => refresh(true));
-  ipcMain.handle('settings:get', () => ({ ...settings.get(), version: app.getVersion(), platform: process.platform }));
+  ipcMain.handle('settings:get', () => ({ ...settings.get(), version: app.getVersion(), platform: process.platform, shortcutOk }));
   ipcMain.handle('settings:set', (_e, patch) => {
-    const allowed = ['intervalSec', 'notify', 'thresholds', 'openAtLogin', 'alwaysOnTop', 'closeAction', 'dock'];
+    const allowed = ['intervalSec', 'notify', 'notifyReset', 'thresholds', 'openAtLogin', 'alwaysOnTop', 'closeAction', 'dock', 'opacity'];
     const clean = {};
     for (const k of allowed) if (patch && k in patch) clean[k] = patch[k];
     const next = settings.set(clean);
@@ -300,7 +323,8 @@ app.whenReady().then(() => {
     if ('alwaysOnTop' in clean && win) win.setAlwaysOnTop(next.alwaysOnTop);
     if ('thresholds' in clean) updateTray();
     if ('dock' in clean) placeWindow();
-    return { ...next, version: app.getVersion(), platform: process.platform };
+    if ('opacity' in clean && win) win.setOpacity(next.opacity);
+    return { ...next, version: app.getVersion(), platform: process.platform, shortcutOk };
   });
   // The page reports how tall its content is; the panel grows or shrinks to fit.
   ipcMain.on('panel:height', (_e, h) => {
@@ -310,6 +334,11 @@ app.whenReady().then(() => {
     placeWindow();
   });
   ipcMain.on('panel:close', () => win && win.close());
+  // Clicking a name opens that site's own usage page in the web browser.
+  ipcMain.on('open-usage-page', (_e, id) => {
+    const pages = { claude: 'https://claude.ai/settings/usage', chatgpt: 'https://chatgpt.com/codex/settings/usage' };
+    if (pages[id]) shell.openExternal(pages[id]);
+  });
   ipcMain.handle('account:login', (_e, id) => {
     const a = accounts[id];
     if (!a) return;
@@ -360,6 +389,8 @@ app.whenReady().then(() => {
     if (win) win.setBackgroundColor(theme().bg);
   });
   powerMonitor.on('resume', () => refresh(true));
+  // Ctrl + Alt + U shows or hides the panel from anywhere.
+  shortcutOk = globalShortcut.register('Control+Alt+U', toggleWindow);
   // Screen size or taskbar changed: stay in the corner.
   screen.on('display-metrics-changed', placeWindow);
   screen.on('display-added', placeWindow);
@@ -372,6 +403,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   quitting = true;
 });
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => {
   // Stays in the tray; quitting goes through the tray menu.
 });
